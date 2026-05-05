@@ -1,0 +1,14 @@
+-- VYDENCE SGQ Schema
+CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, active BOOLEAN DEFAULT TRUE, is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS groups (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, permissions JSONB DEFAULT '[]', created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS user_groups (user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE, PRIMARY KEY (user_id, group_id));
+CREATE TABLE IF NOT EXISTS sequences (module TEXT NOT NULL, year INTEGER NOT NULL, last_seq INTEGER DEFAULT 0, PRIMARY KEY (module, year));
+CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, module TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'aberto', data JSONB NOT NULL DEFAULT '{}', created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_records_module ON records(module);
+CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
+CREATE TABLE IF NOT EXISTS record_links (id SERIAL PRIMARY KEY, from_id TEXT, from_module TEXT NOT NULL, to_id TEXT, to_module TEXT NOT NULL, link_type TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS signatures (id SERIAL PRIMARY KEY, record_id TEXT NOT NULL, module TEXT NOT NULL, user_id INTEGER REFERENCES users(id), user_name TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, meaning TEXT, hash TEXT NOT NULL, ip_address TEXT, user_agent TEXT, signed_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_signatures_record ON signatures(record_id);
+CREATE TABLE IF NOT EXISTS syslog (id SERIAL PRIMARY KEY, user_id INTEGER, user_name TEXT, action TEXT NOT NULL, module TEXT, record_id TEXT, detail JSONB, ip_address TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
+INSERT INTO users (name, email, password, is_admin, active) VALUES ('Admin', 'admin@vydence.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', TRUE, TRUE) ON CONFLICT (email) DO NOTHING;
+INSERT INTO groups (name, description, permissions) VALUES ('SGQ', 'Equipe de Qualidade', '["admin","ro.abrir","ro.editar","ro.decidir","ro.encerrar","ro.cancelar","ro.ver","nc.abrir","nc.editar","nc.analisar","nc.disposicao","nc.encerrar","nc.cancelar","nc.ver","riacp.abrir","riacp.investigar","riacp.plano","riacp.eficacia","riacp.concluir","riacp.cancelar","riacp.ver","sa.abrir","sa.avaliacao_inicial","sa.concluir","sa.cancelar","sa.ver","admin.usuarios","admin.grupos","auditoria.ver"]'::jsonb) ON CONFLICT (name) DO NOTHING;
