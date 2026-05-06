@@ -4549,11 +4549,9 @@ function SeedProdutos({currentUser}){
     setUploading(true); setUploadResult(null);
     try{
       const text=await file.text();
-      const lines=text.split(/
-?
-/).filter(l=>l.trim());
+      const lines=text.split(new RegExp('\r?\n')).filter(l=>l.trim());
       // Detecta separador
-      const sep=lines[0].includes(';')?';':',';
+      const sep=lines[0].indexOf(';')>=0?';':',';
       const headers=lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
       const iCod=headers.findIndex(h=>h.includes('codigo')||h.includes('código')||h==='code');
       const iDesc=headers.findIndex(h=>h.includes('descri'));
