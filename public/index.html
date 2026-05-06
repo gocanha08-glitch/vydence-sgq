@@ -4180,12 +4180,7 @@ function NewRO({currentUser, onSave, onCancel}){
 function GerarNCModal({ro, currentUser, C, Sg, onClose, onConfirm}){
   const d = ro.data||{};
   const [titulo, setTitulo] = useState((d.descricao||"").substring(0,80));
-  const [descricao, setDescricao] = useState(
-    "Originada da RO "+( ro.code||ro.id)+".
-
-"+
-    (d.descricao||"")
-  );
+  const [descricao, setDescricao] = useState("Originada da RO "+(ro.code||ro.id)+". "+(d.descricao||""));
 
   const ok = titulo.trim()&&descricao.trim();
 
