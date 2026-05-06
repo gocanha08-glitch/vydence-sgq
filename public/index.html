@@ -3852,6 +3852,354 @@ function NewRequest({currentUser,onSave,onCancel}){
 }
 
 // ================================================================
+// MÓDULO RO — REGISTRO DE OCORRÊNCIAS
+// ================================================================
+
+const RO_TIPOS = ["Produto","Processo"];
+const RO_LOCAIS = ["Produção","Inspeção Recebimento","Inspeção Final","AT","Almoxarifado","P&D"];
+const RO_DISPOSICOES = {
+  Produto: ["Correção Imediata","Segregado","Sucatado","Liberado Condicional"],
+  Processo: ["Correção Imediata","Segregado"],
+};
+const RO_CLASS_PRODUTO = ["Visual","Montagem","Funcional","N/A"];
+const RO_CLASS_PROCESSO = ["Falha Operacional","Falha de Processo","N/A"];
+
+const RO_STATUS_LABELS = {
+  aberta: {label:"Aberta", color:"#2563EB"},
+  em_analise: {label:"Em Análise", color:"#D97706"},
+  fechada: {label:"Fechada", color:"#16A34A"},
+};
+
+function ROStatusBadge({status}){
+  const s = RO_STATUS_LABELS[status]||{label:status,color:"#64748B"};
+  return <Badge label={s.label} color={s.color}/>;
+}
+
+// ---- ROList ---- listagem de ROs
+function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
+  const {C}=useTheme();const Sg=mkSg(C);
+  const [fText,setFText]=useState("");
+  const [fStatus,setFStatus]=useState("");
+  const [fTipo,setFTipo]=useState("");
+  const canNew = hasPerm(currentUser,'ro.abrir');
+
+  const vis = (roRecords||[]).filter(r=>{
+    const q=fText.toLowerCase();
+    const ok = !q||(r.code||r.id||"").toLowerCase().includes(q)||(r.title||"").toLowerCase().includes(q)||(r.data?.descricao||"").toLowerCase().includes(q);
+    const okS = !fStatus||r.status===fStatus;
+    const okT = !fTipo||r.data?.tipo===fTipo;
+    return ok&&okS&&okT;
+  });
+
+  return <div style={{padding:"18px 22px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <div>
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Registro de Ocorrências</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{(roRecords||[]).length} registro{(roRecords||[]).length!==1?"s":""} no total</div>
+      </div>
+      {canNew&&<button style={{...Sg.btn("primary"),padding:"8px 16px"}} onClick={onNew}>+ Nova RO</button>}
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, título ou descrição..." style={{...Sg.input(),maxWidth:320}}/>
+      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
+        <option value="">Todos os status</option>
+        {Object.entries(RO_STATUS_LABELS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
+      </select>
+      <select value={fTipo} onChange={e=>setFTipo(e.target.value)} style={{...Sg.input(),maxWidth:140}}>
+        <option value="">Todos os tipos</option>
+        {RO_TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
+      </select>
+      <span style={{fontSize:11,color:C.muted,alignSelf:"center"}}>{vis.length} resultado{vis.length!==1?"s":""}</span>
+    </div>
+    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+      {vis.length===0 ? <div style={{textAlign:"center",padding:36,color:C.muted}}>Nenhum registro encontrado.</div> :
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead>
+          <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+            {["Código","Tipo","Local","Descrição","Abertura","Status","Ações"].map(h=>(
+              <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {vis.map((r,i)=>{
+            const d=r.data||{};
+            return <tr key={r.id||i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer",transition:"background .12s"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+              onMouseLeave={e=>e.currentTarget.style.background=""}
+              onClick={()=>onOpen(r.id||r.code)}>
+              <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
+              <td style={{padding:"9px 12px",fontSize:12,color:C.text}}>{d.tipo||"—"}</td>
+              <td style={{padding:"9px 12px",fontSize:12,color:C.dim}}>{d.local||"—"}</td>
+              <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:280}}>
+                <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+              </td>
+              <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(r.createdAt)}</td>
+              <td style={{padding:"9px 12px"}}><ROStatusBadge status={r.status}/></td>
+              <td style={{padding:"9px 12px"}}><button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();onOpen(r.id||r.code);}}>Abrir</button></td>
+            </tr>;
+          })}
+        </tbody>
+      </table>}
+    </div>
+  </div>;
+}
+
+// ---- NewRO ---- formulário de criação
+function NewRO({currentUser, onSave, onCancel}){
+  const {C}=useTheme();const Sg=mkSg(C);
+  const [f,setF]=useState({
+    tipo:"", local:"", opChamado:"", descricao:"",
+    // Produto
+    codPeca:"", descPeca:"", equipamento:"", lote:"", qtdNC:"", classifProduto:"",
+    // Processo
+    classifProcesso:"",
+    disposicao:"",
+  });
+
+  const ok = f.tipo && f.local && f.descricao;
+
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+
+  return <div style={{padding:"18px 22px",maxWidth:680}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+      <div>
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Nova Ocorrência</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>Campos com * são obrigatórios</div>
+      </div>
+      <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
+    </div>
+    <div style={{...Sg.card(),display:"flex",flexDirection:"column",gap:14}}>
+      {/* Tipo + Local */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div>
+          <label style={Sg.lbl}>Tipo *</label>
+          <select style={Sg.input()} value={f.tipo} onChange={e=>{set("tipo",e.target.value);set("classifProduto","");set("classifProcesso","");set("disposicao","");}}>
+            <option value="">Selecione...</option>
+            {RO_TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Local *</label>
+          <select style={Sg.input()} value={f.local} onChange={e=>set("local",e.target.value)}>
+            <option value="">Selecione...</option>
+            {RO_LOCAIS.map(l=><option key={l} value={l}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+      {/* Nº OP / Chamado */}
+      <div><label style={Sg.lbl}>Nº OP / Chamado</label><input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345 ou CHM-001"/></div>
+      {/* Descrição */}
+      <div><label style={Sg.lbl}>Descrição da Ocorrência *</label><textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva detalhadamente o que foi identificado..."/></div>
+
+      {/* Campos específicos Produto */}
+      {f.tipo==="Produto"&&<>
+        <div style={{padding:"12px",background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Dados do Produto</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><label style={Sg.lbl}>Código da Peça</label><input style={Sg.input()} value={f.codPeca} onChange={e=>set("codPeca",e.target.value)} placeholder="Ex: ABC-001"/></div>
+            <div><label style={Sg.lbl}>Descrição da Peça</label><input style={Sg.input()} value={f.descPeca} onChange={e=>set("descPeca",e.target.value)} placeholder="Nome/descrição da peça"/></div>
+            <div><label style={Sg.lbl}>Equipamento</label><input style={Sg.input()} value={f.equipamento} onChange={e=>set("equipamento",e.target.value)} placeholder="Equipamento envolvido"/></div>
+            <div><label style={Sg.lbl}>Lote</label><input style={Sg.input()} value={f.lote} onChange={e=>set("lote",e.target.value)} placeholder="Nº do lote"/></div>
+            <div><label style={Sg.lbl}>Quantidade Não Conforme</label><input style={Sg.input()} type="number" value={f.qtdNC} onChange={e=>set("qtdNC",e.target.value)} placeholder="0"/></div>
+            <div>
+              <label style={Sg.lbl}>Classificação</label>
+              <select style={Sg.input()} value={f.classifProduto} onChange={e=>set("classifProduto",e.target.value)}>
+                <option value="">Selecione...</option>
+                {RO_CLASS_PRODUTO.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+      </>}
+
+      {/* Campos específicos Processo */}
+      {f.tipo==="Processo"&&<div style={{padding:"12px",background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Dados do Processo</div>
+        <div>
+          <label style={Sg.lbl}>Classificação</label>
+          <select style={Sg.input()} value={f.classifProcesso} onChange={e=>set("classifProcesso",e.target.value)}>
+            <option value="">Selecione...</option>
+            {RO_CLASS_PROCESSO.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>}
+
+      {/* Disposição */}
+      {f.tipo&&<div>
+        <label style={Sg.lbl}>Disposição</label>
+        <select style={Sg.input()} value={f.disposicao} onChange={e=>set("disposicao",e.target.value)}>
+          <option value="">Nenhuma / A definir</option>
+          {(RO_DISPOSICOES[f.tipo]||[]).map(d=><option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>}
+
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
+        <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
+        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave(f)}>Abrir Ocorrência</button>
+      </div>
+    </div>
+  </div>;
+}
+
+// ---- RODetail ---- detalhe/operações em uma RO
+function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC}){
+  const {C}=useTheme();const Sg=mkSg(C);
+  const [sigModal,setSigModal]=useState(null); // {action, title, desc}
+  const [analise,setAnalise]=useState(roRecord?.data?.analise||"");
+  const [disposicaoEdit,setDisposicaoEdit]=useState(roRecord?.data?.disposicao||"");
+  const [savingAnalise,setSavingAnalise]=useState(false);
+
+  const r = roRecord;
+  if(!r) return <div style={{padding:32,color:C.muted}}>Registro não encontrado.</div>;
+  const d = r.data||{};
+  const status = r.status;
+
+  const canAnalyze  = hasPerm(currentUser,'ro.analisar');
+  const canClose    = hasPerm(currentUser,'ro.fechar');
+  const canDelete   = hasPerm(currentUser,'ro.excluir');
+
+  // Salva análise + disposição com assinatura
+  const doAnalyze = async (sig) => {
+    if(!analise.trim()){alert("Informe a análise/conclusão.");return;}
+    const now = new Date().toISOString();
+    const updated = {
+      ...r,
+      status: "em_analise",
+      data: {...d, analise, disposicao: disposicaoEdit, analiseBy: currentUser.id, analiseByName: currentUser.name, analiseAt: now},
+      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"analise", event:"Análise registrada", detail: analise.substring(0,80)}],
+    };
+    await onUpdate(updated);
+    setSigModal(null);
+  };
+
+  const doClose = async (sig) => {
+    const now = new Date().toISOString();
+    const updated = {
+      ...r,
+      status: "fechada",
+      data: {...d, fechadoBy: currentUser.id, fechadoByName: currentUser.name, fechadoAt: now},
+      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"fechamento", event:"Ocorrência fechada", detail:""}],
+    };
+    await onUpdate(updated);
+    setSigModal(null);
+  };
+
+  const statusInfo = RO_STATUS_LABELS[status]||{label:status,color:C.muted};
+
+  return <div style={{padding:"18px 22px",maxWidth:800}}>
+    {/* Header */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+      <div>
+        <button style={{...Sg.btn(),fontSize:11,padding:"3px 10px",marginBottom:8}} onClick={onBack}>← Voltar</button>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>{r.code||r.id}</h1>
+          <ROStatusBadge status={status}/>
+        </div>
+        <div style={{fontSize:12,color:C.muted,marginTop:3}}>{d.tipo||""}{d.local?" · "+d.local:""}</div>
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        {status==="em_analise"&&canClose&&<button style={Sg.btn("success")} onClick={()=>setSigModal({action:"fechar",title:"Fechar Ocorrência",desc:"Confirme o fechamento desta RO."})}>Fechar RO</button>}
+        {status==="fechada"&&canClose&&<button style={{...Sg.btn("primary"),fontSize:12}} onClick={onGenerateNC}>Gerar NC</button>}
+      </div>
+    </div>
+
+    {/* Banner status fechada */}
+    {status==="fechada"&&<div style={{padding:"10px 14px",background:C.success+"15",border:"1px solid "+C.success+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.success,fontWeight:600}}>
+      Ocorrência fechada em {fmt(d.fechadoAt)} por {d.fechadoByName||"—"}.
+    </div>}
+
+    {/* Dados principais */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Dados da Ocorrência</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><span style={Sg.lbl}>Tipo</span><div style={{fontSize:13,color:C.text}}>{d.tipo||"—"}</div></div>
+        <div><span style={Sg.lbl}>Local</span><div style={{fontSize:13,color:C.text}}>{d.local||"—"}</div></div>
+        <div><span style={Sg.lbl}>Nº OP / Chamado</span><div style={{fontSize:13,color:C.text}}>{d.opChamado||"—"}</div></div>
+        <div><span style={Sg.lbl}>Aberto por</span><div style={{fontSize:13,color:C.text}}>{r.owner_name||r.createdByName||"—"}</div></div>
+      </div>
+      <div style={{marginBottom:10}}><span style={Sg.lbl}>Descrição da Ocorrência</span><div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px",marginTop:2}}>{d.descricao||"—"}</div></div>
+      {d.disposicao&&<div><span style={Sg.lbl}>Disposição</span><div style={{fontSize:13,color:C.text}}>{d.disposicao}</div></div>}
+    </div>
+
+    {/* Dados específicos tipo */}
+    {d.tipo==="Produto"&&<div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Dados do Produto</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        {[["Código da Peça",d.codPeca],["Descrição da Peça",d.descPeca],["Equipamento",d.equipamento],["Lote",d.lote],["Qtd. Não Conforme",d.qtdNC],["Classificação",d.classifProduto]].map(([k,v])=>(
+          <div key={k}><span style={Sg.lbl}>{k}</span><div style={{fontSize:13,color:C.text}}>{v||"—"}</div></div>
+        ))}
+      </div>
+    </div>}
+    {d.tipo==="Processo"&&<div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Dados do Processo</div>
+      <div><span style={Sg.lbl}>Classificação</span><div style={{fontSize:13,color:C.text}}>{d.classifProcesso||"—"}</div></div>
+    </div>}
+
+    {/* Análise */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Análise / Conclusão da Qualidade</div>
+      {status==="fechada"
+        ? <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.analise||"—"}</div>
+        : <>
+          <textarea style={{...Sg.input(),minHeight:80,resize:"vertical",marginBottom:10}} value={analise} onChange={e=>setAnalise(e.target.value)} placeholder="Registre a análise e conclusão da qualidade..." disabled={!canAnalyze}/>
+          {d.tipo&&<div style={{marginBottom:10}}>
+            <label style={Sg.lbl}>Disposição</label>
+            <select style={Sg.input()} value={disposicaoEdit} onChange={e=>setDisposicaoEdit(e.target.value)} disabled={!canAnalyze}>
+              <option value="">Nenhuma / A definir</option>
+              {(RO_DISPOSICOES[d.tipo]||[]).map(dsp=><option key={dsp} value={dsp}>{dsp}</option>)}
+            </select>
+          </div>}
+          {canAnalyze&&status!=="fechada"&&<button style={{...Sg.btn("primary"),opacity:analise.trim()?1:.4}} disabled={!analise.trim()} onClick={()=>setSigModal({action:"analise",title:"Registrar Análise",desc:"Confirme o registro da análise desta ocorrência."})}> Salvar Análise</button>}
+        </>
+      }
+      {d.analiseAt&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>Análise por {d.analiseByName||"—"} em {fmt(d.analiseAt)}</div>}
+    </div>
+
+    {/* Vínculos NC */}
+    {(d.linkedNCs||[]).length>0&&<div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Não Conformidades Vinculadas</div>
+      {(d.linkedNCs||[]).map(nc=>(
+        <div key={nc} style={{padding:"6px 10px",background:C.surface,borderRadius:6,fontSize:13,color:C.accent,marginBottom:4}}>{nc}</div>
+      ))}
+    </div>}
+
+    {/* Log */}
+    <div style={{...Sg.card()}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Histórico</div>
+      {(r.log||[]).length===0&&<div style={{color:C.muted,fontSize:13}}>Sem eventos registrados.</div>}
+      {[...(r.log||[])].reverse().map((e,i)=>(
+        <div key={i} style={{display:"flex",gap:10,marginBottom:8,paddingBottom:8,borderBottom:i<(r.log||[]).length-1?"1px solid "+C.border:"none"}}>
+          <div style={{width:3,borderRadius:2,background:C.accent,flexShrink:0}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,color:C.text,fontWeight:600}}>{e.event}</div>
+            {e.detail&&<div style={{fontSize:11,color:C.muted}}>{e.detail}</div>}
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>{e.by} · {fmt(e.at)}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Signature modal */}
+    {sigModal&&<SignatureModal
+      open={true}
+      onClose={()=>setSigModal(null)}
+      title={sigModal.title}
+      description={sigModal.desc}
+      confirmLabel={sigModal.action==="fechar"?"Fechar Ocorrência":"Salvar Análise"}
+      confirmStyle={sigModal.action==="fechar"?"success":"primary"}
+      saId={r.id||r.code}
+      action={sigModal.action}
+      C={C} Sg={Sg}
+      onConfirm={async(sig)=>{
+        if(sigModal.action==="fechar") await doClose(sig);
+        else await doAnalyze(sig);
+      }}
+    />}
+  </div>;
+}
+
+// ================================================================
 // USER MANAGER + AUDIT LOG + SETTINGS
 // ================================================================
 
@@ -5148,6 +5496,7 @@ function App() {
   // Data state
   const [users,    setUR] = useState([]);
   const [requests, setRR] = useState([]);
+  const [roRecs,   setRO] = useState([]);
   const [matrix,   setMR] = useState(null);
   const [crits,    setCR] = useState(DEFAULT_CRITS);
   const [phaseDl,  setPH] = useState(JSON.parse(JSON.stringify(DEFAULT_PHASE_DEADLINES)));
@@ -5184,12 +5533,14 @@ function App() {
   }, [loggedIn]);
 
 const loadAll = async () => {
-    const [us, rs] = await Promise.all([
+    const [us, rs, ros] = await Promise.all([
       apiGet('/api/users').catch(()=>null),
       apiGet('/api/records?module=sa').catch(()=>null),
+      apiGet('/api/records?module=ro').catch(()=>null),
     ]);
     if (us) setUR(us);
     if (rs) setRR(rs);
+    if (ros) setRO(ros);
     try {
       const mx = await apiGet('/api/config?key=matrix');
       if (mx) {
@@ -5332,6 +5683,28 @@ const saveReq = async (r) => {
 
   const updateReq = (r) => saveReq(r);
 
+  const saveRO = async (r) => {
+    try {
+      const roId = r.id || r.code;
+      const exists = roRecs.find(x => x.id === roId || x.code === roId);
+      if (exists && roId) {
+        await apiPut('/api/records?module=ro&id=' + encodeURIComponent(roId), r);
+      } else {
+        const res = await apiPost('/api/records?module=ro', r);
+        if (res && res.code) r = { ...r, id: res.code, code: res.code };
+      }
+      setRO(p => {
+        const idx = p.findIndex(x => x.id === roId || x.code === roId);
+        if (idx >= 0) { const n=[...p]; n[idx]=r; return n; }
+        return [r, ...p];
+      });
+      return r;
+    } catch (err) {
+      console.error('Erro ao salvar RO:', err);
+      alert('Erro ao salvar: ' + err.message);
+    }
+  };
+
   const createReq = async (r) => {
     await saveReq(r);
     addSL(r.createdByName, 'criacao', 'Nova SA criada', r.id + ' — ' + r.title);
@@ -5341,6 +5714,7 @@ const saveReq = async (r) => {
   const isAdmin = loggedIn && hasPerm(loggedIn,'sa.avaliacao_inicial');
   const isSuperAdmin = loggedIn && hasPerm(loggedIn,'grupos.gerenciar');
   const selected = requests.find(r => r.id === selId);
+  const selectedRO = roRecs.find(r => r.id === selId || r.code === selId);
 
   // ---- Browser history (back/forward button support) ----
   // Only active on real domains (not srcdoc/iframe previews)
@@ -5385,9 +5759,10 @@ const saveReq = async (r) => {
     const refresh = async () => {
       try {
         // Only refresh requests and users — config rarely changes
-        const [us, rs] = await Promise.all([
+        const [us, rs, ros] = await Promise.all([
           apiGet('/api/users').catch(()=>null),
           apiGet('/api/records?module=sa').catch(()=>null),
+          apiGet('/api/records?module=ro').catch(()=>null),
         ]);
         // Merge carefully: don't overwrite if user is actively editing
         // We compare by updatedAt / log length to detect server changes
@@ -5404,6 +5779,7 @@ const saveReq = async (r) => {
             return lr; // keep local (user may be editing)
           });
         });
+        if (ros) setRO(ros);
         if (us) setUR(us);
       } catch {}
     };
@@ -5421,9 +5797,11 @@ const saveReq = async (r) => {
   const [expandedSections, setExpandedSections] = useState(()=>{
     // Auto-expand the section that contains the current view
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
+    const roViews=['ro_list','ro_detail','ro_new'];
     const admViews=['users','grupos','log','signatures'];
     return {
       cm: cmViews.includes(view),
+      ro: roViews.includes(view),
       adm: admViews.includes(view),
     };
   });
@@ -5432,8 +5810,10 @@ const saveReq = async (r) => {
   // Keep sections expanded when navigating into them
   React.useEffect(()=>{
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
+    const roViews=['ro_list','ro_detail','ro_new'];
     const admViews=['users','grupos','log','signatures'];
     if(cmViews.includes(view)) setExpandedSections(p=>({...p,cm:true}));
+    if(roViews.includes(view)) setExpandedSections(p=>({...p,ro:true}));
     if(admViews.includes(view)) setExpandedSections(p=>({...p,adm:true}));
   },[view]);
 
@@ -5457,7 +5837,8 @@ const saveReq = async (r) => {
   const SidebarSection = ({sectionKey, label, icon, children, badge=0}) => {
     const open = expandedSections[sectionKey];
     const isChildActive = view && (
-      (sectionKey==='cm' && ['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'].includes(view)) ||
+      (sectionKey==='cm' && ['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'].includes(view)) ||\
+      (sectionKey==='ro' && ['ro_list','ro_detail','ro_new'].includes(view)) ||\
       (sectionKey==='adm' && ['users','grupos','log','signatures'].includes(view))
     );
     return <div>
@@ -5505,8 +5886,13 @@ const saveReq = async (r) => {
           <SidebarNavItem id="cm_config" label="Configurações" indent/>
         </SidebarSection>
 
+        {/* Módulo: Ocorrências */}
+        <SidebarSection sectionKey="ro" label="Ocorrências" icon="">
+          <SidebarNavItem id="ro_list" label="Registros" indent/>
+        </SidebarSection>
+
         {/* Módulos futuros */}
-        {['Ocorrências','Não Conformidade','RIACP'].map(m=>(
+        {['Não Conformidade','RIACP'].map(m=>(
           <div key={m} style={{padding:'6px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',opacity:.35,cursor:'not-allowed'}}>
             <span style={{fontSize:12,color:C.muted}}>{m}</span>
             <span style={{fontSize:9,color:C.muted}}>em breve</span>
@@ -5570,6 +5956,15 @@ const saveReq = async (r) => {
       {view==='changes'   &&<ChangesTable requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onOpen={(id)=>nav('detail',id)} onNew={()=>nav('new')}/>}
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
+      {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
+      {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} onCancel={()=>setView('ro_list')} onSave={async(f)=>{
+        const now=new Date().toISOString();
+        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f},log:[{at:now,by:loggedIn.name,type:"criacao",event:"RO aberta",detail:"Tipo: "+f.tipo}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
+        const saved=await saveRO(r);
+        addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
+        setView('ro_list');
+      }}/>}
+      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={()=>alert("Módulo NC em desenvolvimento.")}/>}
       {view==='new'       &&<NewRequest currentUser={loggedIn} onSave={(f,atts)=>{const pd=phaseDl||DEFAULT_PHASE_DEADLINES;const now=new Date().toISOString();const yr=new Date().getFullYear();const id='SA-'+String(requests.length+1).padStart(3,'0')+'/'+yr;const r={id,...f,area:f.area||loggedIn.area||'Administrativo',status:'aberta',triage:null,evaluations:{},actions:[],attachments:atts||[],deadlineExtensions:[],stageDeadlines:{avaliacao_inicial:addDays(todayStr(),pd.avaliacao_inicial.days),avaliacao_areas:null,aprovacao_plano:null,montagem_plano:null,execucao:null},log:[{at:now,by:loggedIn.name,type:'criacao',event:'SA criada',detail:'Tipo: '+f.type}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now};createReq(r);nav('detail',r.id);}} onCancel={()=>nav('changes')}/>}
       {view==='detail'&&selId&&selected&&<RequestDetail request={selected} allUsers={users} matrix={matrix||mkMatrix()} crits={crits} phaseDl={phaseDl} deptQuestions={deptQ} currentUser={loggedIn} onBack={()=>nav('changes')} onUpdate={updateReq} initialTab={initialTab} focusDept={focusDept} focusAcId={focusAcId} autoOpenDrawer={!!(focusDept||focusAcId)}/>}
       {view==='matrix'    &&<MatrixEditor matrix={matrix||mkMatrix()} crits={crits} currentUser={loggedIn} onSave={saveMatrix}/>}
