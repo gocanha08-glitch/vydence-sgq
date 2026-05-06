@@ -5837,8 +5837,8 @@ const saveReq = async (r) => {
   const SidebarSection = ({sectionKey, label, icon, children, badge=0}) => {
     const open = expandedSections[sectionKey];
     const isChildActive = view && (
-      (sectionKey==='cm' && ['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'].includes(view)) ||\
-      (sectionKey==='ro' && ['ro_list','ro_detail','ro_new'].includes(view)) ||\
+      (sectionKey==='cm' && ['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'].includes(view)) ||
+      (sectionKey==='ro' && ['ro_list','ro_detail','ro_new'].includes(view)) ||
       (sectionKey==='adm' && ['users','grupos','log','signatures'].includes(view))
     );
     return <div>
