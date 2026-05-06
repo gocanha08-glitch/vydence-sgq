@@ -3867,12 +3867,65 @@ const RO_CLASS_PROCESSO = ["Falha Operacional","Falha de Processo","N/A"];
 const RO_STATUS_LABELS = {
   aberta: {label:"Aberta", color:"#2563EB"},
   em_analise: {label:"Em Análise", color:"#D97706"},
+  aguardando_conclusao: {label:"Aguard. Conclusão", color:"#7C3AED"},
   fechada: {label:"Fechada", color:"#16A34A"},
 };
 
 function ROStatusBadge({status}){
   const s = RO_STATUS_LABELS[status]||{label:status,color:"#64748B"};
   return <Badge label={s.label} color={s.color}/>;
+}
+
+// ---- ProdutoAutocomplete — campo com busca de produto ----
+function ProdutoAutocomplete({value, onSelect, C, Sg, placeholder}){
+  const [q, setQ] = useState(value||"");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(()=>{
+    const h = e => { if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",h);
+    return ()=>document.removeEventListener("mousedown",h);
+  },[]);
+
+  const search = async (v) => {
+    setQ(v);
+    if(!v.trim()||v.length<2){setResults([]);setOpen(false);return;}
+    setLoading(true);
+    try{
+      const token=sessionStorage.getItem('sgq_token');
+      const r=await fetch('/api/produtos?q='+encodeURIComponent(v),{headers:{'Authorization':'Bearer '+token}});
+      const data=await r.json();
+      setResults(Array.isArray(data)?data:[]);
+      setOpen(true);
+    }catch{setResults([]);}
+    setLoading(false);
+  };
+
+  const pick = (p) => {
+    setQ(p.codigo);
+    setOpen(false);
+    onSelect(p);
+  };
+
+  return <div ref={ref} style={{position:"relative",flex:1}}>
+    <input style={Sg.input()} value={q} onChange={e=>search(e.target.value)}
+      placeholder={placeholder||"Código do produto..."}
+      onFocus={()=>{if(results.length)setOpen(true);}}/>
+    {loading&&<div style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:10,color:C.muted}}>...</div>}
+    {open&&results.length>0&&<div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,zIndex:600,background:C.card,border:"1px solid "+C.border,borderRadius:8,boxShadow:"0 8px 24px #0003",maxHeight:220,overflowY:"auto"}}>
+      {results.map((p,i)=>(
+        <div key={i} onClick={()=>pick(p)} style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid "+C.border,fontSize:12}}
+          onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+          onMouseLeave={e=>e.currentTarget.style.background=""}>
+          <div style={{fontWeight:700,color:C.accent}}>{p.codigo}</div>
+          <div style={{color:C.dim,fontSize:11}}>{p.descricao}</div>
+        </div>
+      ))}
+    </div>}
+  </div>;
 }
 
 // ---- ROList ---- listagem de ROs
@@ -3885,9 +3938,11 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
 
   const vis = (roRecords||[]).filter(r=>{
     const q=fText.toLowerCase();
-    const ok = !q||(r.code||r.id||"").toLowerCase().includes(q)||(r.title||"").toLowerCase().includes(q)||(r.data?.descricao||"").toLowerCase().includes(q);
+    const d=r.data||{};
+    const ok = !q||(r.code||r.id||"").toLowerCase().includes(q)||(r.title||"").toLowerCase().includes(q)||(d.descricao||"").toLowerCase().includes(q)||
+      (d.itens||[]).some(it=>(it.codigo||"").toLowerCase().includes(q));
     const okS = !fStatus||r.status===fStatus;
-    const okT = !fTipo||r.data?.tipo===fTipo;
+    const okT = !fTipo||d.tipo===fTipo;
     return ok&&okS&&okT;
   });
 
@@ -3900,8 +3955,8 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
       {canNew&&<button style={{...Sg.btn("primary"),padding:"8px 16px"}} onClick={onNew}>+ Nova RO</button>}
     </div>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, título ou descrição..." style={{...Sg.input(),maxWidth:320}}/>
-      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
+      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, produto, descrição..." style={{...Sg.input(),maxWidth:320}}/>
+      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:200}}>
         <option value="">Todos os status</option>
         {Object.entries(RO_STATUS_LABELS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
       </select>
@@ -3916,7 +3971,7 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead>
           <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-            {["Código","Tipo","Local","Descrição","Abertura","Status","Ações"].map(h=>(
+            {["Código","Tipo","Local","Descrição","Itens","Abertura","Status"].map(h=>(
               <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
             ))}
           </tr>
@@ -3924,6 +3979,7 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
         <tbody>
           {vis.map((r,i)=>{
             const d=r.data||{};
+            const nItens=(d.itens||[]).length;
             return <tr key={r.id||i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer",transition:"background .12s"}}
               onMouseEnter={e=>e.currentTarget.style.background=C.surface}
               onMouseLeave={e=>e.currentTarget.style.background=""}
@@ -3931,12 +3987,12 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
               <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
               <td style={{padding:"9px 12px",fontSize:12,color:C.text}}>{d.tipo||"—"}</td>
               <td style={{padding:"9px 12px",fontSize:12,color:C.dim}}>{d.local||"—"}</td>
-              <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:280}}>
+              <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:260}}>
                 <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
               </td>
-              <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(r.createdAt)}</td>
+              <td style={{padding:"9px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>{nItens>0?nItens:"—"}</td>
+              <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(r.createdAt||r.created_at)}</td>
               <td style={{padding:"9px 12px"}}><ROStatusBadge status={r.status}/></td>
-              <td style={{padding:"9px 12px"}}><button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();onOpen(r.id||r.code);}}>Abrir</button></td>
             </tr>;
           })}
         </tbody>
@@ -3948,20 +4004,17 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
 // ---- NewRO ---- formulário de criação
 function NewRO({currentUser, onSave, onCancel}){
   const {C}=useTheme();const Sg=mkSg(C);
-  const [f,setF]=useState({
-    tipo:"", local:"", opChamado:"", descricao:"",
-    // Produto
-    codPeca:"", descPeca:"", equipamento:"", lote:"", qtdNC:"", classifProduto:"",
-    // Processo
-    classifProcesso:"",
-    disposicao:"",
-  });
-
-  const ok = f.tipo && f.local && f.descricao;
+  const [f,setF]=useState({tipo:"", local:"", opChamado:"", descricao:"", classif:""});
+  const [itens,setItens]=useState([{id:Date.now(),codigo:"",descricao:"",lote:"",qtdNC:""}]);
 
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const ok = f.tipo && f.local && f.descricao;
 
-  return <div style={{padding:"18px 22px",maxWidth:680}}>
+  const addItem = () => setItens(p=>[...p,{id:Date.now(),codigo:"",descricao:"",lote:"",qtdNC:""}]);
+  const removeItem = (id) => setItens(p=>p.filter(x=>x.id!==id));
+  const setItem = (id,k,v) => setItens(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));
+
+  return <div style={{padding:"18px 22px",maxWidth:760}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
       <div>
         <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Nova Ocorrência</h1>
@@ -3970,11 +4023,12 @@ function NewRO({currentUser, onSave, onCancel}){
       <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
     </div>
     <div style={{...Sg.card(),display:"flex",flexDirection:"column",gap:14}}>
-      {/* Tipo + Local */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+
+      {/* Tipo + Local + OP */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
         <div>
           <label style={Sg.lbl}>Tipo *</label>
-          <select style={Sg.input()} value={f.tipo} onChange={e=>{set("tipo",e.target.value);set("classifProduto","");set("classifProcesso","");set("disposicao","");}}>
+          <select style={Sg.input()} value={f.tipo} onChange={e=>{set("tipo",e.target.value);set("classif","");}}>
             <option value="">Selecione...</option>
             {RO_TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
           </select>
@@ -3986,49 +4040,73 @@ function NewRO({currentUser, onSave, onCancel}){
             {RO_LOCAIS.map(l=><option key={l} value={l}>{l}</option>)}
           </select>
         </div>
-      </div>
-      {/* Nº OP / Chamado */}
-      <div><label style={Sg.lbl}>Nº OP / Chamado</label><input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345 ou CHM-001"/></div>
-      {/* Descrição */}
-      <div><label style={Sg.lbl}>Descrição da Ocorrência *</label><textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva detalhadamente o que foi identificado..."/></div>
-
-      {/* Campos específicos Produto */}
-      {f.tipo==="Produto"&&<>
-        <div style={{padding:"12px",background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Dados do Produto</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><label style={Sg.lbl}>Código da Peça</label><input style={Sg.input()} value={f.codPeca} onChange={e=>set("codPeca",e.target.value)} placeholder="Ex: ABC-001"/></div>
-            <div><label style={Sg.lbl}>Descrição da Peça</label><input style={Sg.input()} value={f.descPeca} onChange={e=>set("descPeca",e.target.value)} placeholder="Nome/descrição da peça"/></div>
-            <div><label style={Sg.lbl}>Equipamento</label><input style={Sg.input()} value={f.equipamento} onChange={e=>set("equipamento",e.target.value)} placeholder="Equipamento envolvido"/></div>
-            <div><label style={Sg.lbl}>Lote</label><input style={Sg.input()} value={f.lote} onChange={e=>set("lote",e.target.value)} placeholder="Nº do lote"/></div>
-            <div><label style={Sg.lbl}>Quantidade Não Conforme</label><input style={Sg.input()} type="number" value={f.qtdNC} onChange={e=>set("qtdNC",e.target.value)} placeholder="0"/></div>
-            <div>
-              <label style={Sg.lbl}>Classificação</label>
-              <select style={Sg.input()} value={f.classifProduto} onChange={e=>set("classifProduto",e.target.value)}>
-                <option value="">Selecione...</option>
-                {RO_CLASS_PRODUTO.map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
-      </>}
-
-      {/* Campos específicos Processo */}
-      {f.tipo==="Processo"&&<div style={{padding:"12px",background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Dados do Processo</div>
         <div>
-          <label style={Sg.lbl}>Classificação</label>
-          <select style={Sg.input()} value={f.classifProcesso} onChange={e=>set("classifProcesso",e.target.value)}>
-            <option value="">Selecione...</option>
-            {RO_CLASS_PROCESSO.map(c=><option key={c} value={c}>{c}</option>)}
-          </select>
+          <label style={Sg.lbl}>Nº OP / Chamado</label>
+          <input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345"/>
+        </div>
+      </div>
+
+      {/* Classificação da ocorrência */}
+      {f.tipo&&<div>
+        <label style={Sg.lbl}>Classificação da Ocorrência</label>
+        <select style={Sg.input()} value={f.classif} onChange={e=>set("classif",e.target.value)}>
+          <option value="">Selecione...</option>
+          {(f.tipo==="Produto"?RO_CLASS_PRODUTO:RO_CLASS_PROCESSO).map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>}
+
+      {/* Descrição */}
+      <div>
+        <label style={Sg.lbl}>Descrição da Ocorrência *</label>
+        <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva detalhadamente o que foi identificado..."/>
+      </div>
+
+      {/* Itens afetados — só para Produto */}
+      {f.tipo==="Produto"&&<div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <label style={Sg.lbl}>Itens Afetados</label>
+          <button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={addItem}>+ Adicionar item</button>
+        </div>
+        <div style={{border:"1px solid "+C.border,borderRadius:8,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+                {["Código","Descrição (auto)","Lote","Qtd NC",""].map(h=>(
+                  <th key={h} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((it)=>(
+                <tr key={it.id} style={{borderBottom:"1px solid "+C.border}}>
+                  <td style={{padding:"6px 8px",minWidth:140}}>
+                    <ProdutoAutocomplete C={C} Sg={Sg} value={it.codigo}
+                      onSelect={p=>{setItem(it.id,"codigo",p.codigo);setItem(it.id,"descricao",p.descricao);}}
+                      placeholder="Código..."/>
+                  </td>
+                  <td style={{padding:"6px 8px",minWidth:200}}>
+                    <input style={Sg.input()} value={it.descricao} onChange={e=>setItem(it.id,"descricao",e.target.value)} placeholder="Descrição..."/>
+                  </td>
+                  <td style={{padding:"6px 8px",minWidth:100}}>
+                    <input style={Sg.input()} value={it.lote} onChange={e=>setItem(it.id,"lote",e.target.value)} placeholder="Lote..."/>
+                  </td>
+                  <td style={{padding:"6px 8px",minWidth:80}}>
+                    <input style={Sg.input()} type="number" value={it.qtdNC} onChange={e=>setItem(it.id,"qtdNC",e.target.value)} placeholder="0"/>
+                  </td>
+                  <td style={{padding:"6px 8px",textAlign:"center"}}>
+                    {itens.length>1&&<button style={{background:"none",border:"none",color:C.danger,cursor:"pointer",fontSize:16,padding:"0 4px"}} onClick={()=>removeItem(it.id)}>×</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>}
 
       {/* Disposição */}
       {f.tipo&&<div>
         <label style={Sg.lbl}>Disposição</label>
-        <select style={Sg.input()} value={f.disposicao} onChange={e=>set("disposicao",e.target.value)}>
+        <select style={Sg.input()} value={f.disposicao||""} onChange={e=>set("disposicao",e.target.value)}>
           <option value="">Nenhuma / A definir</option>
           {(RO_DISPOSICOES[f.tipo]||[]).map(d=><option key={d} value={d}>{d}</option>)}
         </select>
@@ -4036,7 +4114,10 @@ function NewRO({currentUser, onSave, onCancel}){
 
       <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
         <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
-        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave(f)}>Abrir Ocorrência</button>
+        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok}
+          onClick={()=>onSave({...f, itens: f.tipo==="Produto" ? itens.filter(x=>x.codigo||x.descricao) : []})}>
+          Abrir Ocorrência
+        </button>
       </div>
     </div>
   </div>;
@@ -4045,29 +4126,72 @@ function NewRO({currentUser, onSave, onCancel}){
 // ---- RODetail ---- detalhe/operações em uma RO
 function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC}){
   const {C}=useTheme();const Sg=mkSg(C);
-  const [sigModal,setSigModal]=useState(null); // {action, title, desc}
-  const [analise,setAnalise]=useState(roRecord?.data?.analise||"");
-  const [disposicaoEdit,setDisposicaoEdit]=useState(roRecord?.data?.disposicao||"");
-  const [savingAnalise,setSavingAnalise]=useState(false);
+  const [sigModal,setSigModal]=useState(null);
+  const [analise,setAnalise]=useState("");
+  const [disposicaoEdit,setDisposicaoEdit]=useState("");
+  const [conclusao,setConclusao]=useState("");
+  const [editItens,setEditItens]=useState(null); // null = não editando
+
+  React.useEffect(()=>{
+    if(roRecord){
+      setAnalise(roRecord.data?.analise||"");
+      setDisposicaoEdit(roRecord.data?.disposicao||"");
+    }
+  },[roRecord?.id||roRecord?.code]);
 
   const r = roRecord;
   if(!r) return <div style={{padding:32,color:C.muted}}>Registro não encontrado.</div>;
   const d = r.data||{};
   const status = r.status;
+  const itens = d.itens||[];
 
   const canAnalyze  = hasPerm(currentUser,'ro.analisar');
   const canClose    = hasPerm(currentUser,'ro.fechar');
-  const canDelete   = hasPerm(currentUser,'ro.excluir');
 
-  // Salva análise + disposição com assinatura
+  // Disposições que precisam de conclusão final
+  const needsConclusao = ["Segregado","Sucatado"].includes(d.disposicao||disposicaoEdit);
+
   const doAnalyze = async (sig) => {
     if(!analise.trim()){alert("Informe a análise/conclusão.");return;}
     const now = new Date().toISOString();
+    const disp = disposicaoEdit;
+    // Se disposição exige conclusão → aguardando_conclusao, senão fecha
+    const novoStatus = needsConclusao ? "aguardando_conclusao" : "em_analise";
     const updated = {
       ...r,
-      status: "em_analise",
-      data: {...d, analise, disposicao: disposicaoEdit, analiseBy: currentUser.id, analiseByName: currentUser.name, analiseAt: now},
-      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"analise", event:"Análise registrada", detail: analise.substring(0,80)}],
+      status: novoStatus,
+      data: {
+        ...d,
+        analise,
+        disposicao: disp,
+        analiseBy: currentUser.id,
+        analiseByName: currentUser.name,
+        analiseAt: now,
+      },
+      log: [...(r.log||[]), {
+        at:now, by:currentUser.name, type:"analise",
+        event: needsConclusao ? "Análise registrada — aguardando conclusão" : "Análise registrada",
+        detail: `Disposição: ${disp||"—"} | ${analise.substring(0,60)}`
+      }],
+    };
+    await onUpdate(updated);
+    setSigModal(null);
+  };
+
+  const doConclusao = async (sig) => {
+    if(!conclusao.trim()){alert("Informe a conclusão.");return;}
+    const now = new Date().toISOString();
+    const updated = {
+      ...r,
+      status: "fechada",
+      data: {
+        ...d,
+        conclusaoFinal: conclusao,
+        conclusaoBy: currentUser.id,
+        conclusaoByName: currentUser.name,
+        conclusaoAt: now,
+      },
+      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"conclusao", event:"Conclusão final registrada — RO fechada", detail: conclusao.substring(0,80)}],
     };
     await onUpdate(updated);
     setSigModal(null);
@@ -4085,9 +4209,27 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     setSigModal(null);
   };
 
-  const statusInfo = RO_STATUS_LABELS[status]||{label:status,color:C.muted};
+  const saveItens = async () => {
+    if(!editItens) return;
+    const now = new Date().toISOString();
+    const updated = {
+      ...r,
+      data: {...d, itens: editItens},
+      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"edicao", event:"Itens afetados atualizados", detail:""}],
+    };
+    await onUpdate(updated);
+    setEditItens(null);
+  };
 
-  return <div style={{padding:"18px 22px",maxWidth:800}}>
+  const addItemEdit = () => setEditItens(p=>[...(p||[]),{id:Date.now(),codigo:"",descricao:"",lote:"",qtdNC:""}]);
+  const removeItemEdit = (id) => setEditItens(p=>p.filter(x=>x.id!==id));
+  const setItemEdit = (id,k,v) => setEditItens(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));
+
+  const statusInfo = RO_STATUS_LABELS[status]||{label:status,color:C.muted};
+  const isFechada = status==="fechada";
+  const isAguardando = status==="aguardando_conclusao";
+
+  return <div style={{padding:"18px 22px",maxWidth:860}}>
     {/* Header */}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
       <div>
@@ -4096,53 +4238,108 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
           <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>{r.code||r.id}</h1>
           <ROStatusBadge status={status}/>
         </div>
-        <div style={{fontSize:12,color:C.muted,marginTop:3}}>{d.tipo||""}{d.local?" · "+d.local:""}</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:3}}>{d.tipo||""}{d.local?" · "+d.local:""}{d.opChamado?" · "+d.opChamado:""}</div>
       </div>
       <div style={{display:"flex",gap:6}}>
+        {isAguardando&&canClose&&<button style={Sg.btn("warning")} onClick={()=>setSigModal({action:"conclusao",title:"Registrar Conclusão Final",desc:`Disposição: ${d.disposicao}. Registre o desfecho definitivo desta ocorrência.`})}>Registrar Conclusão</button>}
         {status==="em_analise"&&canClose&&<button style={Sg.btn("success")} onClick={()=>setSigModal({action:"fechar",title:"Fechar Ocorrência",desc:"Confirme o fechamento desta RO."})}>Fechar RO</button>}
-        {status==="fechada"&&canClose&&<button style={{...Sg.btn("primary"),fontSize:12}} onClick={onGenerateNC}>Gerar NC</button>}
+        {isFechada&&<button style={{...Sg.btn("primary"),fontSize:12}} onClick={onGenerateNC}>Gerar NC</button>}
       </div>
     </div>
 
-    {/* Banner status fechada */}
-    {status==="fechada"&&<div style={{padding:"10px 14px",background:C.success+"15",border:"1px solid "+C.success+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.success,fontWeight:600}}>
-      Ocorrência fechada em {fmt(d.fechadoAt)} por {d.fechadoByName||"—"}.
+    {/* Banners de status */}
+    {isFechada&&<div style={{padding:"10px 14px",background:C.success+"15",border:"1px solid "+C.success+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.success,fontWeight:600}}>
+      Ocorrência fechada{d.fechadoAt?" em "+fmt(d.fechadoAt):d.conclusaoAt?" em "+fmt(d.conclusaoAt):""}{(d.fechadoByName||d.conclusaoByName)?" por "+(d.fechadoByName||d.conclusaoByName):""}
+    </div>}
+    {isAguardando&&<div style={{padding:"10px 14px",background:C.warning+"15",border:"1px solid "+C.warning+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.warning,fontWeight:600}}>
+      Aguardando conclusão final pela qualidade — Disposição: {d.disposicao}
     </div>}
 
     {/* Dados principais */}
     <div style={{...Sg.card(),marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Dados da Ocorrência</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
         <div><span style={Sg.lbl}>Tipo</span><div style={{fontSize:13,color:C.text}}>{d.tipo||"—"}</div></div>
         <div><span style={Sg.lbl}>Local</span><div style={{fontSize:13,color:C.text}}>{d.local||"—"}</div></div>
         <div><span style={Sg.lbl}>Nº OP / Chamado</span><div style={{fontSize:13,color:C.text}}>{d.opChamado||"—"}</div></div>
+        <div><span style={Sg.lbl}>Classificação</span><div style={{fontSize:13,color:C.text}}>{d.classif||"—"}</div></div>
+        <div><span style={Sg.lbl}>Disposição</span><div style={{fontSize:13,color:C.text}}>{d.disposicao||"—"}</div></div>
         <div><span style={Sg.lbl}>Aberto por</span><div style={{fontSize:13,color:C.text}}>{r.owner_name||r.createdByName||"—"}</div></div>
       </div>
-      <div style={{marginBottom:10}}><span style={Sg.lbl}>Descrição da Ocorrência</span><div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px",marginTop:2}}>{d.descricao||"—"}</div></div>
-      {d.disposicao&&<div><span style={Sg.lbl}>Disposição</span><div style={{fontSize:13,color:C.text}}>{d.disposicao}</div></div>}
+      <div><span style={Sg.lbl}>Descrição da Ocorrência</span>
+        <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px",marginTop:2}}>{d.descricao||"—"}</div>
+      </div>
     </div>
 
-    {/* Dados específicos tipo */}
+    {/* Itens afetados */}
     {d.tipo==="Produto"&&<div style={{...Sg.card(),marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Dados do Produto</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-        {[["Código da Peça",d.codPeca],["Descrição da Peça",d.descPeca],["Equipamento",d.equipamento],["Lote",d.lote],["Qtd. Não Conforme",d.qtdNC],["Classificação",d.classifProduto]].map(([k,v])=>(
-          <div key={k}><span style={Sg.lbl}>{k}</span><div style={{fontSize:13,color:C.text}}>{v||"—"}</div></div>
-        ))}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Itens Afetados</div>
+        {!isFechada&&canAnalyze&&!editItens&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setEditItens(itens.map(x=>({...x,id:x.id||Date.now()+Math.random()})))}>Editar itens</button>}
       </div>
-    </div>}
-    {d.tipo==="Processo"&&<div style={{...Sg.card(),marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Dados do Processo</div>
-      <div><span style={Sg.lbl}>Classificação</span><div style={{fontSize:13,color:C.text}}>{d.classifProcesso||"—"}</div></div>
+      {editItens ? <>
+        <div style={{border:"1px solid "+C.border,borderRadius:8,overflow:"hidden",marginBottom:10}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+              {["Código","Descrição","Lote","Qtd NC",""].map(h=>(
+                <th key={h} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {editItens.map(it=>(
+                <tr key={it.id} style={{borderBottom:"1px solid "+C.border}}>
+                  <td style={{padding:"5px 7px",minWidth:130}}>
+                    <ProdutoAutocomplete C={C} Sg={Sg} value={it.codigo}
+                      onSelect={p=>{setItemEdit(it.id,"codigo",p.codigo);setItemEdit(it.id,"descricao",p.descricao);}}/>
+                  </td>
+                  <td style={{padding:"5px 7px",minWidth:180}}><input style={Sg.input()} value={it.descricao} onChange={e=>setItemEdit(it.id,"descricao",e.target.value)}/></td>
+                  <td style={{padding:"5px 7px",minWidth:90}}><input style={Sg.input()} value={it.lote} onChange={e=>setItemEdit(it.id,"lote",e.target.value)}/></td>
+                  <td style={{padding:"5px 7px",minWidth:70}}><input style={Sg.input()} type="number" value={it.qtdNC} onChange={e=>setItemEdit(it.id,"qtdNC",e.target.value)}/></td>
+                  <td style={{padding:"5px 7px",textAlign:"center"}}>
+                    <button style={{background:"none",border:"none",color:C.danger,cursor:"pointer",fontSize:16}} onClick={()=>removeItemEdit(it.id)}>×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{display:"flex",gap:8,justifyContent:"space-between"}}>
+          <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={addItemEdit}>+ Adicionar</button>
+          <div style={{display:"flex",gap:8}}>
+            <button style={Sg.btn()} onClick={()=>setEditItens(null)}>Cancelar</button>
+            <button style={Sg.btn("success")} onClick={saveItens}>Salvar itens</button>
+          </div>
+        </div>
+      </> : <>
+        {itens.length===0 ? <div style={{fontSize:13,color:C.muted}}>Nenhum item registrado.</div> :
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+            {["Código","Descrição","Lote","Qtd NC"].map(h=>(
+              <th key={h} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {itens.map((it,i)=>(
+              <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                <td style={{padding:"7px 10px",fontSize:12,fontWeight:700,color:C.accent}}>{it.codigo||"—"}</td>
+                <td style={{padding:"7px 10px",fontSize:12,color:C.text}}>{it.descricao||"—"}</td>
+                <td style={{padding:"7px 10px",fontSize:12,color:C.dim}}>{it.lote||"—"}</td>
+                <td style={{padding:"7px 10px",fontSize:12,color:C.text}}>{it.qtdNC||"—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </>}
     </div>}
 
     {/* Análise */}
     <div style={{...Sg.card(),marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Análise / Conclusão da Qualidade</div>
-      {status==="fechada"
+      {(isFechada||isAguardando)
         ? <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.analise||"—"}</div>
         : <>
-          <textarea style={{...Sg.input(),minHeight:80,resize:"vertical",marginBottom:10}} value={analise} onChange={e=>setAnalise(e.target.value)} placeholder="Registre a análise e conclusão da qualidade..." disabled={!canAnalyze}/>
+          <textarea style={{...Sg.input(),minHeight:80,resize:"vertical",marginBottom:10}} value={analise} onChange={e=>setAnalise(e.target.value)}
+            placeholder="Registre a análise e conclusão da qualidade..." disabled={!canAnalyze}/>
           {d.tipo&&<div style={{marginBottom:10}}>
             <label style={Sg.lbl}>Disposição</label>
             <select style={Sg.input()} value={disposicaoEdit} onChange={e=>setDisposicaoEdit(e.target.value)} disabled={!canAnalyze}>
@@ -4150,13 +4347,37 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
               {(RO_DISPOSICOES[d.tipo]||[]).map(dsp=><option key={dsp} value={dsp}>{dsp}</option>)}
             </select>
           </div>}
-          {canAnalyze&&status!=="fechada"&&<button style={{...Sg.btn("primary"),opacity:analise.trim()?1:.4}} disabled={!analise.trim()} onClick={()=>setSigModal({action:"analise",title:"Registrar Análise",desc:"Confirme o registro da análise desta ocorrência."})}> Salvar Análise</button>}
+          {needsConclusao&&disposicaoEdit&&<div style={{padding:"8px 12px",background:C.warning+"15",border:"1px solid "+C.warning+"40",borderRadius:7,fontSize:12,color:C.warning,marginBottom:10}}>
+            Disposição "{disposicaoEdit}" requer conclusão final da qualidade antes de fechar.
+          </div>}
+          {canAnalyze&&<button style={{...Sg.btn("primary"),opacity:analise.trim()?1:.4}} disabled={!analise.trim()}
+            onClick={()=>setSigModal({action:"analise",title:"Registrar Análise",desc:"Confirme o registro da análise desta ocorrência."})}>
+            Salvar Análise
+          </button>}
         </>
       }
       {d.analiseAt&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>Análise por {d.analiseByName||"—"} em {fmt(d.analiseAt)}</div>}
     </div>
 
-    {/* Vínculos NC */}
+    {/* Conclusão final (Segregado/Sucatado) */}
+    {isAguardando&&canClose&&<div style={{...Sg.card({border:"1px solid "+C.warning+"50"}),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.warning,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Conclusão Final — {d.disposicao}</div>
+      <textarea style={{...Sg.input(),minHeight:72,resize:"vertical",marginBottom:10}} value={conclusao} onChange={e=>setConclusao(e.target.value)}
+        placeholder={`Descreva o desfecho do item ${d.disposicao==="Sucatado"?"(confirmação da sucata, nº de série, responsável...)":"(liberado, descartado, reprocessado, devolvido...)"}`}/>
+      <button style={{...Sg.btn("warning"),opacity:conclusao.trim()?1:.4}} disabled={!conclusao.trim()}
+        onClick={()=>setSigModal({action:"conclusao",title:"Registrar Conclusão Final",desc:`Disposição: ${d.disposicao}. Esta ação fechará a ocorrência.`})}>
+        Registrar Conclusão e Fechar RO
+      </button>
+    </div>}
+
+    {/* Conclusão registrada */}
+    {isFechada&&d.conclusaoFinal&&<div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:8}}>Conclusão Final</div>
+      <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.conclusaoFinal}</div>
+      <div style={{fontSize:11,color:C.muted,marginTop:6}}>Por {d.conclusaoByName||"—"} em {fmt(d.conclusaoAt)}</div>
+    </div>}
+
+    {/* NCs vinculadas */}
     {(d.linkedNCs||[]).length>0&&<div style={{...Sg.card(),marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Não Conformidades Vinculadas</div>
       {(d.linkedNCs||[]).map(nc=>(
@@ -4164,13 +4385,13 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       ))}
     </div>}
 
-    {/* Log */}
+    {/* Histórico */}
     <div style={{...Sg.card()}}>
       <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Histórico</div>
       {(r.log||[]).length===0&&<div style={{color:C.muted,fontSize:13}}>Sem eventos registrados.</div>}
       {[...(r.log||[])].reverse().map((e,i)=>(
         <div key={i} style={{display:"flex",gap:10,marginBottom:8,paddingBottom:8,borderBottom:i<(r.log||[]).length-1?"1px solid "+C.border:"none"}}>
-          <div style={{width:3,borderRadius:2,background:C.accent,flexShrink:0}}/>
+          <div style={{width:3,borderRadius:2,background:C.accent,flexShrink:0,marginTop:3}}/>
           <div style={{flex:1}}>
             <div style={{fontSize:12,color:C.text,fontWeight:600}}>{e.event}</div>
             {e.detail&&<div style={{fontSize:11,color:C.muted}}>{e.detail}</div>}
@@ -4186,16 +4407,128 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       onClose={()=>setSigModal(null)}
       title={sigModal.title}
       description={sigModal.desc}
-      confirmLabel={sigModal.action==="fechar"?"Fechar Ocorrência":"Salvar Análise"}
-      confirmStyle={sigModal.action==="fechar"?"success":"primary"}
+      confirmLabel={sigModal.action==="fechar"?"Fechar Ocorrência":sigModal.action==="conclusao"?"Confirmar e Fechar":"Salvar Análise"}
+      confirmStyle={sigModal.action==="fechar"||sigModal.action==="conclusao"?"success":"primary"}
       saId={r.id||r.code}
       action={sigModal.action}
       C={C} Sg={Sg}
       onConfirm={async(sig)=>{
         if(sigModal.action==="fechar") await doClose(sig);
+        else if(sigModal.action==="conclusao") await doConclusao(sig);
         else await doAnalyze(sig);
       }}
     />}
+  </div>;
+}
+
+// ---- ProdutosAdmin ---- tela de gestão de produtos
+function ProdutosAdmin({currentUser}){
+  const {C}=useTheme();const Sg=mkSg(C);
+  const [produtos,setProdutos]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [fText,setFText]=useState("");
+  const [uploading,setUploading]=useState(false);
+  const [uploadMsg,setUploadMsg]=useState("");
+  const fileRef=React.useRef(null);
+
+  const load = async () => {
+    setLoading(true);
+    try{
+      const token=sessionStorage.getItem('sgq_token');
+      const r=await fetch('/api/produtos',{headers:{'Authorization':'Bearer '+token}});
+      const data=await r.json();
+      setProdutos(Array.isArray(data)?data:[]);
+    }catch{}
+    setLoading(false);
+  };
+
+  React.useEffect(()=>{load();},[]);
+
+  const handleCSV = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    setUploading(true);setUploadMsg("");
+    try{
+      const text = await file.text();
+      // Suporta ; e , como separador
+      const sep = text.includes(';') ? ';' : ',';
+      const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+      if(lines.length<2){setUploadMsg("Arquivo vazio ou sem dados.");setUploading(false);return;}
+      const headers = lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
+      const iCod = headers.findIndex(h=>h==='codigo'||h==='código'||h==='code');
+      const iDesc = headers.findIndex(h=>h==='descricao'||h==='descrição'||h==='description'||h==='descr');
+      const iTipo = headers.findIndex(h=>h==='tipo'||h==='type');
+      const iUn = headers.findIndex(h=>h==='unidade'||h==='un'||h==='unit');
+      const iFam = headers.findIndex(h=>h==='familia'||h==='família'||h==='family');
+      if(iCod===-1||iDesc===-1){setUploadMsg("Colunas obrigatórias não encontradas: 'codigo' e 'descricao'");setUploading(false);return;}
+      const prods = lines.slice(1).map(l=>{
+        const cols=l.split(sep).map(c=>c.trim().replace(/^["']|["']$/g,''));
+        return {
+          codigo: cols[iCod]||"",
+          descricao: cols[iDesc]||"",
+          tipo: iTipo>=0?cols[iTipo]||null:null,
+          unidade: iUn>=0?cols[iUn]||'UN':'UN',
+          familia: iFam>=0?cols[iFam]||null:null,
+        };
+      }).filter(p=>p.codigo&&p.descricao);
+      const token=sessionStorage.getItem('sgq_token');
+      const res=await fetch('/api/produtos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({produtos:prods,replace:false})});
+      const data=await res.json();
+      setUploadMsg(`Importação concluída: ${data.inserted||0} inseridos, ${data.updated||0} atualizados de ${prods.length} registros.`);
+      load();
+    }catch(err){setUploadMsg("Erro na importação: "+err.message);}
+    setUploading(false);
+    if(fileRef.current)fileRef.current.value="";
+  };
+
+  const vis = produtos.filter(p=>{
+    const q=fText.toLowerCase();
+    return !q||(p.codigo||"").toLowerCase().includes(q)||(p.descricao||"").toLowerCase().includes(q)||(p.familia||"").toLowerCase().includes(q);
+  });
+
+  return <div style={{padding:"18px 22px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <div>
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Produtos</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{produtos.filter(p=>p.ativo).length} produtos ativos</div>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleCSV}/>
+        <button style={{...Sg.btn("primary"),fontSize:12}} onClick={()=>fileRef.current&&fileRef.current.click()} disabled={uploading}>
+          {uploading?"Importando...":"Importar CSV"}
+        </button>
+      </div>
+    </div>
+    {uploadMsg&&<div style={{padding:"9px 14px",background:uploadMsg.startsWith("Erro")?C.danger+"15":C.success+"15",border:"1px solid "+(uploadMsg.startsWith("Erro")?C.danger:C.success)+"40",borderRadius:8,marginBottom:12,fontSize:13,color:uploadMsg.startsWith("Erro")?C.danger:C.success}}>{uploadMsg}</div>}
+    <div style={{marginBottom:10}}>
+      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, descrição ou família..." style={{...Sg.input(),maxWidth:380}}/>
+    </div>
+    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+      {loading?<div style={{textAlign:"center",padding:32,color:C.muted}}>Carregando...</div>:
+      vis.length===0?<div style={{textAlign:"center",padding:32,color:C.muted}}>Nenhum produto encontrado. Importe um CSV para começar.</div>:
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+          {["Código","Descrição","Tipo","Unidade","Família","Status"].map(h=>(
+            <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {vis.map((p,i)=>(
+            <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"8px 12px",fontSize:12,fontWeight:700,color:C.accent}}>{p.codigo}</td>
+              <td style={{padding:"8px 12px",fontSize:12,color:C.text,maxWidth:340}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.descricao}</div></td>
+              <td style={{padding:"8px 12px",fontSize:12,color:C.dim}}>{p.tipo||"—"}</td>
+              <td style={{padding:"8px 12px",fontSize:12,color:C.dim}}>{p.unidade||"UN"}</td>
+              <td style={{padding:"8px 12px",fontSize:12,color:C.dim}}>{p.familia||"—"}</td>
+              <td style={{padding:"8px 12px"}}><Badge label={p.ativo?"Ativo":"Inativo"} color={p.ativo?C.success:C.muted}/></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>}
+    </div>
+    <div style={{fontSize:11,color:C.muted,marginTop:8}}>
+      O CSV deve ter as colunas: <strong>codigo</strong>, <strong>descricao</strong> (obrigatórias) + tipo, unidade, familia (opcionais). Separador: ponto e vírgula ou vírgula.
+    </div>
   </div>;
 }
 
@@ -5798,7 +6131,7 @@ const saveReq = async (r) => {
     // Auto-expand the section that contains the current view
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
     const roViews=['ro_list','ro_detail','ro_new'];
-    const admViews=['users','grupos','log','signatures'];
+    const admViews=['users','grupos','log','signatures','produtos'];
     return {
       cm: cmViews.includes(view),
       ro: roViews.includes(view),
@@ -5811,7 +6144,7 @@ const saveReq = async (r) => {
   React.useEffect(()=>{
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
     const roViews=['ro_list','ro_detail','ro_new'];
-    const admViews=['users','grupos','log','signatures'];
+    const admViews=['users','grupos','log','signatures','produtos'];
     if(cmViews.includes(view)) setExpandedSections(p=>({...p,cm:true}));
     if(roViews.includes(view)) setExpandedSections(p=>({...p,ro:true}));
     if(admViews.includes(view)) setExpandedSections(p=>({...p,adm:true}));
@@ -5912,6 +6245,7 @@ const saveReq = async (r) => {
           {(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<SidebarNavItem id="grupos"   label="Grupos"    indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="log"         label="Auditoria" indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="signatures"  label="Assinaturas" indent/>}
+          {isAdmin&&<SidebarNavItem id="produtos" label="Produtos" indent/>}
         </SidebarSection>}
 
         {/* Meu Perfil */}
@@ -5975,6 +6309,7 @@ const saveReq = async (r) => {
       {view==='settings'  &&<Settings phaseDl={phaseDl} currentUser={loggedIn} theme={theme} setTheme={setTheme} onChangePwd={(np)=>{const u={...loggedIn,pwd:np};sessionStorage.setItem('sgq_user',JSON.stringify(u));setLI(u);}} onSavePhaseDl={(ph)=>savePhaseDl(ph,loggedIn.name)} onLogout={logout}/>}
       {view==='log'&&(isAdmin||hasPerm(loggedIn,'auditoria.ver'))&&<AuditLog requests={requests} sysLog={sysLog}/>}
       {view==='grupos'    &&(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<GroupManager currentUser={loggedIn} C={C} canManage={hasPerm(loggedIn,'grupos.gerenciar')}/>}
+      {view==='produtos'  &&isAdmin&&<ProdutosAdmin currentUser={loggedIn}/>}
     </div>
   </div>;
 }

@@ -11,6 +11,8 @@
     { "source": "/api/roles",                "destination": "/api/users?_route=roles" },
     { "source": "/api/records/:module/:id",  "destination": "/api/records?module=:module&id=:id" },
     { "source": "/api/records/:module",      "destination": "/api/records?module=:module" },
+    { "source": "/api/produtos",             "destination": "/api/produtos" },
+    { "source": "/api/produtos/:codigo",     "destination": "/api/produtos?codigo=:codigo" },
     { "source": "/api/config/:key",          "destination": "/api/config?key=:key" },
     { "source": "/api/uploads",              "destination": "/api/uploads" },
     { "source": "/((?!api/).*)",             "destination": "/index.html" }

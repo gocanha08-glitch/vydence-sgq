@@ -28,9 +28,10 @@ const ra = (req, res) => {
 
 const nextCode = async mod => {
   const y = new Date().getFullYear();
+  const prefix = {sa:'SA',ro:'RO',nc:'NC',riacp:'RIACP'}[mod] || mod.toUpperCase();
   await sql`INSERT INTO sequences(module,year,last) VALUES(${mod},${y},0) ON CONFLICT(module,year) DO NOTHING`;
   const [r] = await sql`UPDATE sequences SET last=last+1 WHERE module=${mod} AND year=${y} RETURNING last`;
-  return `SA-${String(r.last).padStart(3,'0')}/${y}`;
+  return `${prefix}-${String(r.last).padStart(3,'0')}/${y}`;
 };
 
 module.exports = async (req, res) => {
@@ -57,18 +58,17 @@ module.exports = async (req, res) => {
         ORDER BY created_at DESC
       `;
 
-      if (mod === 'sa') {
-        // Para SA: devolve o objeto data expandido (formato CM)
-        // data já contém o objeto SA completo salvo pelo frontend
-        return res.json(rows.map(r => ({
-          ...( r.data || {} ),
-          _db_id: r.id,
-          id: (r.data && r.data.id) || r.code,
-          code: r.code,
-        })));
-      }
-
-      return res.json(rows);
+      // Para todos os módulos: devolve objeto data expandido
+      // data contém o objeto completo salvo pelo frontend
+      return res.json(rows.map(r => ({
+        ...( r.data || {} ),
+        _db_id: r.id,
+        id: (r.data && (r.data.id || r.data.code)) || r.code,
+        code: r.code,
+        status: r.status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })));
     } catch (err) {
       console.error('GET records error:', err);
       return res.status(500).json({ error: 'Erro interno' });
@@ -140,16 +140,32 @@ module.exports = async (req, res) => {
         return res.status(201).json({ ok: true, id: code, code });
       }
 
-      // Outros módulos (RO, NC, RIACP) — formato padrão
-      const { title, description, priority, data } = req.body || {};
-      if (!title?.trim()) return res.status(400).json({ error: 'Titulo obrigatorio' });
+      // Outros módulos (RO, NC, RIACP) — salva objeto completo em data (mesmo padrão SA)
+      const body = req.body || {};
+      const title = (body.title || (body.data && body.data.descricao && body.data.descricao.substring(0,80)) || 'Sem titulo').trim();
       const code = await nextCode(mod);
-      const [rec] = await sql`
+      body.code = code;
+      body.id = code;
+
+      await sql`
         INSERT INTO records (code, module, title, description, status, priority, data, owner_id, owner_name, created_by)
-        VALUES (${code}, ${mod}, ${title.trim()}, ${description||''}, 'aberto', ${priority||'media'}, ${JSON.stringify(data||{})}::jsonb, ${user.id}, ${user.name}, ${user.id})
-        RETURNING id, code, module, title, status, created_at
+        VALUES (
+          ${code}, ${mod},
+          ${title},
+          ${(body.data && body.data.descricao) || ''},
+          ${body.status || 'aberta'},
+          'media',
+          ${JSON.stringify(body)}::jsonb,
+          ${user.id}, ${user.name}, ${user.id}
+        )
       `;
-      return res.status(201).json(rec);
+
+      await sql`
+        INSERT INTO syslog (by, type, event, detail)
+        VALUES (${user.name}, ${mod}, ${mod.toUpperCase() + ' criada: ' + code}, ${title})
+      `;
+
+      return res.status(201).json({ ok: true, id: code, code });
     } catch (err) {
       console.error('POST records error:', err);
       return res.status(500).json({ error: 'Erro interno', detail: err.message });
@@ -196,20 +212,25 @@ module.exports = async (req, res) => {
         return res.json({ ok: true });
       }
 
-      // Outros módulos
-      const [ex] = await sql`SELECT * FROM records WHERE id = ${id} AND module = ${mod}`;
-      if (!ex) return res.status(404).json({ error: 'Nao encontrado' });
-      const { status, data, title, description, priority } = req.body || {};
-      await sql`
-        UPDATE records SET
-          status = ${status || ex.status},
-          title = ${title || ex.title},
-          description = ${description ?? ex.description},
-          priority = ${priority || ex.priority},
-          data = ${JSON.stringify(data || ex.data)}::jsonb,
-          updated_at = now()
-        WHERE id = ${id}
-      `;
+      // Outros módulos (RO, NC, RIACP) — mesmo padrão SA, salva objeto completo
+      const body = req.body || {};
+      const roId = body.id || body.code || id;
+      const [ex] = await sql`SELECT id FROM records WHERE code = ${roId} AND module = ${mod}`;
+
+      if (ex) {
+        const titleUpd = (body.title || (body.data && body.data.descricao && body.data.descricao.substring(0,80)) || '').trim();
+        await sql`
+          UPDATE records SET
+            title      = CASE WHEN ${titleUpd} != '' THEN ${titleUpd} ELSE title END,
+            description = ${(body.data && body.data.descricao) || ''},
+            status     = ${body.status || 'aberta'},
+            data       = ${JSON.stringify(body)}::jsonb,
+            updated_at = now()
+          WHERE code = ${roId} AND module = ${mod}
+        `;
+      } else {
+        return res.status(404).json({ error: 'Registro nao encontrado: ' + roId });
+      }
       return res.json({ ok: true });
     } catch (err) {
       console.error('PUT records error:', err);
