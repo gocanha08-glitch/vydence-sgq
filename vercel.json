@@ -1,6 +1,12 @@
 {
+  "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/public/index.html" }
+    { "source": "/api/users/me",          "destination": "/api/users?_route=me" },
+    { "source": "/api/users/:id/roles",   "destination": "/api/users?_route=roles&id=:id" },
+    { "source": "/api/records/:module",   "destination": "/api/records?module=:module" },
+    { "source": "/api/records/:module/:id", "destination": "/api/records?module=:module&id=:id" },
+    { "source": "/api/actions",           "destination": "/api/actions" },
+    { "source": "/api/config/:key",       "destination": "/api/config/:key" },
+    { "source": "/((?!api/).*)",          "destination": "/index.html" }
   ]
 }

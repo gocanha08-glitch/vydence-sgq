@@ -279,7 +279,7 @@ const Icon = ({ name, size=16, color="currentColor" }) => {
 
 /* ─── HELPERS ─── */
 const api = async (path, method='GET', body=null) => {
-  const token = localStorage.getItem('sgq_token');
+  const token = sessionStorage.getItem('sgq_token');
   const res = await fetch(path, {
     method,
     headers: { 'Content-Type':'application/json', ...(token ? {'Authorization':`Bearer ${token}`} : {}) },
@@ -408,8 +408,8 @@ const LoginPage = ({ onLogin }) => {
     setLoading(true); setError('');
     try {
       const data = await api('/api/auth/login', 'POST', { email, password });
-      localStorage.setItem('sgq_token', data.token);
-      localStorage.setItem('sgq_user', JSON.stringify(data.user));
+      sessionStorage.setItem('sgq_token', data.token);
+      sessionStorage.setItem('sgq_user', JSON.stringify(data.user));
       onLogin(data.user);
     } catch(err) {
       setAttempts(a => a+1);
@@ -1157,7 +1157,7 @@ const MODULES = [
 
 const App = () => {
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sgq_user')); } catch { return null; }
+    try { return JSON.parse(sessionStorage.getItem('sgq_user')); } catch { return null; }
   });
   const [page, setPage] = useState('dashboard');
   const [records, setRecords] = useState({ ro:[], nc:[], riacp:[], sa:[] });
@@ -1172,8 +1172,8 @@ const App = () => {
   if (!user) return <LoginPage onLogin={u => { setUser(u); setPage('dashboard'); }} />;
 
   const logout = () => {
-    localStorage.removeItem('sgq_token');
-    localStorage.removeItem('sgq_user');
+    sessionStorage.removeItem('sgq_token');
+    sessionStorage.removeItem('sgq_user');
     setUser(null);
   };
 
