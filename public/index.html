@@ -4221,6 +4221,7 @@ function GerarNCModal({ro, currentUser, C, Sg, onClose, onConfirm}){
 function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [sigModal,setSigModal]=useState(null);
+  const [ncModal,setNcModal]=useState(false);
   const [analise,setAnalise]=useState("");
   const [disposicaoEdit,setDisposicaoEdit]=useState("");
   const [conclusao,setConclusao]=useState("");
