@@ -3137,16 +3137,13 @@ function Dashboard({requests,currentUser,allUsers,crits,onNav,onOpenEval,onOpenA
   const total=aprovSGQ.length+analises.length+acoes.length+minhasSAs.length;
 
   return <div style={{padding:"18px 22px"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,flexWrap:"wrap",gap:10}}>
-      <div>
-        <h1 style={{fontSize:18,margin:"0 0 3px",color:C.text,fontWeight:700}}>
-          {h<12?"Bom dia":h<18?"Boa tarde":"Boa noite"}, {nome}
-        </h1>
-       <div style={{fontSize:11,color:C.muted}}>
-          {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
-        </div>
+    <div style={{marginBottom:16}}>
+      <h1 style={{fontSize:18,margin:"0 0 3px",color:C.text,fontWeight:700}}>
+        {h<12?"Bom dia":h<18?"Boa tarde":"Boa noite"}, {nome}
+      </h1>
+      <div style={{fontSize:11,color:C.muted}}>
+        {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
       </div>
-      <button style={{...Sg.btn("primary"),padding:"8px 16px",fontSize:13}} onClick={onNew}>+ Nova Solicitacao</button>
     </div>
 
     {total===0&&pendExt.length===0&&<div style={{...Sg.card({textAlign:"center",padding:48})}}>
@@ -3380,7 +3377,7 @@ function ResizableTable({cols:initialCols,headers,rows,onRowClick,C,storageKey})
 }
 
 // ================================================================
-function ChangesTable({requests,currentUser,crits,allUsers,onOpen}){
+function ChangesTable({requests,currentUser,crits,allUsers,onOpen,onNew}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [q,setQ]=useState("");const [sf,setSF]=useState("");const [st2,setST2]=useState("");
 
@@ -3415,8 +3412,11 @@ function ChangesTable({requests,currentUser,crits,allUsers,onOpen}){
 
   return <div style={{padding:"18px 22px"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:10}}>
-      <h1 style={{margin:0,fontSize:18,color:C.text,fontWeight:700}}>Controles de Mudanca</h1>
-      <span style={{fontSize:11,color:C.muted}}>{vis.length} registro{vis.length!==1?"s":""}</span>
+      <div>
+        <h1 style={{margin:0,fontSize:18,color:C.text,fontWeight:700}}>Controle de Mudanças</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{vis.length} registro{vis.length!==1?"s":""}</div>
+      </div>
+      <button style={{...Sg.btn("primary"),padding:"8px 16px",fontSize:13}} onClick={onNew}>+ Nova SA</button>
     </div>
     <div style={{display:"flex",gap:8,marginBottom:9,flexWrap:"wrap",alignItems:"center"}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar ID, titulo, tipo..." style={{...Sg.input(),maxWidth:280}}/>
@@ -5502,7 +5502,7 @@ const saveReq = async (r) => {
         deptQuestions={deptQ}
         phaseDl={phaseDl}
         C={C}/>
-      {view==='changes'   &&<ChangesTable requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onOpen={(id)=>nav('detail',id)}/>}
+      {view==='changes'   &&<ChangesTable requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onOpen={(id)=>nav('detail',id)} onNew={()=>nav('new')}/>}
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='new'       &&<NewRequest currentUser={loggedIn} onSave={(f,atts)=>{const pd=phaseDl||DEFAULT_PHASE_DEADLINES;const now=new Date().toISOString();const yr=new Date().getFullYear();const id='SA-'+String(requests.length+1).padStart(3,'0')+'/'+yr;const r={id,...f,area:f.area||loggedIn.area||'Administrativo',status:'aberta',triage:null,evaluations:{},actions:[],attachments:atts||[],deadlineExtensions:[],stageDeadlines:{avaliacao_inicial:addDays(todayStr(),pd.avaliacao_inicial.days),avaliacao_areas:null,aprovacao_plano:null,montagem_plano:null,execucao:null},log:[{at:now,by:loggedIn.name,type:'criacao',event:'SA criada',detail:'Tipo: '+f.type}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now};createReq(r);nav('detail',r.id);}} onCancel={()=>nav('changes')}/>}
