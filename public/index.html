@@ -4405,6 +4405,65 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
 }
 
 // ================================================================
+// SEED PRODUTOS — temporário para popular tabela de teste
+// ================================================================
+function SeedProdutos({currentUser}){
+  const {C}=useTheme();const Sg=mkSg(C);
+  const [status,setStatus]=useState(null);
+  const [loading,setLoading]=useState(false);
+
+  const SEED = [
+    {codigo:"026377",descricao:"KIT COMPLETO PLACA MODELO LM-PW1-001 - PEME V1.1 - R1.0 – RETRAB MS-PW1-001",tipo:"TP",unidade:"UN",familia:"Placa PW1"},
+    {codigo:"025358",descricao:"KIT COMPLETO PLACA MODELO LM-PW1-001 - PEME V1.1 - R1.3 ROHS",tipo:"PI",unidade:"UN",familia:"Placa PW1"},
+    {codigo:"026438",descricao:"KIT COMPLETO PLACA MODELO LM-PW1-001 - PEME V1.2 - R1.0 ROHS",tipo:"MP",unidade:"UN",familia:"Placa PW1"},
+    {codigo:"029897",descricao:"KIT COMPLETO PLACA MODELO LM-PW1-001 - PEME V1.2 - R1.0 ROHS - RETRAB MS-PW1-003",tipo:"MP",unidade:"UN",familia:"Placa PW1"},
+    {codigo:"029932",descricao:"KIT COMPLETO PLACA MODELO LM-PW1-001 - PEME V1.2 - R1.1 ROHS",tipo:"MP",unidade:"UN",familia:"Placa PW1"},
+    {codigo:"020424",descricao:"KIT PLACA DE CI PW1-001-PEME V1.1",tipo:"PI",unidade:"UN",familia:"Placa PW1"},
+    {codigo:"025385",descricao:"KIT PLACA LM-PW1-001 - PEME V1.1 - R1.1 RETRAB MS-PW1-001",tipo:"PI",unidade:"UN",familia:"Placa PW1"},
+  ];
+
+  const runSeed = async () => {
+    setLoading(true); setStatus(null);
+    try {
+      const token = sessionStorage.getItem('sgq_token');
+      const res = await fetch('/api/produtos', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body: JSON.stringify({produtos: SEED, replace: false})
+      });
+      const data = await res.json();
+      if(res.ok) setStatus({ok:true, msg:`${data.inserted} inseridos, ${data.updated} atualizados.`});
+      else setStatus({ok:false, msg: data.error||'Erro desconhecido'});
+    } catch(e){ setStatus({ok:false, msg:e.message}); }
+    setLoading(false);
+  };
+
+  return <div style={{padding:"18px 22px",maxWidth:540}}>
+    <h1 style={{margin:"0 0 6px",fontSize:17,color:C.text,fontWeight:700}}>Seed de Produtos (Teste)</h1>
+    <div style={{fontSize:12,color:C.muted,marginBottom:20}}>Popula a tabela de produtos com os dados de teste. Pode rodar mais de uma vez sem duplicar.</div>
+    <div style={{...Sg.card(),marginBottom:16}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Produtos que serão inseridos</div>
+      {SEED.map(p=>(
+        <div key={p.codigo} style={{display:"flex",gap:10,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:12}}>
+          <span style={{fontWeight:700,color:C.accent,width:70,flexShrink:0}}>{p.codigo}</span>
+          <span style={{color:C.text,flex:1}}>{p.descricao}</span>
+          <span style={{color:C.muted,width:30,flexShrink:0}}>{p.tipo}</span>
+        </div>
+      ))}
+    </div>
+    <button style={{...Sg.btn("primary"),padding:"10px 24px",opacity:loading?.5:1}} disabled={loading} onClick={runSeed}>
+      {loading?"Inserindo...":"Rodar Seed"}
+    </button>
+    {status&&<div style={{marginTop:12,padding:"10px 14px",borderRadius:8,fontSize:13,fontWeight:600,
+      background:status.ok?C.success+"15":C.danger+"15",
+      color:status.ok?C.success:C.danger,
+      border:"1px solid "+(status.ok?C.success:C.danger)+"40"}}>
+      {status.ok?"Concluído: ":""}{status.msg}
+    </div>}
+  </div>;
+}
+
+// ================================================================
 // USER MANAGER + AUDIT LOG + SETTINGS
 // ================================================================
 
@@ -6117,7 +6176,7 @@ const saveReq = async (r) => {
           {(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<SidebarNavItem id="grupos"   label="Grupos"    indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="log"         label="Auditoria" indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="signatures"  label="Assinaturas" indent/>}
-          {isAdmin&&<SidebarNavItem id="produtos" label="Produtos" indent/>}
+          {isAdmin&&<SidebarNavItem id="seed_produtos" label="Seed Produtos" indent/>}
         </SidebarSection>}
 
         {/* Meu Perfil */}
@@ -6181,6 +6240,7 @@ const saveReq = async (r) => {
       {view==='settings'  &&<Settings phaseDl={phaseDl} currentUser={loggedIn} theme={theme} setTheme={setTheme} onChangePwd={(np)=>{const u={...loggedIn,pwd:np};sessionStorage.setItem('sgq_user',JSON.stringify(u));setLI(u);}} onSavePhaseDl={(ph)=>savePhaseDl(ph,loggedIn.name)} onLogout={logout}/>}
       {view==='log'&&(isAdmin||hasPerm(loggedIn,'auditoria.ver'))&&<AuditLog requests={requests} sysLog={sysLog}/>}
       {view==='grupos'    &&(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<GroupManager currentUser={loggedIn} C={C} canManage={hasPerm(loggedIn,'grupos.gerenciar')}/>}
+      {view==='seed_produtos'&&isAdmin&&<SeedProdutos currentUser={loggedIn}/>}
       {view==='produtos'  &&isAdmin&&<ProdutosAdmin currentUser={loggedIn}/>}
     </div>
   </div>;
