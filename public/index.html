@@ -1343,7 +1343,8 @@ function RequestDetail({request,allUsers,matrix,currentUser,crits,phaseDl,deptQu
   const [showRegress,setRegress]=useState(false);const [regressNote,setGN]=useState("");
   const [showCancel,setShowCancel]=useState(false);
   const [showReopenSA,setShowReopenSA]=useState(false);
-  const [sigModal,setSigModal]=useState(null); // {action, data, title, desc, label, style}
+  const [sigModal,setSigModal]=useState(null);
+  const [ncModal,setNcModal]=useState(false); // {action, data, title, desc, label, style}
   const [showAp2,setShowAp2]=useState(false);
   const [showAp3,setShowAp3]=useState(false);
   const [ap2DateVal,setAp2DateVal]=useState("");
@@ -4175,6 +4176,52 @@ function NewRO({currentUser, onSave, onCancel}){
   </div>;
 }
 
+// ── GerarNCModal ────────────────────────────────────────────────
+function GerarNCModal({ro, currentUser, C, Sg, onClose, onConfirm}){
+  const d = ro.data||{};
+  const [titulo, setTitulo] = useState((d.descricao||"").substring(0,80));
+  const [descricao, setDescricao] = useState(
+    "Originada da RO "+( ro.code||ro.id)+".
+
+"+
+    (d.descricao||"")
+  );
+
+  const ok = titulo.trim()&&descricao.trim();
+
+  return <Modal open={true} onClose={onClose} title={"Gerar NC a partir de "+(ro.code||ro.id)} width={560}>
+    <div style={{fontSize:13,color:C.muted,marginBottom:14,padding:"8px 12px",background:C.accent+"0D",borderRadius:7,border:"1px solid "+C.accent+"30"}}>
+      Os itens afetados e o vínculo com esta RO serão transferidos automaticamente.
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div>
+        <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.4,display:"block",marginBottom:4}}>Título da NC *</label>
+        <input style={Sg.input()} value={titulo} onChange={e=>setTitulo(e.target.value)} placeholder="Título da não conformidade..."/>
+      </div>
+      <div>
+        <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.4,display:"block",marginBottom:4}}>Descrição *</label>
+        <textarea style={{...Sg.input(),minHeight:100,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)}/>
+      </div>
+      {(d.itens||[]).length>0&&<div style={{padding:"8px 12px",background:C.surface,borderRadius:7,border:"1px solid "+C.border}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>Itens que serão vinculados</div>
+        {(d.itens||[]).filter(x=>x.codigo).map((item,i)=>(
+          <div key={i} style={{fontSize:12,color:C.text,padding:"3px 0"}}>
+            <span style={{fontWeight:700,color:C.accent}}>{item.codigo}</span>
+            {item.descricao&&<span style={{color:C.muted,marginLeft:8}}>{item.descricao}</span>}
+            {item.lote&&<span style={{color:C.muted,marginLeft:8}}>Lote: {item.lote}</span>}
+          </div>
+        ))}
+      </div>}
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:ok?1:.4}} disabled={!ok} onClick={()=>onConfirm({titulo,descricao,roCode:ro.code||ro.id,itens:d.itens||[],tipo:d.tipo,local:d.local,classificacao:d.classificacao})}>
+        Criar NC
+      </button>
+    </div>
+  </Modal>;
+}
+
 // ── RODetail ─────────────────────────────────────────────────────
 function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC}){
   const {C}=useTheme();const Sg=mkSg(C);
@@ -4283,7 +4330,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {status==="em_analise"&&canClose&&<button style={Sg.btn("success")} onClick={()=>setSigModal({action:"fechar",title:"Fechar Ocorrência"})}>Fechar RO</button>}
-        {status==="fechada"&&<button style={{...Sg.btn("primary"),fontSize:12}} onClick={onGenerateNC}>Gerar NC</button>}
+        {status==="fechada"&&<button style={{...Sg.btn("primary"),fontSize:12}} onClick={()=>setNcModal(true)}>Gerar NC</button>}
       </div>
     </div>
 
@@ -4391,19 +4438,37 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     </div>
 
     {/* Histórico */}
-    <div style={{...Sg.card()}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Histórico</div>
-      {(r.log||[]).length===0&&<div style={{color:C.muted,fontSize:13}}>Sem eventos.</div>}
-      {[...(r.log||[])].reverse().map((e,i)=>(
-        <div key={i} style={{display:"flex",gap:10,marginBottom:8,paddingBottom:8,borderBottom:i<(r.log||[]).length-1?"1px solid "+C.border:"none"}}>
-          <div style={{width:3,borderRadius:2,background:C.accent,flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:12,color:C.text,fontWeight:600}}>{e.event}</div>
-            {e.detail&&<div style={{fontSize:11,color:C.muted}}>{e.detail}</div>}
-            <div style={{fontSize:10,color:C.muted,marginTop:2}}>{e.by} · {fmt(e.at)}</div>
-          </div>
-        </div>
-      ))}
+    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+      <div style={{padding:"12px 14px 8px",fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Histórico</div>
+      {(r.log||[]).length===0
+        ? <div style={{padding:"14px",color:C.muted,fontSize:13}}>Sem eventos registrados.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+                {["Etapa","Data","Usuário","Descrição"].map(h=>(
+                  <th key={h} style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...(r.log||[])].reverse().map((e,i)=>{
+                const typeColors={criacao:C.success,analise:C.accent,fechamento:C.success,conclusao:C.success,anexo:C.warning,itens:C.muted,abertura:C.accent};
+                const col=typeColors[e.type]||C.muted;
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                  <td style={{padding:"7px 12px",whiteSpace:"nowrap"}}>
+                    <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:600,background:col+"20",color:col}}>{e.type||"—"}</span>
+                  </td>
+                  <td style={{padding:"7px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(e.at)}</td>
+                  <td style={{padding:"7px 12px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{e.by||"—"}</td>
+                  <td style={{padding:"7px 12px",fontSize:12,color:C.text}}>
+                    <div style={{fontWeight:500}}>{e.event}</div>
+                    {e.detail&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{e.detail}</div>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+      }
     </div>
 
     {/* Signature modal */}
@@ -4421,6 +4486,15 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         else if(sigModal.action==="conclusao") await doConclusao(sig);
         else await doAnalyze(sig);
       }}
+    />}
+
+    {/* Modal Gerar NC */}
+    {ncModal&&<GerarNCModal
+      ro={r}
+      currentUser={currentUser}
+      C={C} Sg={Sg}
+      onClose={()=>setNcModal(false)}
+      onConfirm={onGenerateNC}
     />}
   </div>;
 }
@@ -4480,7 +4554,8 @@ function SeedProdutos({currentUser}){
     setUploading(true); setUploadResult(null);
     try{
       const text=await file.text();
-      const lines=text.split(/?
+      const lines=text.split(/
+?
 /).filter(l=>l.trim());
       // Detecta separador
       const sep=lines[0].includes(';')?';':',';
@@ -5849,6 +5924,7 @@ function App() {
   const [users,    setUR] = useState([]);
   const [requests, setRR] = useState([]);
   const [roRecs,   setRO] = useState([]);
+  const [ncRecs,   setNC_] = useState([]);
   const [matrix,   setMR] = useState(null);
   const [crits,    setCR] = useState(DEFAULT_CRITS);
   const [phaseDl,  setPH] = useState(JSON.parse(JSON.stringify(DEFAULT_PHASE_DEADLINES)));
@@ -6034,6 +6110,59 @@ const saveReq = async (r) => {
   };
 
   const updateReq = (r) => saveReq(r);
+
+  const saveNC = async (r) => {
+    try {
+      const ncId = r.id || r.code;
+      const exists = ncRecs.find(x => x.id === ncId || x.code === ncId);
+      if (exists && ncId) {
+        await apiPut('/api/records?module=nc&id=' + encodeURIComponent(ncId), r);
+      } else {
+        const res = await apiPost('/api/records?module=nc', r);
+        if (res && res.code) r = { ...r, id: res.code, code: res.code };
+      }
+      setNC_(p => {
+        const idx = p.findIndex(x => x.id === (r.id||r.code) || x.code === (r.id||r.code));
+        if (idx >= 0) { const n=[...p]; n[idx]=r; return n; }
+        return [r, ...p];
+      });
+      return r;
+    } catch (err) {
+      alert('Erro ao salvar NC: ' + err.message);
+    }
+  };
+
+  const generateNC = async ({titulo, descricao, roCode, itens, tipo, local, classificacao}) => {
+    const now = new Date().toISOString();
+    const nc = {
+      title: titulo,
+      status: 'aberta',
+      data: {
+        titulo, descricao, tipo, local, classificacao,
+        itens: itens||[],
+        linkedROs: [roCode],
+        origem: 'ro',
+      },
+      log: [{at:now, by:loggedIn.name, type:'criacao', event:'NC aberta', detail:'Originada de '+roCode}],
+      createdBy: loggedIn.id, createdByName: loggedIn.name, createdAt: now,
+      owner_id: loggedIn.id, owner_name: loggedIn.name,
+    };
+    const saved = await saveNC(nc);
+    if (saved) {
+      // Vincula NC na RO
+      const ro = roRecs.find(x => x.code === roCode || x.id === roCode);
+      if (ro) {
+        const updatedRO = {
+          ...ro,
+          data: {...(ro.data||{}), linkedNCs: [...((ro.data||{}).linkedNCs||[]), saved.code||saved.id]},
+          log: [...(ro.log||[]), {at:now, by:loggedIn.name, type:'nc_gerada', event:'NC gerada', detail:(saved.code||saved.id)}],
+        };
+        await saveRO(updatedRO);
+      }
+      addSL(loggedIn.name, 'criacao', 'NC criada a partir de RO', (saved.code||saved.id)+' ← '+roCode);
+      alert('NC '+(saved.code||saved.id)+' criada com sucesso!');
+    }
+  };
 
   const saveRO = async (r) => {
     try {
@@ -6317,7 +6446,7 @@ const saveReq = async (r) => {
         addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
         setView('ro_list');
       }}/>}
-      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={()=>alert("Módulo NC em desenvolvimento.")}/>}
+      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
       {view==='new'       &&<NewRequest currentUser={loggedIn} onSave={(f,atts)=>{const pd=phaseDl||DEFAULT_PHASE_DEADLINES;const now=new Date().toISOString();const yr=new Date().getFullYear();const id='SA-'+String(requests.length+1).padStart(3,'0')+'/'+yr;const r={id,...f,area:f.area||loggedIn.area||'Administrativo',status:'aberta',triage:null,evaluations:{},actions:[],attachments:atts||[],deadlineExtensions:[],stageDeadlines:{avaliacao_inicial:addDays(todayStr(),pd.avaliacao_inicial.days),avaliacao_areas:null,aprovacao_plano:null,montagem_plano:null,execucao:null},log:[{at:now,by:loggedIn.name,type:'criacao',event:'SA criada',detail:'Tipo: '+f.type}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now};createReq(r);nav('detail',r.id);}} onCancel={()=>nav('changes')}/>}
       {view==='detail'&&selId&&selected&&<RequestDetail request={selected} allUsers={users} matrix={matrix||mkMatrix()} crits={crits} phaseDl={phaseDl} deptQuestions={deptQ} currentUser={loggedIn} onBack={()=>nav('changes')} onUpdate={updateReq} initialTab={initialTab} focusDept={focusDept} focusAcId={focusAcId} autoOpenDrawer={!!(focusDept||focusAcId)}/>}
       {view==='matrix'    &&<MatrixEditor matrix={matrix||mkMatrix()} crits={crits} currentUser={loggedIn} onSave={saveMatrix}/>}
