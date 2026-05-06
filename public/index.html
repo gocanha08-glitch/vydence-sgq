@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet"/>
 <title>SGQ - Controle de Mudancas</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -10,7 +13,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--app-bg,#0F1117);font-family:'Segoe UI',system-ui,sans-serif;color:#E8EAF0;font-size:14px}
+body{background:var(--app-bg,#F5F7FA);font-family:'DM Sans',sans-serif;color:#1A2035;font-size:13px;-webkit-font-smoothing:antialiased;}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--sb-color,#2A3050);border-radius:3px}
@@ -177,10 +180,10 @@ const THEMES = {
     text:"#E8EAF0", dim:"#9AA3BF", inputBg:"#181C27",
   },
   light: {
-    bg:"#F4F6FB", surface:"#FFFFFF", card:"#FFFFFF", border:"#D1D9E6",
-    accent:"#2563EB", success:"#0D9488", warning:"#D97706", danger:"#DC2626",
-    purple:"#7C3AED", orange:"#EA580C", cyan:"#0891B2", muted:"#6B7280",
-    text:"#111827", dim:"#374151", inputBg:"#F9FAFB",
+    bg:"#F5F7FA", surface:"#FFFFFF", card:"#FFFFFF", border:"#E8ECF4",
+    accent:"#2563EB", success:"#16A34A", warning:"#D97706", danger:"#DC2626",
+    purple:"#7C3AED", orange:"#EA580C", cyan:"#0891B2", muted:"#64748B",
+    text:"#1A2035", dim:"#475569", inputBg:"#F8FAFC",
   },
 
 };
@@ -190,7 +193,7 @@ const ThemeCtx = React.createContext({theme:"dark", C:THEMES.dark, setTheme:()=>
 const useTheme = () => React.useContext(ThemeCtx);
 
 function ThemeProvider({children}){
-  const [theme, setThemeRaw] = useState(()=>localStorage.getItem("cm_theme_v9")||"dark");
+  const [theme, setThemeRaw] = useState(()=>localStorage.getItem("sgq_theme_v1")||"light");
   const applyBodyTheme=(C2)=>{
     document.body.style.background=C2.bg;
     document.body.style.color=C2.text;
@@ -199,12 +202,12 @@ function ThemeProvider({children}){
     // fix date picker icon for light mode
     const style=document.getElementById('_theme_style')||document.createElement('style');
     style.id='_theme_style';
-    style.textContent=`input[type=date]::-webkit-calendar-picker-indicator{filter:${C2.bg==='#F4F6FB'?'none':'invert(.5)'}}select option{background:${C2.card};color:${C2.text}}`;
+    style.textContent=`input[type=date]::-webkit-calendar-picker-indicator{filter:${['#F4F6FB','#F5F7FA'].includes(C2.bg)?'none':'invert(.5)'}}select option{background:${C2.card};color:${C2.text}}`;
     document.head.appendChild(style);
   };
   const setTheme = t => {
     setThemeRaw(t);
-    localStorage.setItem("cm_theme_v9", t);
+    localStorage.setItem("sgq_theme_v1", t);
     applyBodyTheme(THEMES[t]||THEMES.dark);
   };
   const C = THEMES[theme] || THEMES.dark;
@@ -252,19 +255,19 @@ const validatePwd=(p,user={})=>{
 };
 
 const mkSg=C=>({
-  card:(x={})=>({background:C.card,border:"1px solid "+C.border,borderRadius:10,padding:16,...x}),
-  btn:(v="ghost")=>({padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,outline:"none",flexShrink:0,transition:"opacity .15s",
+  card:(x={})=>({background:C.card,border:"1px solid "+C.border,borderRadius:10,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,.04)",...x}),
+  btn:(v="ghost")=>({padding:"6px 14px",borderRadius:7,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:500,outline:"none",flexShrink:0,transition:"all .15s",
     ...(v==="primary"?{background:C.accent,color:"#fff"}:
         v==="danger" ?{background:C.danger,color:"#fff"}:
-        v==="success"?{background:C.success,color:"#000"}:
-        v==="warning"?{background:C.warning,color:"#000"}:
+        v==="success"?{background:C.success,color:"#fff"}:
+        v==="warning"?{background:C.warning,color:"#fff"}:
         v==="purple" ?{background:C.purple,color:"#fff"}:
-                      {background:C.border,color:C.dim})}),
-  input:()=>({background:C.inputBg,border:"1px solid "+C.border,borderRadius:7,color:C.text,padding:"8px 11px",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}),
-  lbl:{fontSize:11,fontWeight:700,letterSpacing:.7,color:"#6B7A9F",textTransform:"uppercase",display:"block",marginBottom:4},
+                      {background:C.border,color:C.muted})}),
+  input:()=>({background:C.inputBg,border:"1px solid "+C.border,borderRadius:7,color:C.text,padding:"7px 11px",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}),
+  lbl:{fontSize:11,fontWeight:600,letterSpacing:.4,color:C.muted,textTransform:"uppercase",display:"block",marginBottom:4},
 });
 
-function Badge({label,color}){return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:color+"28",color,border:"1px solid "+color+"44",whiteSpace:"nowrap",flexShrink:0}}>{label}</span>;}
+function Badge({label,color}){return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:500,background:color+"15",color,border:"1px solid "+color+"30",whiteSpace:"nowrap",flexShrink:0}}>{label}</span>;}
 function Av({user,size=32}){if(!user)return null;const col=RC[user.role]||"#6B7A9F";return <div style={{width:size,height:size,borderRadius:"50%",background:col+"22",border:"2px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.34,fontWeight:700,color:col,flexShrink:0}}>{mkI(user.name)}</div>;}
 
 function Sel({value,onChange,options,placeholder,disabled,C}){
@@ -5400,13 +5403,13 @@ const saveReq = async (r) => {
   const canSeeAdm = hasPerm(loggedIn,'users')||hasPerm(loggedIn,'usuarios.gerenciar')||hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar')||hasPerm(loggedIn,'auditoria.ver')||isAdmin;
 
   const Sidebar = () => (
-    <div style={{width:192,background:C.card,borderRight:'1px solid '+C.border,display:'flex',flexDirection:'column',height:'100vh',position:'fixed',left:0,top:0,zIndex:10,overflowY:'auto'}}>
+    <div style={{width:192,background:C.surface,borderRight:'1px solid '+C.border,display:'flex',flexDirection:'column',height:'100vh',position:'fixed',left:0,top:0,zIndex:10,overflowY:'auto'}}>
       {/* Logo */}
       <div style={{padding:'14px 12px 10px',borderBottom:'1px solid '+C.border}}>
         <img src={VYDENCE_LOGO} alt="Vydence Medical" style={{width:120,display:'block',marginBottom:9}}/>
         <div style={{display:'flex',alignItems:'baseline',gap:4,marginBottom:1}}>
           <span style={{fontSize:10,fontWeight:800,color:C.accent,letterSpacing:1.3}}>SGQ</span>
-          <span style={{fontSize:8,color:C.muted}}>Portal da Qualidade</span>
+          <span style={{fontSize:8,color:C.muted,letterSpacing:.3}}>Portal da Qualidade</span>
         </div>
         <div style={{fontSize:8,color:C.muted,letterSpacing:.2,display:'flex',alignItems:'center',gap:4}}>
           <div title="Dados atualizados automaticamente a cada 30s" className="refresh-dot" style={{width:5,height:5,borderRadius:'50%',background:C.success,flexShrink:0}}/>
