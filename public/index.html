@@ -1342,6 +1342,7 @@ function RequestDetail({request,allUsers,matrix,currentUser,crits,phaseDl,deptQu
   const [showReject,setReject]=useState(false);const [rejectNote,setRN]=useState("");
   const [showRegress,setRegress]=useState(false);const [regressNote,setGN]=useState("");
   const [showCancel,setShowCancel]=useState(false);
+  const [showReopenSA,setShowReopenSA]=useState(false);
   const [sigModal,setSigModal]=useState(null); // {action, data, title, desc, label, style}
   const [showAp2,setShowAp2]=useState(false);
   const [showAp3,setShowAp3]=useState(false);
@@ -1490,7 +1491,7 @@ const [newArea,setNewArea]=useState({dept:"",responsible:"",deadline:"",motive:"
   };
 
   // ── Actions ──────────────────────────────────────────────────────
-const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,currentUser.name,type,ev,detail);setLocalReq(r);onUpdate(r).then(()=>setLocalReq(r));};
+const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,currentUser.name,type,ev,detail);setLocalReq(r);onUpdate(r).catch(e=>console.error('upd error:',e));};
   
   const saveTriage=async(triage,isEdit,signature)=>{
     const pd=phaseDl||DEFAULT_PHASE_DEADLINES;
@@ -1661,6 +1662,29 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
   };
 
   // ── Cancelar SA ──
+  const reopenSA=(motive)=>{
+    // Volta para aberta, limpa cancelamento, preserva tudo que foi feito
+    let r={
+      ...localReq,
+      status:"aberta",
+      cancelledAt:null,
+      cancelledBy:null,
+      cancelledByName:null,
+      cancellationMotive:null,
+      cancelSignature:null,
+      // Reabrir ações que foram canceladas junto com a SA
+      actions:(localReq.actions||[]).map(a=>
+        a.cancelledMotive==="SA cancelada"
+          ? {...a,status:"pendente",cancelledMotive:null,cancelledBy:null,cancelledAt:null}
+          : a
+      ),
+    };
+    r=mkLog(r,currentUser.name,"reabrir","SA reaberta","Motivo: "+motive+" | Por: "+currentUser.name);
+    setLocalReq({...r,evaluations:r.evaluations||{},actions:r.actions||[]});
+    onUpdate(r);
+    setShowReopenSA(false);
+  };
+
   const cancelSA=(motive,signature)=>{
     // Cancelar todas as ações pendentes
     const actions=(localReq.actions||[]).map(a=>
@@ -1971,11 +1995,34 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
   <MI onClick={()=>setReject(true)} color={C.danger} icon="×" label="Rejeitar SA"/>
   <MI onClick={()=>setShowCancel(true)} color={C.danger} icon="⊘" label="Cancelar SA"/>
 </>}
+              {/* ── REABRIR SA — para cancelada ou concluída ── */}
+              {["cancelada","concluida"].includes(st)&&<>
+  <Sep/>
+  <MI onClick={()=>{setSgqOpen(false);setShowReopenSA(true);}} color={C.accent} icon="↺" label={st==="cancelada"?"Reabrir SA cancelada":"Reabrir SA concluída"}/>
+</>}
             </div>;
           })()}
         </div>}
       </div>;
     })()}
+
+    {/* ══ BANNER CANCELADA / CONCLUÍDA ══ */}
+    {localReq.status==="cancelada"&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:C.danger}}>SA Cancelada</div>
+        {localReq.cancellationMotive&&<div style={{fontSize:12,color:"#991B1B",marginTop:2}}>Motivo: {localReq.cancellationMotive}</div>}
+        {localReq.cancelledByName&&<div style={{fontSize:11,color:"#B91C1C",marginTop:1}}>Por: {localReq.cancelledByName} · {fmt(localReq.cancelledAt)}</div>}
+      </div>
+      {isAdmin&&<button style={{...Sg.btn(),fontSize:12,color:C.accent,border:"1px solid "+C.accent+"33"}} onClick={()=>setShowReopenSA(true)}>Reabrir SA</button>}
+    </div>}
+    {localReq.status==="concluida"&&localReq.verifyNote&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:"#F0FDF4",border:"1px solid #86EFAC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:C.success}}>SA Concluída</div>
+        <div style={{fontSize:12,color:"#166534",marginTop:2}}>{localReq.verifyNote}</div>
+        {localReq.verifiedByName&&<div style={{fontSize:11,color:"#15803D",marginTop:1}}>Por: {localReq.verifiedByName} · {fmt(localReq.closedAt)}</div>}
+      </div>
+      {isAdmin&&<button style={{...Sg.btn(),fontSize:12,color:C.accent,border:"1px solid "+C.accent+"33"}} onClick={()=>setShowReopenSA(true)}>Reabrir SA</button>}
+    </div>}
 
     {/* ══ FOCUS BANNER — shown when coming from task/evaluation click ══ */}
     {(focusDept||focusAcId)&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:C.accent+"0D",border:"1px solid "+C.accent+"33",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -2786,6 +2833,14 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
     </div>
   </div>
 </Modal>}
+    {/* ══ REABRIR SA ══ */}
+    <MotiveModal open={showReopenSA} onClose={()=>setShowReopenSA(false)}
+      onConfirm={motive=>reopenSA(motive)}
+      title={"Reabrir SA — "+localReq.id}
+      confirmLabel="Reabrir" confirmStyle="primary"
+      description={"A SA voltará para o status Aberta. Todo o histórico e dados serão preservados."}
+      C={C} Sg={Sg}/>
+
     {/* ══ SIGNATURE MODAL ══ */}
     {sigModal&&<SignatureModal
       open={!!sigModal}
