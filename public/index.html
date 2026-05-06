@@ -4083,6 +4083,7 @@ function NewRO({currentUser, onSave, onCancel}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [f,setF]=useState({tipo:"",local:"",opChamado:"",descricao:"",classificacao:"",disposicao:""});
   const [itens,setItens]=useState([]);
+  const [attachments,setAttachments]=useState([]);
   const set = (k,v)=>setF(p=>({...p,[k]:v}));
   const ok = f.tipo&&f.local&&f.descricao;
 
@@ -4143,9 +4144,11 @@ function NewRO({currentUser, onSave, onCancel}){
         </div>}
       </div>
 
+      <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura" currentUser={currentUser} C={C}/>
+
       <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
         <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
-        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave(f,itens)}>Abrir Ocorrência</button>
+        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave(f,itens,attachments)}>Abrir Ocorrência</button>
       </div>
     </div>
   </div>;
@@ -4160,6 +4163,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const [conclusao,setConclusao]=useState("");
   const [itensEdit,setItensEdit]=useState([]);
   const [editingItens,setEditingItens]=useState(false);
+  const [addingAtt,setAddingAtt]=useState(false);
 
   const r = roRecord;
   React.useEffect(()=>{
@@ -4170,6 +4174,26 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       setConclusao("");
     }
   },[r?.id||r?.code]);
+
+  const addAttachment = async (att) => {
+    const now = new Date().toISOString();
+    const updated = {
+      ...r,
+      data: {...(r.data||{}), attachments: [...((r.data||{}).attachments||[]), att]},
+      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"anexo", event:"Anexo adicionado", detail:att.name||""}],
+    };
+    await onUpdate(updated);
+  };
+
+  const removeAttachment = async (att) => {
+    const now = new Date().toISOString();
+    const updated = {
+      ...r,
+      data: {...(r.data||{}), attachments: ((r.data||{}).attachments||[]).filter(x=>x.id!==att.id)},
+      log: [...(r.log||[]), {at:now, by:currentUser.name, type:"anexo", event:"Anexo removido", detail:att.name||""}],
+    };
+    await onUpdate(updated);
+  };
 
   if(!r) return <div style={{padding:32,color:C.muted}}>Registro não encontrado.</div>;
   const d = r.data||{};
@@ -4328,6 +4352,22 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         <div key={nc} style={{padding:"6px 10px",background:C.surface,borderRadius:6,fontSize:13,color:C.accent,marginBottom:4}}>{nc}</div>
       ))}
     </div>}
+
+    {/* Anexos */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Anexos</div>
+      <AttachmentsPanel
+        attachments={(d.attachments)||[]}
+        onAdd={addAttachment}
+        onRemove={removeAttachment}
+        readOnly={status==="fechada"}
+        stage={status}
+        currentUser={currentUser}
+        isAdmin={canAnalyze}
+        refId={r.id||r.code}
+        refType="ro"
+        C={C}/>
+    </div>
 
     {/* Histórico */}
     <div style={{...Sg.card()}}>
@@ -6123,9 +6163,9 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
-      {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} onCancel={()=>setView('ro_list')} onSave={async(f,itens)=>{
+      {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
-        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[]},log:[{at:now,by:loggedIn.name,type:"criacao",event:"RO aberta",detail:"Tipo: "+f.tipo+(itens&&itens.length?" | "+itens.length+" item(ns)":"")}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
+        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[],attachments:atts||[]},log:[{at:now,by:loggedIn.name,type:"criacao",event:"RO aberta",detail:"Tipo: "+f.tipo+(itens&&itens.length?" | "+itens.length+" item(ns)":"")}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveRO(r);
         addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
         setView('ro_list');
