@@ -20,7 +20,7 @@ body{background:var(--app-bg,#F5F7FA);font-family:'DM Sans',sans-serif;color:#1A
 select option{background:#1E2333;color:#E8EAF0}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 textarea,input,select,button{font-family:inherit}
-  @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} } .refresh-dot { animation: pulse 2.5s ease-in-out infinite; }
+
 </style>
 </head>
 <body><div id="root"></div>
@@ -174,18 +174,17 @@ const mkSeed=(phaseDl)=>{
 // ================================================================
 const THEMES = {
   dark: {
-    bg:"#0F1117", surface:"#181C27", card:"#1E2333", border:"#2A3050",
-    accent:"#4F8EF7", success:"#2DD4BF", warning:"#F59E0B", danger:"#EF4444",
-    purple:"#8B5CF6", orange:"#F97316", cyan:"#06B6D4", muted:"#6B7A9F",
-    text:"#E8EAF0", dim:"#9AA3BF", inputBg:"#181C27",
+    bg:"#111318", surface:"#1A1D27", card:"#1E2130", border:"#2C3044",
+    accent:"#3B82F6", success:"#22C55E", warning:"#F59E0B", danger:"#EF4444",
+    purple:"#8B5CF6", orange:"#F97316", cyan:"#06B6D4", muted:"#6B7280",
+    text:"#E2E8F0", dim:"#94A3B8", inputBg:"#1A1D27",
   },
   light: {
-    bg:"#F5F7FA", surface:"#FFFFFF", card:"#FFFFFF", border:"#E8ECF4",
+    bg:"#F5F7FA", surface:"#FFFFFF", card:"#FFFFFF", border:"#E2E8F0",
     accent:"#2563EB", success:"#16A34A", warning:"#D97706", danger:"#DC2626",
     purple:"#7C3AED", orange:"#EA580C", cyan:"#0891B2", muted:"#64748B",
-    text:"#1A2035", dim:"#475569", inputBg:"#F8FAFC",
+    text:"#0F172A", dim:"#475569", inputBg:"#F8FAFC",
   },
-
 };
 
 // ThemeContext
@@ -261,14 +260,14 @@ const mkSg=C=>({
         v==="danger" ?{background:C.danger,color:"#fff"}:
         v==="success"?{background:C.success,color:"#fff"}:
         v==="warning"?{background:C.warning,color:"#fff"}:
-        v==="purple" ?{background:C.purple,color:"#fff"}:
+        v==="purple" ?{background:C.accent,color:"#fff"}:
                       {background:C.border,color:C.muted})}),
   input:()=>({background:C.inputBg,border:"1px solid "+C.border,borderRadius:7,color:C.text,padding:"7px 11px",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}),
   lbl:{fontSize:11,fontWeight:600,letterSpacing:.4,color:C.muted,textTransform:"uppercase",display:"block",marginBottom:4},
 });
 
 function Badge({label,color}){return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:500,background:color+"15",color,border:"1px solid "+color+"30",whiteSpace:"nowrap",flexShrink:0}}>{label}</span>;}
-function Av({user,size=32}){if(!user)return null;const col=RC[user.role]||"#6B7A9F";return <div style={{width:size,height:size,borderRadius:"50%",background:col+"22",border:"2px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.34,fontWeight:700,color:col,flexShrink:0}}>{mkI(user.name)}</div>;}
+function Av({user,size=32}){if(!user)return null;return <div style={{width:size,height:size,borderRadius:"50%",background:"#E2E8F0",border:"1px solid #CBD5E1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.34,fontWeight:500,color:"#64748B",flexShrink:0}}>{mkI(user.name)}</div>;}
 
 function Sel({value,onChange,options,placeholder,disabled,C}){
   const [open,setOpen]=React.useState(false);
@@ -674,7 +673,7 @@ function AttachmentsPanel({attachments,onAdd,onRemove,readOnly,stage,currentUser
     {all.length===0&&<div style={{fontSize:11,color:C.muted,padding:"6px 0"}}>Nenhum anexo registrado.</div>}
     {all.map((a,i)=>(
       <div key={a.id||i} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",background:C.surface,borderRadius:7,marginBottom:4}}>
-        <div style={{fontSize:13,flexShrink:0}}>{a.hasFile?"📎":"🔗"}</div>
+        <div style={{fontSize:13,flexShrink:0}}>{a.hasFile?"":""}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:600,color:C.text,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
           <div style={{fontSize:10,color:C.muted,display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -686,7 +685,7 @@ function AttachmentsPanel({attachments,onAdd,onRemove,readOnly,stage,currentUser
           </div>
         </div>
         {a.hasFile&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px",flexShrink:0}} onClick={()=>download(a)}>Download</button>}
-        {onRemove&&isAdmin&&<button style={{...Sg.btn("danger"),fontSize:11,padding:"4px 8px",flexShrink:0}} title="Remover anexo" onClick={()=>{if(window.confirm("Remover o anexo \""+a.name+"\"? Esta acao fica registrada no historico."))onRemove(a);}}>✕</button>}
+        {onRemove&&isAdmin&&<button style={{...Sg.btn("danger"),fontSize:11,padding:"4px 8px",flexShrink:0}} title="Remover anexo" onClick={()=>{if(window.confirm("Remover o anexo \""+a.name+"\"? Esta acao fica registrada no historico."))onRemove(a);}}>×</button>}
       </div>
     ))}
   </div>;
@@ -1090,7 +1089,7 @@ function TriagePanel({request,matrix,allUsers,currentUser,crits,phaseDl,onSave,C
     <div style={{display:"flex",justifyContent:"flex-end"}}>
       <button style={{...Sg.btn("warning"),opacity:canSave?1:.4,padding:"8px 18px"}} disabled={!canSave}
         onClick={()=>onSave({criticality:crit,flagReg:false,flagProd:false,justification:just,classifiedBy:currentUser.id,classifiedByName:currentUser.name,classifiedAt:new Date().toISOString(),assignedAreas:areas,assignments:assigns,deadlines:{...dls},originalDeadlines:{...dls}})}>
-        🔐 Confirmar Triagem
+         Confirmar Triagem
       </button>
     </div>
   </div>;
@@ -1199,19 +1198,19 @@ function SignatureModal({open,onClose,onConfirm,title,description,confirmLabel,c
   };
   return <Modal open={open} onClose={onClose} title={title||"Assinatura Eletronica"} width={420}>
     <div style={{padding:"10px 14px",background:C.accent+"0D",border:"1px solid "+C.accent+"33",borderRadius:8,marginBottom:14,fontSize:13,color:C.accent}}>
-      🔐 Confirme sua identidade digitando sua senha para assinar eletronicamente.
+       Confirme sua identidade digitando sua senha para assinar eletronicamente.
     </div>
     {description&&<div style={{fontSize:13,color:C.muted,marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:8}}>{description}</div>}
     <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,display:"block",marginBottom:6}}>Sua Senha *</label>
     <div style={{position:"relative",marginBottom:14}}>
       <input type={showPwd?"text":"password"} style={{...Sg.input(),paddingRight:40}} value={pwd} onChange={e=>{setPwd(e.target.value);setErr("");}} placeholder="Digite sua senha..." onKeyDown={e=>e.key==="Enter"&&go()} autoFocus/>
-      <button type="button" onClick={()=>setShowPwd(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.muted,padding:0}}>{showPwd?"🙈":"👁️"}</button>
+      <button type="button" onClick={()=>setShowPwd(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.muted,padding:0}}>{showPwd?"●":"○"}</button>
     </div>
     {err&&<div style={{fontSize:12,color:C.danger,marginBottom:10,padding:"6px 10px",background:C.danger+"11",borderRadius:6}}>{err}</div>}
     <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
       <button style={Sg.btn()} onClick={onClose} disabled={loading}>Cancelar</button>
       <button style={{...Sg.btn(confirmStyle||"primary"),opacity:pwd.trim()&&!loading?1:.4}} disabled={!pwd.trim()||loading} onClick={go}>
-        {loading?"Verificando...":("🔐 "+(confirmLabel||"Assinar e Confirmar"))}
+        {loading?"Verificando...":(" "+(confirmLabel||"Assinar e Confirmar"))}
       </button>
     </div>
   </Modal>;
@@ -1290,7 +1289,7 @@ function TaskDrawer({open,onClose,title,subtitle,children,C}){
           <div style={{fontSize:15,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title}</div>
           {subtitle&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>{subtitle}</div>}
         </div>
-        <button onClick={onClose} style={{background:"transparent",border:"1px solid "+C.border,borderRadius:7,cursor:"pointer",color:C.muted,fontSize:18,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"inherit"}}>✕</button>
+        <button onClick={onClose} style={{background:"transparent",border:"1px solid "+C.border,borderRadius:7,cursor:"pointer",color:C.muted,fontSize:18,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"inherit"}}>×</button>
       </div>
       {/* Scrollable content */}
       <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
@@ -1843,7 +1842,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
         <span style={{fontSize:16,fontWeight:700,color:C.text,flex:1}}>Change Management</span>
         {isAdmin&&<div style={{position:"relative"}} ref={sgqRef}>
           <button style={{...Sg.btn("primary"),fontSize:12,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}} onClick={()=>setSgqOpen(o=>!o)}>
-            ⚙ Acoes SGQ <span style={{fontSize:10,opacity:.7}}>{sgqOpen?"▲":"▼"}</span>
+             Acoes SGQ <span style={{fontSize:10,opacity:.7}}>{sgqOpen?"▲":"▼"}</span>
           </button>
           {sgqOpen&&(()=>{
             // ── helpers de item e separador ──────────────────────────────────
@@ -1885,8 +1884,8 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
                 <Sep/>
               </>}
               {st==="aprovacao_plano"&&<>
-                <SectionLabel label="Proximo passo" color={C.purple}/>
-                <MI onClick={()=>setShowAp2(true)} color={C.purple} icon="✓" label="Aprovar avaliacoes — iniciar plano"/>
+                <SectionLabel label="Proximo passo" color={C.accent}/>
+                <MI onClick={()=>setShowAp2(true)} color={C.accent} icon="✓" label="Aprovar avaliacoes — iniciar plano"/>
                 <Sep/>
               </>}
               {st==="montagem_plano"&&(isAdmin||parseInt(localReq.planResponsible)===parseInt(currentUser.id))&&<>
@@ -1903,7 +1902,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
 
               {/* ── REATRIBUIR AVALIACAO — só faz sentido durante avaliacao/revisao ── */}
               {["avaliacao_areas","aprovacao_plano"].includes(st)&&<Collapsible
-                id="reatrib_ev" icon="👤" label="Reatribuir avaliacao" count={evsPend.length} color={C.accent}
+                id="reatrib_ev" icon="" label="Reatribuir avaliacao" count={evsPend.length} color={C.accent}
                 items={evsPend}
                 renderItem={dept=><button key={dept} style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"6px 14px 6px 26px",textAlign:"left",fontSize:12,color:C.text,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surface}
@@ -1927,7 +1926,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
 
               {/* ── REATRIBUIR ACAO — durante plano e execucao ── */}
               {["montagem_plano","execucao"].includes(st)&&<Collapsible
-                id="reatrib_ac" icon="👤" label="Reatribuir acao" count={acsMov.length} color={C.accent}
+                id="reatrib_ac" icon="" label="Reatribuir acao" count={acsMov.length} color={C.accent}
                 items={acsMov}
                 renderItem={ac=><button key={ac.id} style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"6px 14px 6px 26px",textAlign:"left",fontSize:12,color:C.text,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surface}
@@ -1967,9 +1966,9 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
               {/* ── RETORNAR / REJEITAR / CANCELAR — sempre (enquanto ativo) ── */}
               {notFinal&&<>
   <Sep/>
-  {["avaliacao_inicial","avaliacao_areas","aprovacao_plano"].includes(st)&&<MI onClick={()=>{setSgqOpen(false);setAddAreaModal(true);}} color={C.cyan} icon="+" label="Adicionar área avaliadora"/>}
+  {["avaliacao_inicial","avaliacao_areas","aprovacao_plano"].includes(st)&&<MI onClick={()=>{setSgqOpen(false);setAddAreaModal(true);}} color={C.accent} icon="+" label="Adicionar área avaliadora"/>}
   {prevSt&&st!=="aberta"&&<MI onClick={()=>setRegress(true)} color={C.warning} icon="←" label="Retornar fase anterior"/>}
-  <MI onClick={()=>setReject(true)} color={C.danger} icon="✕" label="Rejeitar SA"/>
+  <MI onClick={()=>setReject(true)} color={C.danger} icon="×" label="Rejeitar SA"/>
   <MI onClick={()=>setShowCancel(true)} color={C.danger} icon="⊘" label="Cancelar SA"/>
 </>}
             </div>;
@@ -2286,13 +2285,13 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
             <tbody>
               {allAtts.map((a,i)=>(
                 <tr key={a.id||i} style={{background:i%2!==0?C.surface+"66":"transparent"}}>
-                  <Td><span style={{fontWeight:600}}>📎 {a.name}</span></Td>
+                  <Td><span style={{fontWeight:600}}> {a.name}</span></Td>
                   <Td muted>{a._src||"—"}</Td>
                   <Td muted>{a._by||"—"}</Td>
                   <Td muted>{fmtD(a.addedAt&&a.addedAt.slice(0,10))}</Td>
                   <Td><div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
                     {a.hasFile&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"3px 10px"}} onClick={async()=>{if(!a.r2key){alert("Arquivo local nao disponivel.");return;}try{const r=await apiGet('/api/uploads?key='+encodeURIComponent(a.r2key));window.open(r.downloadUrl,'_blank');}catch(e){alert("Erro: "+e.message);}}}>Download</button>}
-                    {isAdmin&&<button style={{...Sg.btn("danger"),fontSize:12,padding:"3px 8px"}} title="Remover anexo" onClick={()=>{if(window.confirm('Remover "'+a.name+'"? Ficara registrado no historico.'))removeAttachment(a);}}>✕</button>}
+                    {isAdmin&&<button style={{...Sg.btn("danger"),fontSize:12,padding:"3px 8px"}} title="Remover anexo" onClick={()=>{if(window.confirm('Remover "'+a.name+'"? Ficara registrado no historico.'))removeAttachment(a);}}>×</button>}
                   </div></Td>
                 </tr>
               ))}
@@ -2310,7 +2309,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
           <thead><tr><Th w="160px">Data / Hora</Th><Th w="140px">Por</Th><Th w="100px">Tipo</Th><Th>Evento</Th><Th>Detalhe</Th></tr></thead>
           <tbody>
             {(localReq.log||[]).slice().reverse().map((e,i)=>{
-              const tc={avaliacao_inicial:C.warning,avaliacao:C.accent,aprovacao:C.success,rejeicao:C.danger,retorno:C.purple,sistema:C.cyan,criacao:C.success,anexo:C.orange,extensao:C.warning,plano:C.accent,execucao:C.success,conclusao:C.success}[e.type]||C.muted;
+              const tc={avaliacao_inicial:C.warning,avaliacao:C.accent,aprovacao:C.success,rejeicao:C.danger,retorno:C.accent,sistema:C.accent,criacao:C.success,anexo:C.warning,extensao:C.warning,plano:C.accent,execucao:C.success,conclusao:C.success}[e.type]||C.muted;
               return <tr key={i} style={{background:i%2!==0?C.surface+"66":"transparent"}}>
                 <Td muted><span style={{fontSize:13}}>{fmt(e.at)}</span></Td>
                 <Td muted><span style={{fontSize:13}}>{e.by}</span></Td>
@@ -2514,9 +2513,9 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
                     </span>
                   </div>
                   <div style={{display:"flex",gap:16,fontSize:12,color:C.muted}}>
-                    <span>👤 {resp?resp.name:"—"}</span>
+                    <span> {resp?resp.name:"—"}</span>
                     <span style={{color:ov&&ac.status!=="concluida"?C.danger:C.muted}}>📅 {fmtD(ac.deadline)}</span>
-                    {ac.obs&&<span>📝 {ac.obs.slice(0,40)}{ac.obs.length>40?"...":""}</span>}
+                    {ac.obs&&<span> {ac.obs.slice(0,40)}{ac.obs.length>40?"...":""}</span>}
                   </div>
                   {canPlan&&localReq.status==="montagem_plano"&&<div style={{display:"flex",gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
                     <button style={{...Sg.btn(),fontSize:11,padding:"3px 8px"}} onClick={()=>setEditAc(ac)}>Editar</button>
@@ -2581,7 +2580,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
           {ac.status==="concluida"&&<div style={{padding:"12px 16px",background:C.success+"0D",border:"1px solid "+C.success+"33",borderRadius:10,marginBottom:16}}>
             <div style={{fontSize:10,fontWeight:700,color:C.success,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Concluida em {fmtD(ac.doneAt&&ac.doneAt.slice(0,10))}</div>
             <div style={{fontSize:14,color:C.text,lineHeight:1.5}}>{ac.doneNote||"—"}</div>
-            {ac.doneAtt&&<div style={{fontSize:12,color:C.muted,marginTop:6}}>📎 {ac.doneAtt.name}</div>}
+            {ac.doneAtt&&<div style={{fontSize:12,color:C.muted,marginTop:6}}> {ac.doneAtt.name}</div>}
           </div>}
 
           {/* Form conclusao */}
@@ -2599,10 +2598,10 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
                 setDrawerEditVals({desc:ac.desc,responsible:String(ac.responsible),deadline:ac.deadline,obs:ac.obs||""});
                 setDrawerEditing(true);
               }}>✏ Editar</button>}
-              <button style={{...Sg.btn(),fontSize:12}} onClick={()=>{closeDrawer();setReassignAc(ac);setReassignAcUser("");}}>👤 Reatribuir</button>
+              <button style={{...Sg.btn(),fontSize:12}} onClick={()=>{closeDrawer();setReassignAc(ac);setReassignAcUser("");}}> Reatribuir</button>
               <button style={{...Sg.btn(),fontSize:12}} onClick={()=>{closeDrawer();setAdminDlTarget({type:"action",key:ac.id,label:ac.desc,currentDate:ac.deadline});}}>📅 Alterar prazo</button>
               {localReq.status==="montagem_plano"&&<button style={{...Sg.btn("danger"),fontSize:12}} onClick={()=>{closeDrawer();setConfirmRemoveAc(ac);}}>🗑 Excluir</button>}
-              {localReq.status==="execucao"&&<button style={{...Sg.btn("danger"),fontSize:12}} onClick={()=>{closeDrawer();setRemoveAcExec(ac);}}>✕ Remover do plano</button>}
+              {localReq.status==="execucao"&&<button style={{...Sg.btn("danger"),fontSize:12}} onClick={()=>{closeDrawer();setRemoveAcExec(ac);}}>× Remover do plano</button>}
             </div>
           </div>}
           {canPlan&&localReq.status==="montagem_plano"&&!isAdmin&&<div style={{marginTop:16,display:"flex",flexDirection:"column",gap:8}}>
@@ -2762,7 +2761,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
         placeholder="Justifique a inclusão desta área no processo..."/>
     </div>
     {newArea.dept&&allUsers.filter(u=>u.active&&(u.evalDepts||u.eval_depts||[]).includes(newArea.dept)).length===0&&
-      <div style={{fontSize:12,color:C.danger}}>⚠️ Nenhum avaliador cadastrado para esta área.</div>}
+      <div style={{fontSize:12,color:C.danger}}> Nenhum avaliador cadastrado para esta área.</div>}
     <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:4}}>
       <button style={Sg.btn()} onClick={()=>{setAddAreaModal(false);setNewArea({dept:"",responsible:"",deadline:"",motive:""});}}>Cancelar</button>
       <button style={{...Sg.btn("primary"),opacity:newArea.dept&&newArea.responsible&&newArea.deadline&&newArea.motive.trim()?1:.4}}
@@ -3035,12 +3034,12 @@ function MyTasksDrawer({open,onClose,requests,currentUser,allUsers,crits,initial
             :<><div style={{fontSize:15,fontWeight:700,color:C.text}}>Minhas Tarefas</div>
                <div style={{fontSize:12,color:C.muted,marginTop:1}}>{pending} pendente{pending!==1?"s":""} · {tasks.length} total</div></>}
         </div>
-        <button onClick={onClose} style={{background:"transparent",border:"1px solid "+C.border,borderRadius:7,cursor:"pointer",color:C.muted,fontSize:18,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",flexShrink:0}}>✕</button>
+        <button onClick={onClose} style={{background:"transparent",border:"1px solid "+C.border,borderRadius:7,cursor:"pointer",color:C.muted,fontSize:18,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",flexShrink:0}}>×</button>
       </div>
       {/* Content */}
       <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
         {selected?renderTask(selected):<>
-          {tasks.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.muted,fontSize:14}}>Nenhuma tarefa pendente 🎉</div>}
+          {tasks.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.muted,fontSize:14}}>Nenhuma tarefa pendente </div>}
           {tasks.map((t,i)=>{
             const uc=urgColor(t.urg);
             return <div key={i}
@@ -3050,7 +3049,7 @@ function MyTasksDrawer({open,onClose,requests,currentUser,allUsers,crits,initial
               onClick={()=>setSelected(t)}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:4}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:15}}>{t.type==="eval"?"📋":t.type==="plan"?"📝":"⚡"}</span>
+                  <span style={{fontSize:15}}>{t.type==="eval"?"":t.type==="plan"?"":"⚡"}</span>
                   <span style={{fontSize:13,fontWeight:600,color:C.text}}>{t.label}</span>
                 </div>
                 <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:999,background:uc+"18",color:uc,border:"1px solid "+uc+"33",flexShrink:0}}>{urgLabel(t.urg)}</span>
@@ -3075,10 +3074,10 @@ function Dashboard({requests,currentUser,allUsers,crits,onNav,onOpenEval,onOpenA
 
   const aprovSGQ=isAdmin?[
     ...requests.filter(r=>r.status==="aberta"||r.status==="avaliacao_inicial").map(r=>({type:"triage",r,urg:urgCls(getPhaseDeadline(r),""),tag:"Aval. Inicial",tagColor:C.warning,deadline:getPhaseDeadline(r)})),
-    ...requests.filter(r=>r.status==="aprovacao_plano").map(r=>({type:"revisao",r,urg:"today",tag:"Aprovar Aval.",tagColor:C.purple,deadline:getPhaseDeadline(r)})),
+    ...requests.filter(r=>r.status==="aprovacao_plano").map(r=>({type:"revisao",r,urg:"today",tag:"Aprovar Aval.",tagColor:C.accent,deadline:getPhaseDeadline(r)})),
     ...requests.filter(r=>r.status==="montagem_plano"&&(r.actions||[]).length>0).map(r=>({type:"plano",r,urg:urgCls(getPhaseDeadline(r),""),tag:"Aprovar Plano",tagColor:C.success,deadline:getPhaseDeadline(r)})),
-    ...requests.filter(r=>r.status==="montagem_plano"&&!(r.actions||[]).length).map(r=>({type:"montarplano",r,urg:urgCls(getPhaseDeadline(r),""),tag:"Montar Plano",tagColor:C.cyan,deadline:getPhaseDeadline(r)})),
-    ...requests.filter(r=>(r.deadlineExtensions||[]).some(e=>e.status==="pending")).map(r=>({type:"extensao",r,urg:"today",tag:"Extensao Prazo",tagColor:C.orange,deadline:getPhaseDeadline(r)})),
+    ...requests.filter(r=>r.status==="montagem_plano"&&!(r.actions||[]).length).map(r=>({type:"montarplano",r,urg:urgCls(getPhaseDeadline(r),""),tag:"Montar Plano",tagColor:C.accent,deadline:getPhaseDeadline(r)})),
+    ...requests.filter(r=>(r.deadlineExtensions||[]).some(e=>e.status==="pending")).map(r=>({type:"extensao",r,urg:"today",tag:"Extensao Prazo",tagColor:C.warning,deadline:getPhaseDeadline(r)})),
   ]:[];
 
   const pendExt=isAdmin?requests.filter(r=>(r.deadlineExtensions||[]).some(e=>e.status==="pending")):[];
@@ -3218,7 +3217,7 @@ function Dashboard({requests,currentUser,allUsers,crits,onNav,onOpenEval,onOpenA
     {/* AÇÕES — responsável */}
     {acoes.length>0&&<div style={{marginBottom:14}}>
       {planosAguardando.length>0&&<div style={{marginBottom:20}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.purple||"#7C3AED",letterSpacing:.7,marginBottom:6}}>PLANOS AGUARDANDO APROVACAO ({planosAguardando.length})</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.accent||"#7C3AED",letterSpacing:.7,marginBottom:6}}>PLANOS AGUARDANDO APROVACAO ({planosAguardando.length})</div>
         <div style={{border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
           <ResizableTable
             storageKey="cm_dash_planos_cols_v4"
@@ -3563,7 +3562,7 @@ function ActionsPage({requests,currentUser,allUsers,crits,onNav}){
   const acPend=allItems.filter(i=>i.type==="acao"&&!i.done&&!i.cancel).length;
   const evPend=allItems.filter(i=>i.type==="avaliacao"&&!i.done).length;
 
-  const urgColor=u=>u==="overdue"?C.danger:u==="today"?C.orange:u==="soon"?C.accent:u==="done"?C.success:C.muted;
+  const urgColor=u=>u==="overdue"?C.danger:u==="today"?C.warning:u==="soon"?C.accent:u==="done"?C.success:C.muted;
 
   return <div style={{padding:"18px 22px"}}>
     <div style={{marginBottom:12}}>
@@ -3578,7 +3577,7 @@ function ActionsPage({requests,currentUser,allUsers,crits,onNav}){
         {l:"Atrasadas",v:late,c:C.danger},
         {l:"Concluidas",v:done,c:C.success},
         {l:"Acoes abertas",v:acPend,c:C.accent},
-        {l:"Avals. abertas",v:evPend,c:C.purple||C.accent},
+        {l:"Avals. abertas",v:evPend,c:C.accent||C.accent},
       ].map(k=>(
         <div key={k.l} style={{...Sg.card({padding:"9px 13px",flex:1,minWidth:90,borderTop:"3px solid "+k.c})}}>
           <div style={{fontSize:20,fontWeight:800,color:k.c}}>{k.v}</div>
@@ -3642,7 +3641,7 @@ function ActionsPage({requests,currentUser,allUsers,crits,onNav}){
           const stLabel=i.done?"Concluida":i.cancel?"Cancelada":i.ov?"Atrasada":"Pendente";
           const stColor=i.done?C.success:i.cancel?C.muted:i.ov?C.danger:C.warning;
           const typeLabel=i.type==="acao"?"Acao":"Aval.";
-          const typeColor=i.type==="acao"?C.accent:C.purple||C.accent;
+          const typeColor=i.type==="acao"?C.accent:C.accent||C.accent;
           return {r:i,cells:[
             <span style={{fontSize:11,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{i.r.id}</span>,
             <span style={{fontSize:11,color:C.text,display:"block",lineHeight:1.3,maxHeight:40,overflowY:"hidden",wordBreak:"break-word"}}>{i.r.title}</span>,
@@ -3811,7 +3810,7 @@ function AuditLog({requests,sysLog}){
   const all=[...evts,...(sysLog||[])].sort((a,b)=>new Date(b.at)-new Date(a.at));
   const types=[...new Set(all.map(e=>e.type).filter(Boolean))];
   const vis=all.filter(e=>(!f||(e.event+e.by+(e.reqId||"")+(e.detail||"")).toLowerCase().includes(f.toLowerCase()))&&(!fType||e.type===fType));
-  const tc={triagem:C.warning,avaliacao:C.accent,aprovacao:C.success,rejeicao:C.danger,retorno:C.purple,sistema:C.cyan,criacao:C.success,anexo:C.orange,extensao:C.warning,owner:C.muted,plano:C.accent,execucao:C.success};
+  const tc={triagem:C.warning,avaliacao:C.accent,aprovacao:C.success,rejeicao:C.danger,retorno:C.accent,sistema:C.accent,criacao:C.success,anexo:C.warning,extensao:C.warning,owner:C.muted,plano:C.accent,execucao:C.success};
   return <div style={{padding:"18px 22px"}}>
     <h1 style={{margin:"0 0 12px",fontSize:18,color:C.text,fontWeight:700}}>Auditoria — v{APP_VERSION}</h1>
     <div style={{display:"flex",gap:8,marginBottom:11,flexWrap:"wrap"}}>
@@ -3881,7 +3880,7 @@ const PERFIS={
         <label style={{fontSize:10,fontWeight:700,color:CC.muted,letterSpacing:.5,display:"block",marginBottom:4}}>{pwdLabel}</label>
         <div style={{position:"relative"}}>
           <input type={u._showPwd?"text":"password"} autoComplete="new-password" value={u.pwd||u._np||""} onChange={e=>onPwdChange?onPwdChange(e.target.value):onChange({...u,pwd:e.target.value})} placeholder={pwdRequired?"Obrigatoria":"Deixar vazio para manter"} style={{...inp,paddingRight:36}}/>
-          <button type="button" onClick={()=>onChange({...u,_showPwd:!u._showPwd})} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:CC.muted,padding:0}}>{u._showPwd?"🙈":"👁️"}</button>
+          <button type="button" onClick={()=>onChange({...u,_showPwd:!u._showPwd})} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:CC.muted,padding:0}}>{u._showPwd?"●":"○"}</button>
         </div>
         {(()=>{const pwd=u.pwd||u._np||"";if(!pwd)return<div style={{fontSize:10,color:CC.muted,marginTop:4}}>Requisitos: 8-20 caracteres · maiúscula · minúscula · número · especial (!@#$...)</div>;const err=validatePwd(pwd,{name:u.name,email:u.email});return err?<div style={{fontSize:10,color:CC.danger,marginTop:4}}>⚠ {err}</div>:<div style={{fontSize:10,color:CC.success,marginTop:4}}>✓ Senha válida</div>;})()}
       </div>
@@ -4470,7 +4469,7 @@ function IndicatorsPage({requests,allUsers,crits}){
   const byCrit={};crits.forEach(c=>{byCrit[c.v]=pool.filter(r=>r.triage&&r.triage.criticality===c.v).length;});
   const byStatus={};Object.keys(REQ_ST).forEach(s=>{byStatus[s]=pool.filter(r=>r.status===s).length;});
   const byType={};CHANGE_TYPES.forEach(t=>{byType[t]=pool.filter(r=>r.type===t).length;});
-  const typeColors=[C.accent,C.warning,C.success,C.purple,C.orange,C.cyan];
+  const typeColors=[C.accent,C.warning,C.success,C.accent,C.warning,C.accent];
 
   const totalExt=pool.reduce((n,r)=>n+(r.deadlineExtensions||[]).length,0);
   const approvedExt=pool.reduce((n,r)=>n+(r.deadlineExtensions||[]).filter(e=>e.status==="approved").length,0);
@@ -4589,15 +4588,15 @@ function IndicatorsPage({requests,allUsers,crits}){
       <KPI label="Total SAs" value={total} color={C.accent}/>
       <KPI label="Em andamento" value={abertas} color={C.warning}/>
       <KPI label="Concluidas" value={concluidas} color={C.success}/>
-      <KPI label={abPer!==null?"Abertas no periodo":"Abertas no periodo"} value={abPer!==null?abPer:"—"} color={abPer!==null?C.cyan:C.muted} sub={abPer===null?"Selecione periodo":undefined}/>
+      <KPI label={abPer!==null?"Abertas no periodo":"Abertas no periodo"} value={abPer!==null?abPer:"—"} color={abPer!==null?C.accent:C.muted} sub={abPer===null?"Selecione periodo":undefined}/>
       <KPI label="Fechadas no periodo" value={fePer!==null?fePer:"—"} color={fePer!==null?C.success:C.muted} sub={fePer===null?"Selecione periodo":undefined}/>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:9,marginBottom:14}}>
       <KPI label="Aval. atrasadas" value={overdueEvals.length} color={overdueEvals.length?C.danger:C.success}/>
       <KPI label="Acoes pendentes" value={acPend} color={C.warning} sub={acDone+" concluidas"}/>
       <KPI label="Acoes atrasadas" value={overdueAcs.length} color={overdueAcs.length?C.danger:C.success}/>
-      <KPI label="Extensoes" value={totalExt} color={C.orange} sub={approvedExt+" apr | "+pendingExt+" pend | "+rejectedExt+" rej"}/>
-      <KPI label="Tempo medio total" value={avgTotal!==null?avgTotal+"d":"--"} color={C.purple} sub={avgTriagem!=null?"Ate triagem: "+avgTriagem+"d":""}/>
+      <KPI label="Extensoes" value={totalExt} color={C.warning} sub={approvedExt+" apr | "+pendingExt+" pend | "+rejectedExt+" rej"}/>
+      <KPI label="Tempo medio total" value={avgTotal!==null?avgTotal+"d":"--"} color={C.accent} sub={avgTriagem!=null?"Ate triagem: "+avgTriagem+"d":""}/>
     </div>
 
     {/* Charts row 1: donuts */}
@@ -4915,9 +4914,9 @@ const go=async()=>{
       <div>
         <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:9,letterSpacing:.7}}>ALTERAR SENHA</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:9}}>
-          <div><label style={Sg.lbl}>Senha Atual</label><div style={{position:"relative"}}><input type={showCur?"text":"password"} style={{...Sg.input(),paddingRight:36}} value={cur} onChange={e=>{setCur(e.target.value);setMsg("");}}/><button type="button" onClick={()=>setShowCur(s=>!s)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#6b7a9f",padding:0}}>{showCur?"🙈":"👁️"}</button></div></div>
-          <div><label style={Sg.lbl}>Nova Senha</label><div style={{position:"relative"}}><input type={showN1?"text":"password"} style={{...Sg.input(),paddingRight:36}} value={n1} onChange={e=>{setN1(e.target.value);setMsg("");setPwdErr("");}}/><button type="button" onClick={()=>setShowN1(s=>!s)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#6b7a9f",padding:0}}>{showN1?"🙈":"👁️"}</button></div>{pwdErr&&<div style={{fontSize:11,color:C.danger,marginTop:2}}>{pwdErr}</div>}</div>
-          <div><label style={Sg.lbl}>Confirmar</label><div style={{position:"relative"}}><input type={showN2?"text":"password"} style={{...Sg.input(),paddingRight:36}} value={n2} onChange={e=>{setN2(e.target.value);setMsg("");}}/><button type="button" onClick={()=>setShowN2(s=>!s)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#6b7a9f",padding:0}}>{showN2?"🙈":"👁️"}</button></div></div>
+          <div><label style={Sg.lbl}>Senha Atual</label><div style={{position:"relative"}}><input type={showCur?"text":"password"} style={{...Sg.input(),paddingRight:36}} value={cur} onChange={e=>{setCur(e.target.value);setMsg("");}}/><button type="button" onClick={()=>setShowCur(s=>!s)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#6b7a9f",padding:0}}>{showCur?"●":"○"}</button></div></div>
+          <div><label style={Sg.lbl}>Nova Senha</label><div style={{position:"relative"}}><input type={showN1?"text":"password"} style={{...Sg.input(),paddingRight:36}} value={n1} onChange={e=>{setN1(e.target.value);setMsg("");setPwdErr("");}}/><button type="button" onClick={()=>setShowN1(s=>!s)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#6b7a9f",padding:0}}>{showN1?"●":"○"}</button></div>{pwdErr&&<div style={{fontSize:11,color:C.danger,marginTop:2}}>{pwdErr}</div>}</div>
+          <div><label style={Sg.lbl}>Confirmar</label><div style={{position:"relative"}}><input type={showN2?"text":"password"} style={{...Sg.input(),paddingRight:36}} value={n2} onChange={e=>{setN2(e.target.value);setMsg("");}}/><button type="button" onClick={()=>setShowN2(s=>!s)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#6b7a9f",padding:0}}>{showN2?"●":"○"}</button></div></div>
         </div>
         {msg&&msg.startsWith("err:")&&<div style={{fontSize:12,color:C.danger,fontWeight:600,marginBottom:7}}>{msg.slice(4)}</div>}
         {msg&&msg.startsWith("ok:")&&!msg.includes("Tema")&&<div style={{fontSize:12,color:C.success,fontWeight:600,marginBottom:7}}>{msg.slice(3)}</div>}
@@ -5384,10 +5383,9 @@ const saveReq = async (r) => {
       (sectionKey==='adm' && ['users','grupos','log','signatures'].includes(view))
     );
     return <div>
-      <button onClick={()=>toggleSection(sectionKey)} style={{width:'100%',padding:'8px 14px',background:isChildActive&&!open?C.accent+'08':'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,fontFamily:'inherit',borderLeft:'3px solid '+(isChildActive?C.accent+'55':'transparent')}}>
+      <button onClick={()=>toggleSection(sectionKey)} style={{width:'100%',padding:'8px 14px',background:isChildActive&&!open?C.accent+'08':'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,fontFamily:'inherit',borderLeft:'2px solid '+(isChildActive?C.accent:'transparent')}}>
         <div style={{display:'flex',alignItems:'center',gap:7,flex:1,minWidth:0}}>
-          <span style={{fontSize:13,flexShrink:0}}>{icon}</span>
-          <span style={{fontSize:12,color:isChildActive?C.accent:C.dim,fontWeight:isChildActive?600:400,textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
+          <span style={{fontSize:12,color:isChildActive?C.accent:C.muted,fontWeight:isChildActive?600:400,textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
           {badge>0&&<span style={{background:C.danger,color:'#fff',borderRadius:9,fontSize:9,fontWeight:700,padding:'1px 5px',minWidth:16,textAlign:'center'}}>{badge}</span>}
@@ -5408,12 +5406,11 @@ const saveReq = async (r) => {
       <div style={{padding:'14px 12px 10px',borderBottom:'1px solid '+C.border}}>
         <img src={VYDENCE_LOGO} alt="Vydence Medical" style={{width:120,display:'block',marginBottom:9}}/>
         <div style={{display:'flex',alignItems:'baseline',gap:4,marginBottom:1}}>
-          <span style={{fontSize:10,fontWeight:800,color:C.accent,letterSpacing:1.3}}>SGQ</span>
+          <span style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:.5}}>SGQ</span>
           <span style={{fontSize:8,color:C.muted,letterSpacing:.3}}>Portal da Qualidade</span>
         </div>
-        <div style={{fontSize:8,color:C.muted,letterSpacing:.2,display:'flex',alignItems:'center',gap:4}}>
-          <div title="Dados atualizados automaticamente a cada 30s" className="refresh-dot" style={{width:5,height:5,borderRadius:'50%',background:C.success,flexShrink:0}}/>
-          v{APP_VERSION} · {(()=>{const g=loggedIn.roles||loggedIn.groups||[];return g.length>0?g.map(r=>r.name).join(', '):loggedIn.role.toUpperCase();})()}
+        <div style={{fontSize:10,color:C.muted,letterSpacing:.2}}>
+          v{APP_VERSION}
         </div>
       </div>
 
@@ -5421,45 +5418,32 @@ const saveReq = async (r) => {
       <div style={{flex:1,padding:'6px 0'}}>
 
         {/* Início */}
-        <SidebarNavItem id="dashboard" label="🏠  Início" badge={0}/>
+        <SidebarNavItem id="dashboard" label="Início" badge={0}/>
 
         {/* Módulo: Controle de Mudanças */}
-        <SidebarSection sectionKey="cm" label="Controle de Mudanças" icon="📋" badge={pendCM}>
+        <SidebarSection sectionKey="cm" label="Controle de Mudanças" icon="" badge={pendCM}>
           <SidebarNavItem id="changes" label="Controles" indent/>
           <SidebarNavItem id="acoes"   label="Tarefas"   badge={pendCM} indent/>
           <SidebarNavItem id="cm_config" label="Configurações" indent/>
         </SidebarSection>
 
-        {/* Módulo: Ocorrências (placeholder) */}
-        <div style={{padding:'8px 14px',display:'flex',alignItems:'center',gap:7,opacity:.4,cursor:'not-allowed'}}>
-          <span style={{fontSize:13}}>📝</span>
-          <span style={{fontSize:12,color:C.dim}}>Ocorrências</span>
-          <span style={{fontSize:9,color:C.muted,marginLeft:'auto',background:C.border,borderRadius:4,padding:'1px 5px'}}>em breve</span>
-        </div>
-
-        {/* Módulo: Não Conformidade (placeholder) */}
-        <div style={{padding:'8px 14px',display:'flex',alignItems:'center',gap:7,opacity:.4,cursor:'not-allowed'}}>
-          <span style={{fontSize:13}}>⚠️</span>
-          <span style={{fontSize:12,color:C.dim}}>Não Conformidade</span>
-          <span style={{fontSize:9,color:C.muted,marginLeft:'auto',background:C.border,borderRadius:4,padding:'1px 5px'}}>em breve</span>
-        </div>
-
-        {/* Módulo: RIACP (placeholder) */}
-        <div style={{padding:'8px 14px',display:'flex',alignItems:'center',gap:7,opacity:.4,cursor:'not-allowed'}}>
-          <span style={{fontSize:13}}>🔍</span>
-          <span style={{fontSize:12,color:C.dim}}>RIACP</span>
-          <span style={{fontSize:9,color:C.muted,marginLeft:'auto',background:C.border,borderRadius:4,padding:'1px 5px'}}>em breve</span>
-        </div>
+        {/* Módulos futuros */}
+        {['Ocorrências','Não Conformidade','RIACP'].map(m=>(
+          <div key={m} style={{padding:'6px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',opacity:.35,cursor:'not-allowed'}}>
+            <span style={{fontSize:12,color:C.muted}}>{m}</span>
+            <span style={{fontSize:9,color:C.muted}}>em breve</span>
+          </div>
+        ))}
 
         <div style={{height:1,background:C.border,margin:'6px 12px'}}/>
 
         {/* Indicadores */}
-        <SidebarNavItem id="indicators" label="📊  Indicadores" badge={0}/>
+        <SidebarNavItem id="indicators" label="Indicadores" badge={0}/>
 
         <div style={{height:1,background:C.border,margin:'6px 12px'}}/>
 
         {/* Administração */}
-        {canSeeAdm && <SidebarSection sectionKey="adm" label="Administração" icon="⚙️">
+        {canSeeAdm && <SidebarSection sectionKey="adm" label="Administração" icon="">
           {(hasPerm(loggedIn,'users')||hasPerm(loggedIn,'usuarios.gerenciar'))&&<SidebarNavItem id="users"      label="Usuários"  indent/>}
           {(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<SidebarNavItem id="grupos"   label="Grupos"    indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="log"         label="Auditoria" indent/>}
@@ -5467,14 +5451,14 @@ const saveReq = async (r) => {
         </SidebarSection>}
 
         {/* Meu Perfil */}
-        <SidebarNavItem id="settings" label="👤  Meu Perfil" badge={0}/>
+        <SidebarNavItem id="settings" label="Meu Perfil" badge={0}/>
 
       </div>
 
       {/* User footer */}
       <div style={{padding:'10px 12px',borderTop:'1px solid '+C.border}}>
         <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:5}}>
-          <div style={{width:26,height:26,borderRadius:'50%',background:C.accent+'22',border:'1px solid '+C.accent+'44',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:C.accent,flexShrink:0}}>
+          <div style={{width:26,height:26,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:600,color:C.muted,flexShrink:0}}>
             {loggedIn.name.split(' ').map(w=>w[0]).slice(0,2).join('')}
           </div>
           <div style={{flex:1,minWidth:0}}>
