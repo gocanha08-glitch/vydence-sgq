@@ -1518,11 +1518,11 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
       const id=encodeURIComponent(localReq.id);
       try{
         // Primeiro PUT: aberta → avaliacao_inicial
-        await fetch(base+'/api/records/'+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(r)});
+        await fetch(base+'/api/records?module=sa&id='+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(r)});
         // Segundo PUT: avaliacao_inicial → avaliacao_areas
         const r2={...r,status:"avaliacao_areas"};
         r2.log=[...(r.log||[]),{at:new Date().toISOString(),by:currentUser.name,type:"avaliacao_inicial",event:"SA enviada para avaliacao de areas",detail:"Areas: "+triage.assignedAreas.join(", ")}];
-        await fetch(base+'/api/records/'+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(r2)});
+        await fetch(base+'/api/records?module=sa&id='+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(r2)});
         setLocalReq(r2);onUpdate(r2);
       }catch(e){alert('Erro ao salvar triagem: '+e.message);}
     } else {
@@ -5087,7 +5087,7 @@ function App() {
   // ---- Bootstrap: check existing session ----
   useEffect(() => {
     const token = sessionStorage.getItem('sgq_token');
-    const userStr = sessionStorage.getItem('cm_user');
+    const userStr = sessionStorage.getItem('sgq_user');
     if (token && userStr) {
       try {
         const u = JSON.parse(userStr);
@@ -5097,7 +5097,7 @@ function App() {
           apiGet('/api/users?_route=me').then(fresh => {
             if (fresh && !fresh.error) {
               const updated = {...u, groups: fresh.groups||[], groupIds: fresh.groupIds||[], permissions: fresh.permissions||[]};
-              sessionStorage.setItem('cm_user', JSON.stringify(updated));
+              sessionStorage.setItem('sgq_user', JSON.stringify(updated));
               setLI(updated);
             }
           }).catch(()=>{});
@@ -5147,7 +5147,7 @@ const loadAll = async () => {
     const data = await apiPost('/api/auth?_route=login', { email, password });
     if (!data) return 'Erro de conexao';
     sessionStorage.setItem('sgq_token', data.token);
-    sessionStorage.setItem('cm_user', JSON.stringify(data.user));
+    sessionStorage.setItem('sgq_user', JSON.stringify(data.user));
     setLI(data.user);
     setView('dashboard');
     try { if(historyOK) window.history.replaceState({v:'dashboard'}, '', '?view=dashboard'); } catch {}
@@ -5170,7 +5170,7 @@ const loadAll = async () => {
               groups: fresh.groups,
               groupIds: fresh.groupIds
             };
-            sessionStorage.setItem('cm_user', JSON.stringify(updated));
+            sessionStorage.setItem('sgq_user', JSON.stringify(updated));
             return updated;
           });
         }
@@ -5183,7 +5183,7 @@ const loadAll = async () => {
 
   const logout = () => {
     sessionStorage.removeItem('sgq_token');
-    sessionStorage.removeItem('cm_user');
+    sessionStorage.removeItem('sgq_user');
     setLI(null); setView('dashboard');
     try { if(typeof historyOK!=='undefined'&&historyOK) window.history.replaceState({v:'dashboard'}, '', '?view=dashboard'); } catch {}
   };
@@ -5198,7 +5198,7 @@ const loadAll = async () => {
 const saveReq = async (r) => {
     try {
       const exists = requests.find(x => x.id === r.id);
-      if (exists) await apiPut('/api/records/' + encodeURIComponent(r.id), r);
+      if (exists) await apiPut('/api/records?module=sa&id=' + encodeURIComponent(r.id), r);
       else await apiPost('/api/records?module=sa', r);
       // Atualiza estado local imediatamente
       setRR(p => exists ? p.map(x => x.id === r.id ? r : x) : [r, ...p]);
@@ -5509,7 +5509,7 @@ const saveReq = async (r) => {
       {view==='perguntas' &&<QuestionsEditor deptQuestions={deptQ} currentUser={loggedIn} onSave={saveDeptQ}/>}
       {view==='cm_config' &&<CMConfig crits={crits} matrix={matrix||mkMatrix()} deptQ={deptQ} phaseDl={phaseDl} currentUser={loggedIn} onSaveCrits={saveCrits} onSaveMatrix={saveMatrix} onSaveDeptQ={saveDeptQ} onSavePhaseDl={(ph)=>savePhaseDl(ph,loggedIn.name)}/>}
       {view==='users'     &&(hasPerm(loggedIn,'users')||hasPerm(loggedIn,'usuarios.gerenciar'))&&<UserManager users={users} currentUser={loggedIn} isSuperAdmin={isSuperAdmin} canManage={hasPerm(loggedIn,'usuarios.gerenciar')} onSave={saveUsers}/>}
-      {view==='settings'  &&<Settings phaseDl={phaseDl} currentUser={loggedIn} theme={theme} setTheme={setTheme} onChangePwd={(np)=>{const u={...loggedIn,pwd:np};sessionStorage.setItem('cm_user',JSON.stringify(u));setLI(u);}} onSavePhaseDl={(ph)=>savePhaseDl(ph,loggedIn.name)} onLogout={logout}/>}
+      {view==='settings'  &&<Settings phaseDl={phaseDl} currentUser={loggedIn} theme={theme} setTheme={setTheme} onChangePwd={(np)=>{const u={...loggedIn,pwd:np};sessionStorage.setItem('sgq_user',JSON.stringify(u));setLI(u);}} onSavePhaseDl={(ph)=>savePhaseDl(ph,loggedIn.name)} onLogout={logout}/>}
       {view==='log'&&(isAdmin||hasPerm(loggedIn,'auditoria.ver'))&&<AuditLog requests={requests} sysLog={sysLog}/>}
       {view==='grupos'    &&(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<GroupManager currentUser={loggedIn} C={C} canManage={hasPerm(loggedIn,'grupos.gerenciar')}/>}
     </div>
