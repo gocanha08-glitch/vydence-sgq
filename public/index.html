@@ -3901,10 +3901,28 @@ function ProdutoAutocomplete({value, onChange, onSelect, C, Sg, placeholder}){
       const token = sessionStorage.getItem('sgq_token');
       const res = await fetch('/api/produtos?q='+encodeURIComponent(term),{headers:{'Authorization':'Bearer '+token}});
       const data = await res.json();
-      setResults(Array.isArray(data)?data:[]);
-      setOpen(true);
+      const list = Array.isArray(data)?data:[];
+      setResults(list);
+      // Se retornou exatamente 1 resultado com código igual ao digitado → preenche direto
+      if(list.length===1 && list[0].codigo.toLowerCase()===term.toLowerCase()){
+        onSelect(list[0]);
+        setOpen(false);
+      } else {
+        setOpen(list.length>0);
+      }
     }catch{ setResults([]); }
     setLoading(false);
+  };
+
+  // Busca exata ao sair do campo (blur) ou apertar Enter/Tab
+  const fetchExact = async (term) => {
+    if(!term||term.length<2) return;
+    try{
+      const token = sessionStorage.getItem('sgq_token');
+      const res = await fetch('/api/produtos?codigo='+encodeURIComponent(term.trim()),{headers:{'Authorization':'Bearer '+token}});
+      const data = await res.json();
+      if(data && data.codigo){ onSelect(data); setOpen(false); }
+    }catch{}
   };
 
   const debounceRef = React.useRef(null);
@@ -3923,6 +3941,8 @@ function ProdutoAutocomplete({value, onChange, onSelect, C, Sg, placeholder}){
         onChange={e=>handleChange(e.target.value)}
         placeholder={placeholder||"Digite o código..."}
         onFocus={()=>{ if(results.length>0) setOpen(true); }}
+        onBlur={()=>{ setTimeout(()=>{ if(q.trim()) fetchExact(q.trim()); setOpen(false); },200); }}
+        onKeyDown={e=>{ if(e.key==='Enter'||e.key==='Tab'){ fetchExact(q.trim()); setOpen(false); } }}
         autoComplete="off"
       />
       {loading&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:10,color:C.muted}}>...</span>}
@@ -3933,6 +3953,7 @@ function ProdutoAutocomplete({value, onChange, onSelect, C, Sg, placeholder}){
           style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid "+C.border,fontSize:12}}
           onMouseEnter={e=>e.currentTarget.style.background=C.surface}
           onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+          onMouseDown={e=>e.preventDefault()}
           onClick={()=>{ onSelect(p); setQ(p.codigo); setOpen(false); }}>
           <span style={{fontWeight:700,color:C.accent}}>{p.codigo}</span>
           <span style={{color:C.muted,marginLeft:8}}>{p.descricao}</span>
@@ -4405,12 +4426,15 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
 }
 
 // ================================================================
-// SEED PRODUTOS — temporário para popular tabela de teste
+// PRODUTOS — gerenciamento da base de produtos
 // ================================================================
 function SeedProdutos({currentUser}){
   const {C}=useTheme();const Sg=mkSg(C);
-  const [status,setStatus]=useState(null);
+  const [info,setInfo]=useState(null);
   const [loading,setLoading]=useState(false);
+  const [uploading,setUploading]=useState(false);
+  const [uploadResult,setUploadResult]=useState(null);
+  const fileRef=React.useRef(null);
 
   const SEED = [
     {codigo:"026377",descricao:"KIT COMPLETO PLACA MODELO LM-PW1-001 - PEME V1.1 - R1.0 – RETRAB MS-PW1-001",tipo:"TP",unidade:"UN",familia:"Placa PW1"},
@@ -4422,43 +4446,107 @@ function SeedProdutos({currentUser}){
     {codigo:"025385",descricao:"KIT PLACA LM-PW1-001 - PEME V1.1 - R1.1 RETRAB MS-PW1-001",tipo:"PI",unidade:"UN",familia:"Placa PW1"},
   ];
 
-  const runSeed = async () => {
-    setLoading(true); setStatus(null);
-    try {
-      const token = sessionStorage.getItem('sgq_token');
-      const res = await fetch('/api/produtos', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-        body: JSON.stringify({produtos: SEED, replace: false})
-      });
-      const data = await res.json();
-      if(res.ok) setStatus({ok:true, msg:`${data.inserted} inseridos, ${data.updated} atualizados.`});
-      else setStatus({ok:false, msg: data.error||'Erro desconhecido'});
-    } catch(e){ setStatus({ok:false, msg:e.message}); }
+  React.useEffect(()=>{ loadInfo(); },[]);
+
+  const loadInfo = async () => {
+    setLoading(true);
+    try{
+      const token=sessionStorage.getItem('sgq_token');
+      const res=await fetch('/api/produtos',{headers:{'Authorization':'Bearer '+token}});
+      const data=await res.json();
+      if(Array.isArray(data)){
+        const ativos=data.filter(p=>p.ativo);
+        const lastUpd=data.map(p=>p.updated_at).filter(Boolean).sort().reverse()[0];
+        setInfo({total:data.length, ativos:ativos.length, lastUpd});
+      }
+    }catch{}
     setLoading(false);
   };
 
-  return <div style={{padding:"18px 22px",maxWidth:540}}>
-    <h1 style={{margin:"0 0 6px",fontSize:17,color:C.text,fontWeight:700}}>Seed de Produtos (Teste)</h1>
-    <div style={{fontSize:12,color:C.muted,marginBottom:20}}>Popula a tabela de produtos com os dados de teste. Pode rodar mais de uma vez sem duplicar.</div>
-    <div style={{...Sg.card(),marginBottom:16}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Produtos que serão inseridos</div>
-      {SEED.map(p=>(
-        <div key={p.codigo} style={{display:"flex",gap:10,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:12}}>
-          <span style={{fontWeight:700,color:C.accent,width:70,flexShrink:0}}>{p.codigo}</span>
-          <span style={{color:C.text,flex:1}}>{p.descricao}</span>
-          <span style={{color:C.muted,width:30,flexShrink:0}}>{p.tipo}</span>
+  const runSeed = async () => {
+    setUploading(true); setUploadResult(null);
+    try{
+      const token=sessionStorage.getItem('sgq_token');
+      const res=await fetch('/api/produtos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({produtos:SEED,replace:false})});
+      const data=await res.json();
+      if(res.ok){ setUploadResult({ok:true,msg:data.inserted+" inseridos, "+data.updated+" atualizados."}); loadInfo(); }
+      else setUploadResult({ok:false,msg:data.error||'Erro'});
+    }catch(e){setUploadResult({ok:false,msg:e.message});}
+    setUploading(false);
+  };
+
+  const handleCSV = async (file) => {
+    if(!file) return;
+    setUploading(true); setUploadResult(null);
+    try{
+      const text=await file.text();
+      const lines=text.split(/?
+/).filter(l=>l.trim());
+      // Detecta separador
+      const sep=lines[0].includes(';')?';':',';
+      const headers=lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
+      const iCod=headers.findIndex(h=>h.includes('codigo')||h.includes('código')||h==='code');
+      const iDesc=headers.findIndex(h=>h.includes('descri'));
+      const iTipo=headers.findIndex(h=>h.includes('tipo')||h==='type');
+      const iUn=headers.findIndex(h=>h.includes('unidade')||h==='un'||h==='unit');
+      const iFam=headers.findIndex(h=>h.includes('familia')||h.includes('família')||h==='family');
+      if(iCod<0||iDesc<0){ setUploadResult({ok:false,msg:'CSV precisa ter colunas "codigo" e "descricao"'}); setUploading(false); return; }
+      const produtos=lines.slice(1).map(l=>{
+        const cols=l.split(sep).map(c=>c.trim().replace(/^["']|["']$/g,''));
+        return {codigo:cols[iCod],descricao:cols[iDesc],tipo:iTipo>=0?cols[iTipo]:null,unidade:iUn>=0?cols[iUn]:'UN',familia:iFam>=0?cols[iFam]:null};
+      }).filter(p=>p.codigo&&p.descricao);
+      const token=sessionStorage.getItem('sgq_token');
+      const res=await fetch('/api/produtos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({produtos,replace:false})});
+      const data=await res.json();
+      if(res.ok){ setUploadResult({ok:true,msg:data.inserted+" inseridos, "+data.updated+" atualizados de "+produtos.length+" linhas."}); loadInfo(); }
+      else setUploadResult({ok:false,msg:data.error||'Erro'});
+    }catch(e){setUploadResult({ok:false,msg:e.message});}
+    setUploading(false);
+  };
+
+  return <div style={{padding:"18px 22px",maxWidth:560}}>
+    <h1 style={{margin:"0 0 4px",fontSize:17,color:C.text,fontWeight:700}}>Gestão de Produtos</h1>
+    <div style={{fontSize:11,color:C.muted,marginBottom:20}}>Base de produtos usada pelo autocomplete em todos os módulos.</div>
+
+    {/* Status atual */}
+    <div style={{...Sg.card(),marginBottom:16,display:"flex",gap:24,alignItems:"center"}}>
+      {loading?<span style={{fontSize:13,color:C.muted}}>Carregando...</span>:<>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:700,color:C.accent}}>{info?.ativos??0}</div>
+          <div style={{fontSize:11,color:C.muted}}>produtos ativos</div>
         </div>
-      ))}
+        <div style={{flex:1}}>
+          <div style={{fontSize:12,color:C.muted}}>Última atualização</div>
+          <div style={{fontSize:13,color:C.text,fontWeight:600}}>{info?.lastUpd?fmt(info.lastUpd):"Nunca"}</div>
+        </div>
+        <button style={{...Sg.btn(),fontSize:11,padding:"4px 10px"}} onClick={loadInfo}>Atualizar</button>
+      </>}
     </div>
-    <button style={{...Sg.btn("primary"),padding:"10px 24px",opacity:loading?.5:1}} disabled={loading} onClick={runSeed}>
-      {loading?"Inserindo...":"Rodar Seed"}
-    </button>
-    {status&&<div style={{marginTop:12,padding:"10px 14px",borderRadius:8,fontSize:13,fontWeight:600,
-      background:status.ok?C.success+"15":C.danger+"15",
-      color:status.ok?C.success:C.danger,
-      border:"1px solid "+(status.ok?C.success:C.danger)+"40"}}>
-      {status.ok?"Concluído: ":""}{status.msg}
+
+    {/* Upload CSV */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Importar CSV</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Colunas obrigatórias: <strong>codigo</strong>, <strong>descricao</strong>. Opcionais: tipo, unidade, familia. Separador: <code>;</code> ou <code>,</code>.</div>
+      <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>handleCSV(e.target.files[0])}/>
+      <button style={{...Sg.btn("primary"),opacity:uploading?.5:1}} disabled={uploading} onClick={()=>fileRef.current.click()}>
+        {uploading?"Importando...":"Selecionar CSV"}
+      </button>
+    </div>
+
+    {/* Seed de teste */}
+    {(info?.ativos??0)===0&&<div style={{...Sg.card(),marginBottom:14,border:"1px dashed "+C.border}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:8}}>Dados de Teste</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Nenhum produto cadastrado. Carregue os dados de teste para começar.</div>
+      <button style={{...Sg.btn(),opacity:uploading?.5:1}} disabled={uploading} onClick={runSeed}>
+        {uploading?"Carregando...":"Carregar dados de teste (7 produtos)"}
+      </button>
+    </div>}
+
+    {uploadResult&&<div style={{padding:"10px 14px",borderRadius:8,fontSize:13,fontWeight:600,
+      background:uploadResult.ok?C.success+"15":C.danger+"15",
+      color:uploadResult.ok?C.success:C.danger,
+      border:"1px solid "+(uploadResult.ok?C.success:C.danger)+"40"}}>
+      {uploadResult.ok?"Concluído: ":""}{uploadResult.msg}
     </div>}
   </div>;
 }
@@ -6176,7 +6264,7 @@ const saveReq = async (r) => {
           {(hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar'))&&<SidebarNavItem id="grupos"   label="Grupos"    indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="log"         label="Auditoria" indent/>}
           {(hasPerm(loggedIn,'auditoria.ver')||isAdmin)&&<SidebarNavItem id="signatures"  label="Assinaturas" indent/>}
-          {isAdmin&&<SidebarNavItem id="seed_produtos" label="Seed Produtos" indent/>}
+          {isAdmin&&<SidebarNavItem id="seed_produtos" label="Produtos" indent/>}
         </SidebarSection>}
 
         {/* Meu Perfil */}
