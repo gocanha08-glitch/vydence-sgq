@@ -1510,24 +1510,12 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
     const targetStatus = isEdit ? localReq.status : "avaliacao_areas";
     let r={...localReq,triage:{...triage,...(signature?{triageSignature:signature}:{})},status:isEdit?localReq.status:"avaliacao_inicial",evaluations:newEvs,ap1By:currentUser.id,ap1ByName:currentUser.name,ap1At:new Date().toISOString(),stageDeadlines:newSD};
     r=mkLog(r,currentUser.name,"avaliacao_inicial",isEdit?"Avaliacao inicial editada pelo SGQ":"Avaliacao inicial realizada",detail);
-    if(!isEdit && localReq.status==="aberta"){
-      // Backend valida transições individuais: precisa de dois PUTs
-      // 1) aberta → avaliacao_inicial, 2) avaliacao_inicial → avaliacao_areas
-      const token=sessionStorage.getItem('sgq_token');
-      const base=window.API_BASE||'';
-      const id=encodeURIComponent(localReq.id);
-      try{
-        // Primeiro PUT: aberta → avaliacao_inicial
-        await fetch(base+'/api/records?module=sa&id='+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(r)});
-        // Segundo PUT: avaliacao_inicial → avaliacao_areas
-        const r2={...r,status:"avaliacao_areas"};
-        r2.log=[...(r.log||[]),{at:new Date().toISOString(),by:currentUser.name,type:"avaliacao_inicial",event:"SA enviada para avaliacao de areas",detail:"Areas: "+triage.assignedAreas.join(", ")}];
-        await fetch(base+'/api/records?module=sa&id='+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(r2)});
-        setLocalReq(r2);onUpdate(r2);
-      }catch(e){alert('Erro ao salvar triagem: '+e.message);}
-    } else {
-      setLocalReq({...r,evaluations:r.evaluations||{},actions:r.actions||[]});onUpdate(r);
-    }
+    // Salva direto — backend SGQ aceita qualquer status sem validação de transição
+    const r2 = isEdit ? r : {...r, status: "avaliacao_areas",
+      log:[...(r.log||[]),{at:new Date().toISOString(),by:currentUser.name,type:"avaliacao_inicial",event:"SA enviada para avaliacao de areas",detail:"Areas: "+triage.assignedAreas.join(", ")}]
+    };
+    setLocalReq({...r2,evaluations:r2.evaluations||{},actions:r2.actions||[]});
+    onUpdate(r2);
     setEditTriagem(false);setSigModal(null);
   };
 
@@ -5197,12 +5185,25 @@ const loadAll = async () => {
 
 const saveReq = async (r) => {
     try {
-      const exists = requests.find(x => x.id === r.id);
-      if (exists) await apiPut('/api/records?module=sa&id=' + encodeURIComponent(r.id), r);
-      else await apiPost('/api/records?module=sa', r);
-      // Atualiza estado local imediatamente
-      setRR(p => exists ? p.map(x => x.id === r.id ? r : x) : [r, ...p]);
-    } catch (err) { alert('Erro ao salvar SA: ' + err.message); }
+      const saId = r.id || r.code;
+      if (!saId) { console.error('saveReq: SA sem id', r); return; }
+      const exists = requests.find(x => x.id === saId || x.code === saId);
+      if (exists) {
+        await apiPut('/api/records?module=sa&id=' + encodeURIComponent(saId), r);
+      } else {
+        const res = await apiPost('/api/records?module=sa', r);
+        // Backend retorna { ok, id, code } — garante que o id local bate com o code
+        if (res && res.code) r = { ...r, id: res.code };
+      }
+      setRR(p => {
+        const idx = p.findIndex(x => x.id === saId || x.code === saId);
+        if (idx >= 0) { const n=[...p]; n[idx]=r; return n; }
+        return [r, ...p];
+      });
+    } catch (err) {
+      console.error('Erro ao salvar SA:', err);
+      alert('Erro ao salvar: ' + err.message);
+    }
   };
 
   const saveUsers = async (list, by, action, detail) => {
