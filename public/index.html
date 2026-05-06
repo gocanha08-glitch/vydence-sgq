@@ -2007,21 +2007,15 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
     })()}
 
     {/* ══ BANNER CANCELADA / CONCLUÍDA ══ */}
-    {localReq.status==="cancelada"&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-      <div>
-        <div style={{fontSize:13,fontWeight:700,color:C.danger}}>SA Cancelada</div>
-        {localReq.cancellationMotive&&<div style={{fontSize:12,color:"#991B1B",marginTop:2}}>Motivo: {localReq.cancellationMotive}</div>}
-        {localReq.cancelledByName&&<div style={{fontSize:11,color:"#B91C1C",marginTop:1}}>Por: {localReq.cancelledByName} · {fmt(localReq.cancelledAt)}</div>}
-      </div>
-      {isAdmin&&<button style={{...Sg.btn(),fontSize:12,color:C.accent,border:"1px solid "+C.accent+"33"}} onClick={()=>setShowReopenSA(true)}>Reabrir SA</button>}
+    {localReq.status==="cancelada"&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA"}}>
+      <div style={{fontSize:13,fontWeight:600,color:C.danger}}>SA Cancelada</div>
+      {localReq.cancellationMotive&&<div style={{fontSize:12,color:"#991B1B",marginTop:2}}>Motivo: {localReq.cancellationMotive}</div>}
+      {localReq.cancelledByName&&<div style={{fontSize:11,color:"#B91C1C",marginTop:1}}>Por: {localReq.cancelledByName} · {fmt(localReq.cancelledAt)}</div>}
     </div>}
-    {localReq.status==="concluida"&&localReq.verifyNote&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:"#F0FDF4",border:"1px solid #86EFAC",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-      <div>
-        <div style={{fontSize:13,fontWeight:700,color:C.success}}>SA Concluída</div>
-        <div style={{fontSize:12,color:"#166534",marginTop:2}}>{localReq.verifyNote}</div>
-        {localReq.verifiedByName&&<div style={{fontSize:11,color:"#15803D",marginTop:1}}>Por: {localReq.verifiedByName} · {fmt(localReq.closedAt)}</div>}
-      </div>
-      {isAdmin&&<button style={{...Sg.btn(),fontSize:12,color:C.accent,border:"1px solid "+C.accent+"33"}} onClick={()=>setShowReopenSA(true)}>Reabrir SA</button>}
+    {localReq.status==="concluida"&&localReq.verifyNote&&<div style={{marginBottom:14,padding:"12px 18px",borderRadius:10,background:"#F0FDF4",border:"1px solid #86EFAC"}}>
+      <div style={{fontSize:13,fontWeight:600,color:C.success}}>SA Concluída</div>
+      <div style={{fontSize:12,color:"#166534",marginTop:2}}>{localReq.verifyNote}</div>
+      {localReq.verifiedByName&&<div style={{fontSize:11,color:"#15803D",marginTop:1}}>Por: {localReq.verifiedByName} · {fmt(localReq.closedAt)}</div>}
     </div>}
 
     {/* ══ FOCUS BANNER — shown when coming from task/evaluation click ══ */}
@@ -2114,13 +2108,15 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
     ══════════════════════════════════════════════════════════ */}
     <SecCard id="triagem" title="Avaliacao Inicial da Mudanca">
       {!localReq.triage||editTriagem
-        ?isAdmin
+        ?isAdmin&&!["cancelada","concluida"].includes(localReq.status)
           ?<div>
             <button style={{...Sg.btn("primary"),fontSize:13,padding:"8px 18px"}} onClick={()=>setTriageDrawer(true)}>
-              {editTriagem?"✏ Editar Avaliacao Inicial":"Iniciar Avaliacao Inicial →"}
+              {editTriagem?"Editar Avaliacao Inicial":"Iniciar Avaliacao Inicial →"}
             </button>
           </div>
-          :<div style={{fontSize:14,color:C.muted,padding:"8px 0"}}>Aguardando triagem pelo SGQ.</div>
+          :["cancelada","concluida"].includes(localReq.status)
+            ?<div style={{fontSize:13,color:C.muted,padding:"8px 0"}}>—</div>
+            :<div style={{fontSize:13,color:C.muted,padding:"8px 0"}}>Aguardando triagem pelo SGQ.</div>
         :<div>
           {/* Grid 3: nivel, avaliado por, data */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:14}}>
@@ -2311,9 +2307,11 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
             <div style={{fontSize:14,color:C.text,lineHeight:1.6}}>{localReq.verifyNote||"—"}</div>
           </FieldCard>
         </div>
-        :isAdmin&&allActsDone
-          ?<VerifyForm onConfirm={note=>setSigModal({action:(sig)=>concludeSA(note,sig),title:"Assinar - Encerramento da SA",desc:"SA: "+localReq.id+" - "+localReq.title,label:"Assinar e Encerrar",style:"success",saId:localReq.id,sigAction:"conclusao"})} C={C} Sg={Sg}/>
-          :<div style={{fontSize:14,color:C.muted}}>{allActsDone?"Aguardando verificacao pelo SGQ/Admin.":"Disponivel quando todas as acoes estiverem concluidas."}</div>}
+        :localReq.status==="cancelada"
+          ?<div style={{fontSize:13,color:C.muted}}>SA cancelada.</div>
+          :isAdmin&&allActsDone
+            ?<VerifyForm onConfirm={note=>setSigModal({action:(sig)=>concludeSA(note,sig),title:"Assinar - Encerramento da SA",desc:"SA: "+localReq.id+" - "+localReq.title,label:"Assinar e Encerrar",style:"success",saId:localReq.id,sigAction:"conclusao"})} C={C} Sg={Sg}/>
+            :<div style={{fontSize:13,color:C.muted}}>{allActsDone?"Aguardando verificacao pelo SGQ/Admin.":"Disponivel quando todas as acoes estiverem concluidas."}</div>}
     </SecCard>
 
     {/* ══════════════════════════════════════════════════════════
