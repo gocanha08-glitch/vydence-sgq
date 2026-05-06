@@ -4441,27 +4441,22 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
-                {["Etapa","Data","Usuário","Descrição"].map(h=>(
+                {["Data","Usuário","O que foi feito"].map(h=>(
                   <th key={h} style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {[...(r.log||[])].reverse().map((e,i)=>{
-                const typeColors={criacao:C.success,analise:C.accent,fechamento:C.success,conclusao:C.success,anexo:C.warning,itens:C.muted,abertura:C.accent};
-                const col=typeColors[e.type]||C.muted;
-                return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
-                  <td style={{padding:"7px 12px",whiteSpace:"nowrap"}}>
-                    <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:600,background:col+"20",color:col}}>{e.type||"—"}</span>
-                  </td>
+              {[...(r.log||[])].reverse().map((e,i)=>(
+                <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
                   <td style={{padding:"7px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(e.at)}</td>
                   <td style={{padding:"7px 12px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{e.by||"—"}</td>
                   <td style={{padding:"7px 12px",fontSize:12,color:C.text}}>
                     <div style={{fontWeight:500}}>{e.event}</div>
                     {e.detail&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{e.detail}</div>}
                   </td>
-                </tr>;
-              })}
+                </tr>
+              ))}
             </tbody>
           </table>
       }
