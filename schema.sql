@@ -129,9 +129,9 @@ CREATE INDEX IF NOT EXISTS idx_syslog_at       ON syslog(at DESC);
 -- SEED: roles do sistema
 -- ================================================================
 INSERT INTO roles (name, description, permissions, is_system) VALUES
-('Administradores', 'Acesso total ao sistema', '["dashboard","usuarios.gerenciar","grupos.gerenciar","auditoria.ver","ro.abrir","ro.analisar","ro.aprovar","ro.fechar","nc.abrir","nc.analisar","nc.aprovar","nc.fechar","riacp.abrir","riacp.analisar","riacp.aprovar","riacp.fechar","sa.abrir","sa.analisar","sa.aprovar","sa.fechar"]'::jsonb, true),
-('SGQ', 'Equipe de Qualidade', '["dashboard","auditoria.ver","ro.abrir","ro.analisar","ro.aprovar","ro.fechar","nc.abrir","nc.analisar","nc.aprovar","nc.fechar","riacp.abrir","riacp.analisar","riacp.aprovar","riacp.fechar","sa.abrir","sa.analisar","sa.aprovar","sa.fechar"]'::jsonb, true),
-('Geral', 'Usuário padrão', '["dashboard","ro.abrir","nc.abrir","sa.abrir"]'::jsonb, true)
+('Administradores', 'Acesso total ao sistema', '["dashboard","users","usuarios.gerenciar","usuarios.importar","grupos.ver","grupos.gerenciar","auditoria.ver","config.criticidades","config.matriz","config.perguntas","config.prazos","sa.avaliacao_inicial","sa.criar","sa.ver_todas","sa.aprovacao_plano","sa.concluir","sa.cancelar","sa.abrir","sa.analisar","sa.aprovar","sa.fechar","sa.excluir","ro.abrir","ro.analisar","ro.aprovar","ro.fechar","nc.abrir","nc.analisar","nc.aprovar","nc.fechar","riacp.abrir","riacp.analisar","riacp.aprovar","riacp.fechar"]'::jsonb, true),
+('SGQ', 'Equipe de Qualidade', '["dashboard","users","auditoria.ver","config.criticidades","config.matriz","config.perguntas","config.prazos","sa.avaliacao_inicial","sa.criar","sa.ver_todas","sa.aprovacao_plano","sa.concluir","sa.cancelar","sa.abrir","sa.analisar","sa.aprovar","sa.fechar","ro.abrir","ro.analisar","ro.aprovar","ro.fechar","nc.abrir","nc.analisar","nc.aprovar","nc.fechar","riacp.abrir","riacp.analisar","riacp.aprovar","riacp.fechar"]'::jsonb, true),
+('Geral', 'Usuário padrão', '["dashboard","sa.criar","sa.abrir","ro.abrir","nc.abrir","riacp.abrir"]'::jsonb, true)
 ON CONFLICT (name) DO NOTHING;
 
 -- ================================================================

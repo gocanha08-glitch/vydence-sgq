@@ -32,6 +32,8 @@ const APP_DATE = "2026-03-11";
 // ── Permissões ─────────────────────────────────────────────
 const hasPermission = (user, perm) => {
   if (!user) return false;
+  // admin e sgq têm acesso a tudo
+  if (['admin','sgq'].includes(user.role)) return true;
   const perms = user.permissions || [];
   return perms.includes(perm);
 };
