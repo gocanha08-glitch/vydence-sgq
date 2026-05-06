@@ -2842,7 +2842,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
     {sigModal&&<SignatureModal
       open={!!sigModal}
       onClose={()=>setSigModal(null)}
-      onConfirm={(sig)=>sigModal.action(sig)}
+      onConfirm={(sig)=>{sigModal.action(sig);setSigModal(null);}}
       title={sigModal.title}
       description={sigModal.desc}
       confirmLabel={sigModal.label}
