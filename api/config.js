@@ -16,7 +16,9 @@ module.exports=async(req,res)=>{
   }
   if(req.method==='PUT'){
     try{
-      const{value}=req.body||{};
+      // Aceita { value: ... } ou o dado direto no body (compatibilidade com CM frontend)
+      const rawBody=req.body||{};
+      const value='value' in rawBody ? rawBody.value : rawBody;
       if(key==='syslog'){const es=Array.isArray(value)?value:[value];for(const e of es)await sql`INSERT INTO syslog(at,by,type,event,detail)VALUES(${e.at||new Date().toISOString()},${e.by||''},${e.type||'sistema'},${e.event||''},${e.detail||''})`;return res.json({ok:true});}
       await sql`INSERT INTO config(key,value,updated_at,updated_by)VALUES(${key},${JSON.stringify(value)}::jsonb,now(),${d.name})ON CONFLICT(key)DO UPDATE SET value=EXCLUDED.value,updated_at=now(),updated_by=EXCLUDED.updated_by`;
       return res.json({ok:true});
