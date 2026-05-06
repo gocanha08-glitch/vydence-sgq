@@ -1,12 +1,17 @@
 {
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/users/me",          "destination": "/api/users?_route=me" },
-    { "source": "/api/users/:id/roles",   "destination": "/api/users?_route=roles&id=:id" },
-    { "source": "/api/records/:module",   "destination": "/api/records?module=:module" },
-    { "source": "/api/records/:module/:id", "destination": "/api/records?module=:module&id=:id" },
-    { "source": "/api/actions",           "destination": "/api/actions" },
-    { "source": "/api/config/:key",       "destination": "/api/config/:key" },
-    { "source": "/((?!api/).*)",          "destination": "/index.html" }
+    { "source": "/api/auth/login",           "destination": "/api/auth?_route=login" },
+    { "source": "/api/auth/forgot",          "destination": "/api/auth?_route=forgot" },
+    { "source": "/api/auth/reset",           "destination": "/api/auth?_route=reset" },
+    { "source": "/api/auth/verify-password", "destination": "/api/auth?_route=verify" },
+    { "source": "/api/auth/me",              "destination": "/api/auth?_route=me" },
+    { "source": "/api/users/me",             "destination": "/api/users?_route=me" },
+    { "source": "/api/users/:id/roles",      "destination": "/api/users?_route=userroles&id=:id" },
+    { "source": "/api/roles",                "destination": "/api/users?_route=roles" },
+    { "source": "/api/records/:module/:id",  "destination": "/api/records?module=:module&id=:id" },
+    { "source": "/api/records/:module",      "destination": "/api/records?module=:module" },
+    { "source": "/api/config/:key",          "destination": "/api/config?key=:key" },
+    { "source": "/((?!api/).*)",             "destination": "/index.html" }
   ]
 }
