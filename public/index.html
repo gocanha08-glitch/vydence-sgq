@@ -1662,8 +1662,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
   };
 
   // ── Cancelar SA ──
-  const reopenSA=(motive)=>{
-    // Volta para aberta, limpa cancelamento, preserva tudo que foi feito
+  const reopenSA=(motive,signature)=>{
     let r={
       ...localReq,
       status:"aberta",
@@ -1672,14 +1671,14 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
       cancelledByName:null,
       cancellationMotive:null,
       cancelSignature:null,
-      // Reabrir ações que foram canceladas junto com a SA
       actions:(localReq.actions||[]).map(a=>
         a.cancelledMotive==="SA cancelada"
           ? {...a,status:"pendente",cancelledMotive:null,cancelledBy:null,cancelledAt:null}
           : a
       ),
     };
-    r=mkLog(r,currentUser.name,"reabrir","SA reaberta","Motivo: "+motive+" | Por: "+currentUser.name);
+    if(signature) r={...r,reopenSignature:signature};
+    r=mkLog(r,currentUser.name,"reabrir","SA reaberta","Motivo: "+motive+(signature?" | Assinado por: "+signature.signedByName:"")+" | Por: "+currentUser.name);
     setLocalReq({...r,evaluations:r.evaluations||{},actions:r.actions||[]});
     onUpdate(r);
     setShowReopenSA(false);
@@ -2833,9 +2832,9 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
 </Modal>}
     {/* ══ REABRIR SA ══ */}
     <MotiveModal open={showReopenSA} onClose={()=>setShowReopenSA(false)}
-      onConfirm={motive=>reopenSA(motive)}
+      onConfirm={motive=>{setShowReopenSA(false);setSigModal({action:(sig)=>reopenSA(motive,sig),title:"Assinar — Reabertura da SA",desc:"SA: "+localReq.id+" | Motivo: "+motive,label:"Assinar e Reabrir",style:"primary",saId:localReq.id,sigAction:"reabrir_sa"});}}
       title={"Reabrir SA — "+localReq.id}
-      confirmLabel="Reabrir" confirmStyle="primary"
+      confirmLabel="Continuar →" confirmStyle="primary"
       description={"A SA voltará para o status Aberta. Todo o histórico e dados serão preservados."}
       C={C} Sg={Sg}/>
 
