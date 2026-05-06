@@ -1,243 +1,22 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SGQ — Vydence Medical</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vydence SGQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet"/>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:        #F7F8FA;
-  --surface:   #FFFFFF;
-  --border:    #E4E7EC;
-  --border-2:  #D0D5DD;
-  --text-1:    #101828;
-  --text-2:    #475467;
-  --text-3:    #98A2B3;
-  --accent:    #1570EF;
-  --accent-h:  #175CD3;
-  --accent-bg: #EFF4FF;
-  --green:     #12B76A;
-  --green-bg:  #ECFDF3;
-  --yellow:    #F79009;
-  --yellow-bg: #FFFAEB;
-  --red:       #F04438;
-  --red-bg:    #FEF3F2;
-  --purple:    #7F56D9;
-  --purple-bg: #F9F5FF;
-  --nav-w:     240px;
-  --radius:    8px;
-  --shadow:    0 1px 2px rgba(16,24,40,.05);
-  --shadow-md: 0 4px 8px rgba(16,24,40,.08);
-}
-
-body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text-1); font-size:14px; line-height:1.5; }
-input,textarea,select,button { font-family:inherit; font-size:14px; }
-button { cursor:pointer; }
-
-/* ── LAYOUT ── */
-.app   { display:flex; min-height:100vh; }
-.nav   { width:var(--nav-w); background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; position:fixed; top:0; left:0; height:100vh; overflow-y:auto; z-index:100; }
-.main  { margin-left:var(--nav-w); flex:1; min-height:100vh; display:flex; flex-direction:column; }
-.topbar{ background:var(--surface); border-bottom:1px solid var(--border); padding:0 28px; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; }
-.content { padding:28px; flex:1; }
-
-/* ── NAV ── */
-.nav-logo { padding:20px 18px 16px; border-bottom:1px solid var(--border); }
-.nav-logo-mark { display:flex; align-items:center; gap:9px; }
-.nav-logo-icon { width:32px; height:32px; background:var(--accent); border-radius:7px; display:flex; align-items:center; justify-content:center; }
-.nav-logo-icon svg { color:#fff; }
-.nav-logo-name { font-size:15px; font-weight:600; color:var(--text-1); letter-spacing:-.3px; }
-.nav-logo-sub  { font-size:11px; color:var(--text-3); letter-spacing:.3px; text-transform:uppercase; margin-top:1px; }
-
-.nav-section { padding:16px 10px 6px; }
-.nav-section-label { font-size:11px; font-weight:500; color:var(--text-3); letter-spacing:.5px; text-transform:uppercase; padding:0 8px; margin-bottom:4px; }
-.nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; color:var(--text-2); font-size:13.5px; font-weight:400; cursor:pointer; transition:all .15s; user-select:none; }
-.nav-item:hover { background:var(--bg); color:var(--text-1); }
-.nav-item.active { background:var(--accent-bg); color:var(--accent); font-weight:500; }
-.nav-item svg { flex-shrink:0; opacity:.7; }
-.nav-item.active svg { opacity:1; }
-.nav-badge { margin-left:auto; background:var(--red); color:#fff; font-size:11px; font-weight:600; padding:1px 6px; border-radius:10px; min-width:18px; text-align:center; }
-
-.nav-footer { margin-top:auto; padding:14px 10px; border-top:1px solid var(--border); }
-.nav-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; cursor:pointer; }
-.nav-user:hover { background:var(--bg); }
-.nav-avatar { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:600; flex-shrink:0; }
-.nav-user-info { flex:1; overflow:hidden; }
-.nav-user-name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.nav-user-role { font-size:11px; color:var(--text-3); }
-
-/* ── TOPBAR ── */
-.topbar-title { font-size:16px; font-weight:600; color:var(--text-1); }
-.topbar-actions { display:flex; align-items:center; gap:10px; }
-.topbar-search { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:0 12px; height:36px; width:220px; }
-.topbar-search input { border:none; background:none; outline:none; color:var(--text-1); flex:1; font-size:13.5px; }
-.topbar-search input::placeholder { color:var(--text-3); }
-
-/* ── BUTTONS ── */
-.btn { display:inline-flex; align-items:center; gap:6px; padding:0 14px; height:36px; border-radius:var(--radius); font-size:13.5px; font-weight:500; border:none; transition:all .15s; white-space:nowrap; }
-.btn-primary { background:var(--accent); color:#fff; }
-.btn-primary:hover { background:var(--accent-h); }
-.btn-secondary { background:var(--surface); color:var(--text-1); border:1px solid var(--border-2); box-shadow:var(--shadow); }
-.btn-secondary:hover { background:var(--bg); }
-.btn-ghost { background:none; color:var(--text-2); border:none; padding:0 10px; }
-.btn-ghost:hover { background:var(--bg); color:var(--text-1); }
-.btn-danger { background:var(--red); color:#fff; }
-.btn-danger:hover { background:#c0392b; }
-.btn-sm { height:30px; padding:0 10px; font-size:12.5px; }
-.btn-icon { width:36px; height:36px; padding:0; justify-content:center; }
-
-/* ── CARDS ── */
-.card { background:var(--surface); border:1px solid var(--border); border-radius:10px; }
-.card-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.card-title { font-size:14px; font-weight:600; color:var(--text-1); }
-.card-body { padding:20px; }
-
-/* ── STATS ── */
-.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
-.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
-.stat-label { font-size:12px; color:var(--text-3); font-weight:500; letter-spacing:.3px; text-transform:uppercase; margin-bottom:8px; }
-.stat-value { font-size:26px; font-weight:600; color:var(--text-1); letter-spacing:-1px; font-family:'DM Mono',monospace; }
-.stat-delta { font-size:12px; margin-top:4px; color:var(--text-3); }
-.stat-delta.up { color:var(--green); }
-.stat-delta.down { color:var(--red); }
-
-/* ── TABLE ── */
-.table-wrap { overflow-x:auto; }
-table { width:100%; border-collapse:collapse; }
-thead th { padding:10px 14px; text-align:left; font-size:12px; font-weight:500; color:var(--text-3); border-bottom:1px solid var(--border); white-space:nowrap; }
-tbody td { padding:12px 14px; border-bottom:1px solid var(--border); color:var(--text-1); font-size:13.5px; vertical-align:middle; }
-tbody tr:last-child td { border-bottom:none; }
-tbody tr:hover td { background:var(--bg); }
-
-/* ── BADGES ── */
-.badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:20px; font-size:11.5px; font-weight:500; white-space:nowrap; }
-.badge::before { content:''; width:6px; height:6px; border-radius:50%; flex-shrink:0; }
-.badge-green  { background:var(--green-bg);  color:#027A48; } .badge-green::before  { background:var(--green); }
-.badge-yellow { background:var(--yellow-bg); color:#B54708; } .badge-yellow::before { background:var(--yellow); }
-.badge-red    { background:var(--red-bg);    color:#B42318; } .badge-red::before    { background:var(--red); }
-.badge-blue   { background:var(--accent-bg); color:#1849A9; } .badge-blue::before   { background:var(--accent); }
-.badge-purple { background:var(--purple-bg); color:#5925DC; } .badge-purple::before { background:var(--purple); }
-.badge-gray   { background:var(--bg);        color:var(--text-2); } .badge-gray::before { background:var(--text-3); }
-
-/* ── FORMS ── */
-.form-group { margin-bottom:16px; }
-.form-label { display:block; font-size:13px; font-weight:500; color:var(--text-1); margin-bottom:6px; }
-.form-label span { color:var(--red); margin-left:2px; }
-.form-input { width:100%; height:38px; border:1px solid var(--border-2); border-radius:var(--radius); padding:0 12px; outline:none; transition:border .15s; background:var(--surface); color:var(--text-1); }
-.form-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(21,112,239,.08); }
-.form-input.error { border-color:var(--red); }
-.form-select { width:100%; height:38px; border:1px solid var(--border-2); border-radius:var(--radius); padding:0 12px; outline:none; background:var(--surface); color:var(--text-1); }
-.form-select:focus { border-color:var(--accent); }
-.form-textarea { width:100%; border:1px solid var(--border-2); border-radius:var(--radius); padding:10px 12px; outline:none; resize:vertical; min-height:80px; background:var(--surface); color:var(--text-1); }
-.form-textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(21,112,239,.08); }
-.form-hint { font-size:12px; color:var(--text-3); margin-top:4px; }
-.form-error { font-size:12px; color:var(--red); margin-top:4px; }
-.form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.form-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
-
-/* ── PASSWORD STRENGTH ── */
-.pw-strength { margin-top:8px; }
-.pw-bars { display:flex; gap:4px; margin-bottom:4px; }
-.pw-bar { height:3px; border-radius:2px; flex:1; background:var(--border); transition:background .2s; }
-.pw-bar.active-1 { background:var(--red); }
-.pw-bar.active-2 { background:var(--yellow); }
-.pw-bar.active-3 { background:var(--yellow); }
-.pw-bar.active-4 { background:var(--green); }
-.pw-strength-text { font-size:11px; color:var(--text-3); }
-
-/* ── MODAL ── */
-.modal-overlay { position:fixed; inset:0; background:rgba(16,24,40,.4); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; backdrop-filter:blur(2px); }
-.modal { background:var(--surface); border-radius:12px; width:100%; max-width:520px; box-shadow:0 20px 40px rgba(16,24,40,.15); max-height:90vh; overflow-y:auto; }
-.modal-lg { max-width:680px; }
-.modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
-.modal-title { font-size:15px; font-weight:600; }
-.modal-body { padding:20px 24px; }
-.modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
-
-/* ── LOGIN ── */
-.login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); }
-.login-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:36px; width:100%; max-width:400px; box-shadow:var(--shadow-md); }
-.login-logo { display:flex; align-items:center; gap:10px; margin-bottom:28px; }
-.login-logo-icon { width:38px; height:38px; background:var(--accent); border-radius:8px; display:flex; align-items:center; justify-content:center; }
-.login-logo-name { font-size:16px; font-weight:600; }
-.login-logo-sub { font-size:12px; color:var(--text-3); }
-.login-title { font-size:20px; font-weight:600; margin-bottom:4px; }
-.login-sub { font-size:13.5px; color:var(--text-2); margin-bottom:24px; }
-.login-alert { background:var(--red-bg); border:1px solid #FECDCA; border-radius:var(--radius); padding:10px 14px; font-size:13px; color:var(--red); margin-bottom:16px; }
-.login-alert-warn { background:var(--yellow-bg); border:1px solid #FEDF89; border-radius:var(--radius); padding:10px 14px; font-size:13px; color:#B54708; margin-bottom:16px; }
-.login-footer { text-align:center; margin-top:20px; font-size:12px; color:var(--text-3); }
-
-/* ── TABS ── */
-.tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:20px; }
-.tab { padding:10px 16px; font-size:13.5px; font-weight:500; color:var(--text-2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; }
-.tab:hover { color:var(--text-1); }
-.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
-
-/* ── EMPTY STATE ── */
-.empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 20px; color:var(--text-3); text-align:center; }
-.empty-icon { margin-bottom:12px; opacity:.4; }
-.empty-text { font-size:14px; font-weight:500; color:var(--text-2); margin-bottom:4px; }
-.empty-sub { font-size:13px; }
-
-/* ── CHECKBOX / TOGGLE ── */
-.checkbox-group { display:flex; flex-wrap:wrap; gap:8px; }
-.checkbox-item { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12.5px; padding:5px 10px; border:1px solid var(--border); border-radius:6px; transition:all .15s; }
-.checkbox-item:hover { border-color:var(--accent); background:var(--accent-bg); }
-.checkbox-item input { accent-color:var(--accent); }
-.checkbox-item.checked { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:500; }
-
-/* ── PROGRESS ── */
-.progress { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
-.progress-bar { height:100%; border-radius:3px; background:var(--accent); transition:width .3s; }
-
-/* ── DIVIDER ── */
-.divider { height:1px; background:var(--border); margin:16px 0; }
-
-/* ── ALERT ── */
-.alert { border-radius:var(--radius); padding:12px 14px; font-size:13.5px; display:flex; gap:10px; align-items:flex-start; margin-bottom:16px; }
-.alert-info    { background:var(--accent-bg); border:1px solid #B2CCFF; color:#1849A9; }
-.alert-success { background:var(--green-bg);  border:1px solid #ABEFC6; color:#067647; }
-.alert-warn    { background:var(--yellow-bg); border:1px solid #FEDF89; color:#B54708; }
-.alert-error   { background:var(--red-bg);    border:1px solid #FECDCA; color:#B42318; }
-
-/* ── PROCESSO STEPS ── */
-.process-steps { display:flex; gap:0; margin-bottom:20px; }
-.process-step { flex:1; display:flex; align-items:center; }
-.process-step-inner { flex:1; text-align:center; padding:10px 6px; border-top:3px solid var(--border); }
-.process-step-inner.done { border-color:var(--green); }
-.process-step-inner.active { border-color:var(--accent); }
-.process-step-num { font-size:11px; font-weight:600; color:var(--text-3); }
-.process-step-inner.done .process-step-num { color:var(--green); }
-.process-step-inner.active .process-step-num { color:var(--accent); }
-.process-step-label { font-size:11.5px; color:var(--text-2); margin-top:2px; }
-
-/* ── ACTIONS LIST ── */
-.action-item { border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin-bottom:8px; display:flex; gap:12px; align-items:flex-start; }
-.action-item:hover { border-color:var(--border-2); box-shadow:var(--shadow); }
-.action-num { width:24px; height:24px; border-radius:50%; background:var(--accent-bg); color:var(--accent); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
-.action-body { flex:1; }
-.action-title { font-size:13.5px; font-weight:500; margin-bottom:2px; }
-.action-meta { font-size:12px; color:var(--text-3); display:flex; gap:10px; }
-
-/* ── TOOLTIP ── */
-.tooltip-wrap { position:relative; display:inline-flex; }
-.tooltip-wrap:hover .tooltip-box { opacity:1; pointer-events:auto; }
-.tooltip-box { position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:#1D2939; color:#fff; font-size:11.5px; padding:5px 9px; border-radius:5px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s; z-index:999; }
-
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width:5px; height:5px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border-2); border-radius:3px; }
-
-/* ── RESPONSIVE ── */
-@media(max-width:900px){ .stats-grid{grid-template-columns:1fr 1fr;} .form-row{grid-template-columns:1fr;} }
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#F5F7FA;color:#1A2035;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#D1D9E6;border-radius:10px}
 </style>
 </head>
 <body>
@@ -245,1011 +24,1458 @@ tbody tr:hover td { background:var(--bg); }
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-/* ─── ICONS ─── */
-const Icon = ({ name, size=16, color="currentColor" }) => {
-  const icons = {
-    logo: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
-    home: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-    clipboard: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
-    alert: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
-    activity: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
-    change: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
-    users: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>,
-    shield: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-    log: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
-    plus: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
-    edit: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-    trash: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>,
-    eye: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
-    eyeoff: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
-    check: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
-    x: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-    logout: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
-    search: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
-    key: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
-    bell: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
-    chart: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
-    chevron: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
-    lock: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
-    info: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
-    filter: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
-  };
-  return icons[name] || null;
-};
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const SA_TYPES = ['Corretiva','Preventiva','Melhoria','Regulatória','Tecnológica','Outro'];
+const SA_CRITS = ['Baixa','Média','Alta','Crítica'];
 
-/* ─── HELPERS ─── */
-const api = async (path, method='GET', body=null) => {
-  const token = sessionStorage.getItem('sgq_token');
-  const res = await fetch(path, {
-    method,
-    headers: { 'Content-Type':'application/json', ...(token ? {'Authorization':`Bearer ${token}`} : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {})
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Erro na requisição');
-  return data;
-};
-
-const pwStrength = (pw) => {
-  if (!pw) return 0;
-  let s = 0;
-  if (pw.length >= 8) s++;
-  if (/[A-Z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
-  return s;
-};
-const pwLabel = s => ['','Fraca','Razoável','Boa','Forte'][s];
-const pwColor = s => ['','red','yellow','yellow','green'][s];
-
-const formatDate = d => d ? new Date(d).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
-const initials = name => name ? name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() : '?';
-
-/* ─── MODULO STATUS ─── */
-const MODULE_STEPS = {
-  ro:    ['Aberto','Em Análise','Aprovado','Fechado'],
-  nc:    ['Aberto','Em Análise','Plano de Ação','Aprovado','Fechado'],
-  riacp: ['Identificação','Análise de Causa','Plano de Ação','Verificação','Encerrado'],
-  sa:    ['Solicitado','Avaliação','Aprovado','Implementação','Verificação','Encerrado'],
-};
-
-const STATUS_BADGE = {
-  'Aberto':         'blue',
-  'Em Análise':     'yellow',
-  'Plano de Ação':  'yellow',
-  'Aprovado':       'green',
-  'Fechado':        'gray',
-  'Identificação':  'blue',
-  'Análise de Causa':'yellow',
-  'Verificação':    'purple',
-  'Encerrado':      'gray',
-  'Solicitado':     'blue',
-  'Implementação':  'purple',
-};
-
-/* ─── PERMISSIONS ─── */
-const ALL_PERMS = [
-  { group:'RO — Registro de Ocorrência', perms:['ro.abrir','ro.analisar','ro.aprovar','ro.fechar','ro.excluir'] },
-  { group:'NC — Não Conformidade',       perms:['nc.abrir','nc.analisar','nc.aprovar','nc.fechar','nc.excluir'] },
-  { group:'RIACP',                        perms:['riacp.abrir','riacp.analisar','riacp.aprovar','riacp.fechar','riacp.excluir'] },
-  { group:'SA — Controle de Mudanças',    perms:['sa.abrir','sa.analisar','sa.aprovar','sa.fechar','sa.excluir'] },
-  { group:'Administração',               perms:['admin.users','admin.groups','admin.audit'] },
+const DEPT_LIST = [
+  'Qualidade','Produção','Engenharia','Logística','Compras',
+  'TI','RH','Financeiro','Comercial','P&D','Segurança'
 ];
-const PERM_LABEL = p => ({ 
-  abrir:'Abrir', analisar:'Analisar', aprovar:'Aprovar', fechar:'Fechar', excluir:'Excluir',
-  users:'Usuários', groups:'Grupos', audit:'Auditoria'
-}[p.split('.')[1]] || p);
 
-/* ─── PASSWORD INPUT ─── */
-const PasswordInput = ({ value, onChange, showStrength=false, placeholder='Senha', name }) => {
-  const [show, setShow] = useState(false);
-  const str = pwStrength(value);
-  return (
-    <div>
-      <div style={{position:'relative'}}>
-        <input
-          className="form-input"
-          type={show ? 'text' : 'password'}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          name={name}
-          style={{paddingRight:'38px'}}
-          autoComplete="new-password"
-        />
-        <button type="button" onClick={() => setShow(!show)}
-          style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--text-3)',cursor:'pointer',display:'flex',alignItems:'center'}}>
-          <Icon name={show ? 'eyeoff' : 'eye'} size={15} />
-        </button>
-      </div>
-      {showStrength && value && (
-        <div className="pw-strength">
-          <div className="pw-bars">
-            {[1,2,3,4].map(i => <div key={i} className={`pw-bar ${str >= i ? `active-${str}` : ''}`} />)}
-          </div>
-          <span className="pw-strength-text" style={{color:`var(--${pwColor(str)})`}}>
-            Senha {pwLabel(str)}
-            {str < 3 && ' — use letras maiúsculas, números e símbolos'}
-          </span>
-        </div>
-      )}
-    </div>
-  );
+// Matriz tipo × criticidade → áreas obrigatórias
+const DEFAULT_MATRIX = {
+  'Corretiva':    { 'Baixa':['Qualidade'],         'Média':['Qualidade','Produção'],       'Alta':['Qualidade','Produção','Engenharia'],    'Crítica':['Qualidade','Produção','Engenharia','Segurança'] },
+  'Preventiva':   { 'Baixa':['Qualidade'],         'Média':['Qualidade','Produção'],       'Alta':['Qualidade','Produção','Engenharia'],    'Crítica':['Qualidade','Produção','Engenharia','Segurança'] },
+  'Melhoria':     { 'Baixa':['Qualidade'],         'Média':['Qualidade'],                  'Alta':['Qualidade','Engenharia'],               'Crítica':['Qualidade','Engenharia','Produção'] },
+  'Regulatória':  { 'Baixa':['Qualidade'],         'Média':['Qualidade','Juridico'],       'Alta':['Qualidade','Juridico','RH'],            'Crítica':['Qualidade','Juridico','RH','Financeiro'] },
+  'Tecnológica':  { 'Baixa':['TI'],                'Média':['TI','Engenharia'],             'Alta':['TI','Engenharia','Qualidade'],          'Crítica':['TI','Engenharia','Qualidade','Produção'] },
+  'Outro':        { 'Baixa':['Qualidade'],         'Média':['Qualidade'],                  'Alta':['Qualidade'],                            'Crítica':['Qualidade'] },
 };
 
-/* ─── MODAL ─── */
-const Modal = ({ open, onClose, title, children, footer, size='' }) => {
-  if (!open) return null;
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${size}`}>
-        <div className="modal-header">
-          <span className="modal-title">{title}</span>
-          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}><Icon name="x" size={16}/></button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
-      </div>
-    </div>
-  );
+const DEFAULT_DEPT_Q = {
+  'Qualidade':    ['A mudança impacta processos certificados (ISO/IATF)?','Há necessidade de atualização de documentos do SGQ?','Foram realizados testes de qualidade adequados?'],
+  'Produção':     ['A linha de produção será interrompida durante a mudança?','Os operadores foram treinados para a nova condição?','Há risco de geração de não conformidades?'],
+  'Engenharia':   ['Há alteração de especificações técnicas ou desenhos?','Foi realizada análise FMEA para a mudança?','Os fornecedores foram notificados?'],
+  'Logística':    ['A mudança impacta estoque ou armazenagem?','Há necessidade de ajuste nos processos de expedição?'],
+  'Compras':      ['Há necessidade de novos fornecedores ou materiais?','Os contratos existentes precisam ser revisados?'],
+  'TI':           ['A mudança afeta sistemas ou infraestrutura de TI?','Foi realizado backup dos dados antes da mudança?'],
+  'RH':           ['Há necessidade de treinamento para a mudança?','O quadro de pessoal é suficiente para a implementação?'],
+  'Financeiro':   ['O custo da mudança está orçado e aprovado?','Há impacto em processos contábeis ou fiscais?'],
+  'Segurança':    ['A mudança gera novos riscos de segurança do trabalho?','O PPRA/PCMSO precisa ser revisado?'],
+  'Comercial':    ['Clientes serão impactados pela mudança?','Há necessidade de comunicado formal aos clientes?'],
+  'P&D':          ['A mudança envolve propriedade intelectual ou patentes?','Há impacto em projetos de desenvolvimento em andamento?'],
 };
 
-/* ─── LOGIN PAGE ─── */
-const LoginPage = ({ onLogin }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [attempts, setAttempts] = useState(0);
+const PHASE_DEADLINES = { triagem: 3, avaliacao: 7, aprovacao: 5, execucao: 30 };
 
-  const handle = async (e) => {
-    e.preventDefault();
-    if (!email || !password) { setError('Preencha todos os campos'); return; }
-    setLoading(true); setError('');
-    try {
-      const data = await api('/api/auth/login', 'POST', { email, password });
-      sessionStorage.setItem('sgq_token', data.token);
-      sessionStorage.setItem('sgq_user', JSON.stringify(data.user));
-      onLogin(data.user);
-    } catch(err) {
-      setAttempts(a => a+1);
-      setError(attempts >= 2 ? 'Muitas tentativas. Verifique suas credenciais ou solicite reset de senha ao administrador.' : (err.message || 'Credenciais inválidas'));
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="login-wrap">
-      <div className="login-card">
-        <div className="login-logo">
-          <div className="login-logo-icon"><Icon name="logo" size={20} color="#fff"/></div>
-          <div>
-            <div className="login-logo-name">Vydence Medical</div>
-            <div className="login-logo-sub">Sistema de Gestão da Qualidade</div>
-          </div>
-        </div>
-        <div className="login-title">Acessar plataforma</div>
-        <div className="login-sub">Entre com suas credenciais corporativas</div>
-        {error && <div className="login-alert">{error}</div>}
-        <form onSubmit={handle}>
-          <div className="form-group">
-            <label className="form-label">E-mail<span>*</span></label>
-            <input className="form-input" type="email" placeholder="seu@vydence.com" value={email} onChange={e=>setEmail(e.target.value)} autoFocus/>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Senha<span>*</span></label>
-            <PasswordInput value={password} onChange={setPassword} placeholder="Sua senha" />
-          </div>
-          <button className="btn btn-primary" type="submit" style={{width:'100%',height:'40px',marginTop:'4px'}} disabled={loading}>
-            {loading ? 'Verificando...' : 'Entrar'}
-          </button>
-        </form>
-        <div className="login-footer">SGQ v1.0 · Vydence Medical © 2025</div>
-      </div>
-    </div>
-  );
+const STATUS_CONFIG = {
+  'aberta':    { label:'Aberta',       color:'#2563EB', bg:'#EFF6FF' },
+  'triagem':   { label:'Triagem SGQ',  color:'#7C3AED', bg:'#F5F3FF' },
+  'avaliacao': { label:'Avaliação',    color:'#D97706', bg:'#FFFBEB' },
+  'aprovacao': { label:'Aprovação',    color:'#059669', bg:'#ECFDF5' },
+  'execucao':  { label:'Execução',     color:'#0891B2', bg:'#ECFEFF' },
+  'concluida': { label:'Concluída',    color:'#16A34A', bg:'#F0FDF4' },
+  'cancelada': { label:'Cancelada',    color:'#DC2626', bg:'#FEF2F2' },
 };
 
-/* ─── DASHBOARD ─── */
-const Dashboard = ({ user, records }) => {
-  const stats = {
-    ro:    records.ro?.length || 0,
-    nc:    records.nc?.length || 0,
-    riacp: records.riacp?.length || 0,
-    sa:    records.sa?.length || 0,
-  };
-  const open = (r) => r.filter(x => x.status !== 'Fechado' && x.status !== 'Encerrado').length;
-  return (
-    <div>
-      <div className="stats-grid">
-        {[
-          {label:'Registros de Ocorrência', val:stats.ro, open:open(records.ro||[]), color:'accent'},
-          {label:'Não Conformidades',       val:stats.nc, open:open(records.nc||[]), color:'yellow'},
-          {label:'RIACPs',                  val:stats.riacp, open:open(records.riacp||[]), color:'purple'},
-          {label:'Controle de Mudanças',    val:stats.sa,  open:open(records.sa||[]),  color:'green'},
-        ].map((s,i) => (
-          <div className="stat-card" key={i}>
-            <div className="stat-label">{s.label}</div>
-            <div className="stat-value">{String(s.val).padStart(2,'0')}</div>
-            <div className="stat-delta">{s.open} em aberto</div>
-          </div>
-        ))}
-      </div>
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">Atividade Recente</span>
-        </div>
-        <div className="card-body">
-          <div className="empty">
-            <div className="empty-icon"><Icon name="activity" size={32}/></div>
-            <div className="empty-text">Nenhuma atividade recente</div>
-            <div className="empty-sub">Registros e transições aparecerão aqui</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+const ACTION_STATUS = {
+  'pendente':  { label:'Pendente',    color:'#D97706' },
+  'andamento': { label:'Em Andamento',color:'#2563EB' },
+  'concluida': { label:'Concluída',   color:'#16A34A' },
+  'cancelada': { label:'Cancelada',   color:'#DC2626' },
 };
 
-/* ─── GENERIC MODULE ─── */
-const ModuleView = ({ mod, user, modKey }) => {
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [showNew, setShowNew] = useState(false);
-  const [showDetail, setShowDetail] = useState(null);
-  const [showAction, setShowAction] = useState(false);
-  const [tab, setTab] = useState('processo');
+// ─── COLORS ───────────────────────────────────────────────────────────────────
+const C = {
+  bg:       '#F5F7FA',
+  surface:  '#FFFFFF',
+  border:   '#E8ECF4',
+  accent:   '#2563EB',
+  accent2:  '#1D4ED8',
+  text:     '#1A2035',
+  muted:    '#64748B',
+  dim:      '#94A3B8',
+  danger:   '#DC2626',
+  success:  '#16A34A',
+  warning:  '#D97706',
+  purple:   '#7C3AED',
+  teal:     '#0891B2',
+};
 
-  const steps = MODULE_STEPS[modKey] || [];
-
-  const load = async () => {
-    setLoading(true);
-    try { const d = await api(`/api/${modKey}`); setRecords(d); }
-    catch { setRecords([]); }
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, [modKey]);
-
-  const filtered = records.filter(r => {
-    const q = search.toLowerCase();
-    const matchQ = !q || r.title?.toLowerCase().includes(q) || r.code?.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q);
-    const matchS = !statusFilter || r.status === statusFilter;
-    return matchQ && matchS;
+// ─── API HELPERS ──────────────────────────────────────────────────────────────
+const API = '';
+async function apiFetch(path, opts={}) {
+  const token = sessionStorage.getItem('sgq_token');
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type':'application/json', ...(token ? { Authorization:'Bearer '+token } : {}) },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
+  if (res.status === 401) { sessionStorage.removeItem('sgq_token'); sessionStorage.removeItem('sgq_user'); window.location.reload(); return null; }
+  if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || 'Erro '+res.status); }
+  return res.json();
+}
+const apiGet  = p => apiFetch(p);
+const apiPost = (p,b) => apiFetch(p, { method:'POST', body:b });
+const apiPut  = (p,b) => apiFetch(p, { method:'PUT', body:b });
+const apiDel  = (p,b) => apiFetch(p, { method:'DELETE', body:b });
 
-  const canOpen = user.is_admin || user.permissions?.includes(`${modKey}.abrir`);
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const fmt = (d) => { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); };
+const fmtDT = (d) => { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
+const fmtDiff = (d) => { if (!d) return ''; const diff = Math.floor((Date.now()-new Date(d))/(1000*60*60*24)); if (diff===0) return 'hoje'; if (diff===1) return 'ontem'; return `${diff}d atrás`; };
+const initials = (n='') => n.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 
-  const stepIndex = (status) => steps.indexOf(status);
-
-  return (
-    <div>
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <div className="card-title">{mod.label}</div>
-            <div style={{fontSize:'12px',color:'var(--text-3)',marginTop:'2px'}}>{records.length} registro{records.length !== 1 ? 's' : ''}</div>
-          </div>
-          <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-            <div className="topbar-search" style={{width:'200px'}}>
-              <Icon name="search" size={14} color="var(--text-3)"/>
-              <input placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)}/>
-            </div>
-            <select className="form-select" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{width:'140px',height:'36px',fontSize:'13px'}}>
-              <option value="">Todos status</option>
-              {steps.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {canOpen && (
-              <button className="btn btn-primary" onClick={() => setShowNew(true)}>
-                <Icon name="plus" size={15} color="#fff"/> Novo
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="table-wrap">
-          {loading ? (
-            <div className="empty"><div className="empty-sub">Carregando...</div></div>
-          ) : filtered.length === 0 ? (
-            <div className="empty">
-              <div className="empty-icon"><Icon name={mod.icon} size={32}/></div>
-              <div className="empty-text">Nenhum registro encontrado</div>
-              {canOpen && <div className="empty-sub">Clique em "Novo" para criar o primeiro</div>}
-            </div>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Título</th>
-                  <th>Status</th>
-                  <th>Responsável</th>
-                  <th>Data</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(r => (
-                  <tr key={r.id}>
-                    <td><span style={{fontFamily:'var(--font-mono,DM Mono)',fontSize:'12.5px',color:'var(--text-3)'}}>{r.code||`#${r.id}`}</span></td>
-                    <td style={{maxWidth:'260px'}}>
-                      <div style={{fontWeight:'500',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.title}</div>
-                      {r.description && <div style={{fontSize:'12px',color:'var(--text-3)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.description}</div>}
-                    </td>
-                    <td><span className={`badge badge-${STATUS_BADGE[r.status]||'gray'}`}>{r.status}</span></td>
-                    <td style={{fontSize:'13px',color:'var(--text-2)'}}>{r.owner_name||'—'}</td>
-                    <td style={{fontSize:'12.5px',color:'var(--text-3)'}}>{formatDate(r.created_at)}</td>
-                    <td>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setShowDetail(r)}>
-                        <Icon name="eye" size={14}/> Ver
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* NEW MODAL */}
-      <NewRecordModal open={showNew} onClose={() => setShowNew(false)} modKey={modKey} steps={steps} onSaved={() => { setShowNew(false); load(); }} />
-
-      {/* DETAIL MODAL */}
-      {showDetail && (
-        <Modal open={true} onClose={() => setShowDetail(null)} title={`${showDetail.code || '#'+showDetail.id} — ${showDetail.title}`} size="modal-lg">
-          <div className="tabs">
-            {['processo','acoes','historico'].map(t => (
-              <div key={t} className={`tab ${tab===t?'active':''}`} onClick={() => setTab(t)}>
-                {{processo:'Processo',acoes:'Ações',historico:'Histórico'}[t]}
-              </div>
-            ))}
-          </div>
-          {tab === 'processo' && (
-            <div>
-              <div className="process-steps" style={{marginBottom:'20px'}}>
-                {steps.map((s,i) => {
-                  const cur = stepIndex(showDetail.status);
-                  const cls = i < cur ? 'done' : i === cur ? 'active' : '';
-                  return (
-                    <div className="process-step" key={s}>
-                      <div className={`process-step-inner ${cls}`}>
-                        <div className="process-step-num">{String(i+1).padStart(2,'0')}</div>
-                        <div className="process-step-label">{s}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="form-row">
-                <div><div className="form-label">Título</div><div style={{fontSize:'13.5px'}}>{showDetail.title}</div></div>
-                <div><div className="form-label">Status</div><span className={`badge badge-${STATUS_BADGE[showDetail.status]||'gray'}`}>{showDetail.status}</span></div>
-              </div>
-              <div className="divider"/>
-              <div className="form-group">
-                <div className="form-label">Descrição</div>
-                <div style={{fontSize:'13.5px',color:'var(--text-2)',lineHeight:'1.6'}}>{showDetail.description||'—'}</div>
-              </div>
-              <div className="form-row">
-                <div><div className="form-label">Criado em</div><div style={{fontSize:'13.5px'}}>{formatDate(showDetail.created_at)}</div></div>
-                <div><div className="form-label">Responsável</div><div style={{fontSize:'13.5px'}}>{showDetail.owner_name||'—'}</div></div>
-              </div>
-              {user.is_admin && stepIndex(showDetail.status) < steps.length - 1 && (
-                <div style={{marginTop:'16px'}}>
-                  <div className="divider"/>
-                  <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
-                    <button className="btn btn-primary" onClick={async () => {
-                      const next = steps[stepIndex(showDetail.status)+1];
-                      await api(`/api/${modKey}/${showDetail.id}`, 'PUT', { status: next });
-                      load(); setShowDetail({...showDetail, status: next});
-                    }}>
-                      Avançar → {steps[stepIndex(showDetail.status)+1]}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {tab === 'acoes' && (
-            <ActionsTab record={showDetail} modKey={modKey} user={user} />
-          )}
-          {tab === 'historico' && (
-            <div className="empty"><div className="empty-icon"><Icon name="log" size={28}/></div><div className="empty-text">Histórico em desenvolvimento</div></div>
-          )}
-        </Modal>
-      )}
-    </div>
-  );
+// ─── UI COMPONENTS ────────────────────────────────────────────────────────────
+const Badge = ({status}) => {
+  const s = STATUS_CONFIG[status] || { label: status, color: C.muted, bg: '#F1F5F9' };
+  return <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:600,color:s.color,background:s.bg,whiteSpace:'nowrap'}}>
+    <span style={{width:6,height:6,borderRadius:'50%',background:s.color,flexShrink:0}}/>
+    {s.label}
+  </span>;
 };
 
-/* ─── NEW RECORD MODAL ─── */
-const NewRecordModal = ({ open, onClose, modKey, steps, onSaved }) => {
-  const [form, setForm] = useState({ title:'', description:'', priority:'media' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const set = (k,v) => setForm(f => ({...f,[k]:v}));
-
-  const save = async () => {
-    if (!form.title.trim()) { setError('Título é obrigatório'); return; }
-    setLoading(true); setError('');
-    try {
-      await api(`/api/${modKey}`, 'POST', { ...form, status: steps[0] });
-      onSaved();
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Novo Registro"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={loading}>{loading?'Salvando...':'Criar Registro'}</button></>}>
-      {error && <div className="alert alert-error">{error}</div>}
-      <div className="form-group">
-        <label className="form-label">Título<span>*</span></label>
-        <input className="form-input" placeholder="Descreva brevemente o registro" value={form.title} onChange={e=>set('title',e.target.value)}/>
-      </div>
-      <div className="form-group">
-        <label className="form-label">Descrição</label>
-        <textarea className="form-textarea" placeholder="Detalhes, contexto, observações..." value={form.description} onChange={e=>set('description',e.target.value)} rows={4}/>
-      </div>
-      <div className="form-group">
-        <label className="form-label">Prioridade</label>
-        <select className="form-select" value={form.priority} onChange={e=>set('priority',e.target.value)}>
-          <option value="baixa">Baixa</option>
-          <option value="media">Média</option>
-          <option value="alta">Alta</option>
-          <option value="critica">Crítica</option>
-        </select>
-      </div>
-    </Modal>
-  );
-};
-
-/* ─── ACTIONS TAB ─── */
-const ActionsTab = ({ record, modKey, user }) => {
-  const [actions, setActions] = useState([]);
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ description:'', responsible:'', due_date:'' });
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    api(`/api/${modKey}/${record.id}/actions`).then(setActions).catch(() => setActions([]));
-  }, [record.id]);
-
-  const save = async () => {
-    if (!form.description.trim()) return;
-    setLoading(true);
-    try {
-      await api(`/api/${modKey}/${record.id}/actions`, 'POST', form);
-      const updated = await api(`/api/${modKey}/${record.id}/actions`);
-      setActions(updated); setShowAdd(false); setForm({description:'',responsible:'',due_date:''});
-    } catch{}
-    setLoading(false);
-  };
-
-  return (
-    <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
-        <div style={{fontSize:'13px',color:'var(--text-2)'}}>{actions.length} ação{actions.length!==1?'ões':''} cadastrada{actions.length!==1?'s':''}</div>
-        {user.is_admin && <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(!showAdd)}><Icon name="plus" size={13} color="#fff"/> Adicionar Ação</button>}
-      </div>
-      {showAdd && (
-        <div className="card" style={{marginBottom:'14px',border:'1px dashed var(--border-2)'}}>
-          <div className="card-body">
-            <div className="form-group"><label className="form-label">Descrição da Ação<span>*</span></label><textarea className="form-textarea" rows={2} value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/></div>
-            <div className="form-row">
-              <div className="form-group"><label className="form-label">Responsável</label><input className="form-input" value={form.responsible} onChange={e=>setForm(f=>({...f,responsible:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">Prazo</label><input type="date" className="form-input" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/></div>
-            </div>
-            <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)}>Cancelar</button>
-              <button className="btn btn-primary btn-sm" onClick={save} disabled={loading}>{loading?'...':'Salvar'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {actions.length === 0 ? (
-        <div className="empty"><div className="empty-icon"><Icon name="check" size={28}/></div><div className="empty-text">Sem ações cadastradas</div></div>
-      ) : (
-        actions.map((a,i) => (
-          <div className="action-item" key={a.id||i}>
-            <div className="action-num">{i+1}</div>
-            <div className="action-body">
-              <div className="action-title">{a.description}</div>
-              <div className="action-meta">
-                {a.responsible && <span>👤 {a.responsible}</span>}
-                {a.due_date && <span>📅 {formatDate(a.due_date)}</span>}
-                <span className={`badge badge-${a.done?'green':'blue'}`} style={{fontSize:'10.5px',padding:'1px 6px'}}>{a.done?'Concluída':'Pendente'}</span>
-              </div>
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-};
-
-/* ─── USERS PAGE ─── */
-const UsersPage = ({ user }) => {
-  const [users, setUsers] = useState([]);
-  const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [showNew, setShowNew] = useState(false);
-  const [showEdit, setShowEdit] = useState(null);
-  const [showReset, setShowReset] = useState(null);
-  const [showSelf, setShowSelf] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [u, g] = await Promise.all([api('/api/users'), api('/api/groups')]);
-      setUsers(u); setGroups(g);
-    } catch { setUsers([]); setGroups([]); }
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
-
-  const filtered = users.filter(u => {
-    const q = search.toLowerCase();
-    return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
-  });
-
-  const toggleActive = async (u) => {
-    await api(`/api/users/${u.id}`, 'PUT', { active: !u.active });
-    load();
-  };
-
-  return (
-    <div>
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <div className="card-title">Usuários</div>
-            <div style={{fontSize:'12px',color:'var(--text-3)',marginTop:'2px'}}>{users.length} usuário{users.length!==1?'s':''}</div>
-          </div>
-          <div style={{display:'flex',gap:'8px'}}>
-            <div className="topbar-search" style={{width:'200px'}}>
-              <Icon name="search" size={14} color="var(--text-3)"/>
-              <input placeholder="Buscar usuário..." value={search} onChange={e=>setSearch(e.target.value)}/>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowSelf(true)}><Icon name="key" size={13}/>Alterar senha</button>
-            <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={15} color="#fff"/> Novo Usuário</button>
-          </div>
-        </div>
-        <div className="table-wrap">
-          {loading ? <div className="empty"><div className="empty-sub">Carregando...</div></div> :
-          filtered.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="users" size={28}/></div><div className="empty-text">Nenhum usuário</div></div> : (
-            <table>
-              <thead><tr><th>Usuário</th><th>E-mail</th><th>Grupo</th><th>Admin</th><th>Status</th><th></th></tr></thead>
-              <tbody>
-                {filtered.map(u => (
-                  <tr key={u.id}>
-                    <td><div style={{display:'flex',alignItems:'center',gap:'10px'}}><div className="nav-avatar" style={{width:'30px',height:'30px',fontSize:'11px',background:u.is_admin?'var(--accent)':'var(--text-3)'}}>{initials(u.name)}</div><span style={{fontWeight:'500'}}>{u.name}</span></div></td>
-                    <td style={{fontSize:'13px',color:'var(--text-2)'}}>{u.email}</td>
-                    <td><span style={{fontSize:'12.5px',color:'var(--text-2)'}}>{groups.find(g=>g.id===u.group_id)?.name||'—'}</span></td>
-                    <td>{u.is_admin ? <span className="badge badge-purple">Admin</span> : <span className="badge badge-gray">Usuário</span>}</td>
-                    <td><span className={`badge badge-${u.active?'green':'gray'}`}>{u.active?'Ativo':'Inativo'}</span></td>
-                    <td>
-                      <div style={{display:'flex',gap:'6px'}}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(u)}><Icon name="edit" size={13}/></button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setShowReset(u)} title="Reset de senha"><Icon name="key" size={13}/></button>
-                        {u.id !== user.id && <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(u)} title={u.active?'Desativar':'Ativar'}><Icon name={u.active?'x':'check'} size={13}/></button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <UserModal open={showNew} onClose={() => setShowNew(false)} groups={groups} onSaved={() => { setShowNew(false); load(); }} />
-      {showEdit && <UserModal open={true} onClose={() => setShowEdit(null)} groups={groups} user={showEdit} onSaved={() => { setShowEdit(null); load(); }} />}
-      {showReset && <ResetPasswordModal open={true} onClose={() => setShowReset(null)} target={showReset} />}
-      {showSelf && <SelfPasswordModal open={true} onClose={() => setShowSelf(false)} currentUser={user} />}
-    </div>
-  );
-};
-
-/* ─── USER MODAL ─── */
-const UserModal = ({ open, onClose, groups, user: editUser, onSaved }) => {
-  const isEdit = !!editUser;
-  const [form, setForm] = useState({ name:'', email:'', password:'', is_admin:false, group_id:'', active:true });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const set = (k,v) => setForm(f => ({...f,[k]:v}));
-
-  useEffect(() => {
-    if (editUser) setForm({ name:editUser.name||'', email:editUser.email||'', password:'', is_admin:editUser.is_admin||false, group_id:editUser.group_id||'', active:editUser.active??true });
-    else setForm({ name:'', email:'', password:'', is_admin:false, group_id:'', active:true });
-    setError('');
-  }, [editUser, open]);
-
-  const validate = () => {
-    if (!form.name.trim()) return 'Nome é obrigatório';
-    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) return 'E-mail inválido';
-    if (!isEdit && !form.password) return 'Senha é obrigatória';
-    if (!isEdit && pwStrength(form.password) < 3) return 'Senha fraca — use maiúsculas, números e símbolos';
-    return null;
-  };
-
-  const save = async () => {
-    const err = validate(); if (err) { setError(err); return; }
-    setLoading(true); setError('');
-    try {
-      const payload = { name:form.name, email:form.email, is_admin:form.is_admin, group_id:form.group_id||null, active:form.active };
-      if (!isEdit || form.password) payload.password = form.password;
-      if (isEdit) await api(`/api/users/${editUser.id}`, 'PUT', payload);
-      else await api('/api/users', 'POST', payload);
-      onSaved();
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={isEdit ? `Editar — ${editUser?.name}` : 'Novo Usuário'}
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={loading}>{loading?'Salvando...':isEdit?'Salvar':'Criar Usuário'}</button></>}>
-      {error && <div className="alert alert-error">{error}</div>}
-      <div className="form-row">
-        <div className="form-group"><label className="form-label">Nome completo<span>*</span></label><input className="form-input" value={form.name} onChange={e=>set('name',e.target.value)}/></div>
-        <div className="form-group"><label className="form-label">E-mail corporativo<span>*</span></label><input className="form-input" type="email" value={form.email} onChange={e=>set('email',e.target.value)}/></div>
-      </div>
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">{isEdit ? 'Nova senha (deixe vazio para manter)' : 'Senha'}{!isEdit && <span>*</span>}</label>
-          <PasswordInput value={form.password} onChange={v=>set('password',v)} showStrength={true} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Grupo de Acesso</label>
-          <select className="form-select" value={form.group_id} onChange={e=>set('group_id',e.target.value)}>
-            <option value="">Sem grupo</option>
-            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-        </div>
-      </div>
-      <div style={{display:'flex',gap:'20px'}}>
-        <label style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'13.5px',cursor:'pointer'}}>
-          <input type="checkbox" checked={form.is_admin} onChange={e=>set('is_admin',e.target.checked)} style={{accentColor:'var(--accent)'}}/>
-          Administrador do sistema
-        </label>
-        <label style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'13.5px',cursor:'pointer'}}>
-          <input type="checkbox" checked={form.active} onChange={e=>set('active',e.target.checked)} style={{accentColor:'var(--accent)'}}/>
-          Usuário ativo
-        </label>
-      </div>
-    </Modal>
-  );
-};
-
-/* ─── RESET PASSWORD MODAL ─── */
-const ResetPasswordModal = ({ open, onClose, target }) => {
-  const [pw, setPw] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-
-  useEffect(() => { if (open) { setPw(''); setConfirm(''); setError(''); setSuccess(false); } }, [open]);
-
-  const save = async () => {
-    if (!pw) { setError('Digite a nova senha'); return; }
-    if (pwStrength(pw) < 3) { setError('Senha fraca — use maiúsculas, números e símbolos'); return; }
-    if (pw !== confirm) { setError('Senhas não coincidem'); return; }
-    setLoading(true); setError('');
-    try {
-      await api(`/api/users/${target.id}/reset-password`, 'POST', { password: pw });
-      setSuccess(true);
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={`Reset de Senha — ${target?.name}`}
-      footer={success ? <button className="btn btn-primary" onClick={onClose}>Fechar</button> : <><button className="btn btn-secondary" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={loading}>{loading?'Salvando...':'Redefinir Senha'}</button></>}>
-      {success ? (
-        <div className="alert alert-success"><Icon name="check" size={16}/>Senha redefinida com sucesso! O usuário deverá usar a nova senha no próximo acesso.</div>
-      ) : (
-        <>
-          {error && <div className="alert alert-error">{error}</div>}
-          <div className="alert alert-warn"><Icon name="info" size={15}/>O usuário <strong>{target?.name}</strong> precisará usar esta nova senha no próximo login.</div>
-          <div className="form-group"><label className="form-label">Nova senha<span>*</span></label><PasswordInput value={pw} onChange={setPw} showStrength={true}/></div>
-          <div className="form-group"><label className="form-label">Confirmar senha<span>*</span></label><PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirme a nova senha"/>{confirm && pw !== confirm && <div className="form-error">Senhas não coincidem</div>}</div>
-        </>
-      )}
-    </Modal>
-  );
-};
-
-/* ─── SELF PASSWORD MODAL ─── */
-const SelfPasswordModal = ({ open, onClose, currentUser }) => {
-  const [current, setCurrent] = useState('');
-  const [pw, setPw] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-
-  useEffect(() => { if (open) { setCurrent(''); setPw(''); setConfirm(''); setError(''); setSuccess(false); } }, [open]);
-
-  const save = async () => {
-    if (!current) { setError('Digite sua senha atual'); return; }
-    if (!pw) { setError('Digite a nova senha'); return; }
-    if (pwStrength(pw) < 3) { setError('Senha fraca — use maiúsculas, números e símbolos'); return; }
-    if (pw !== confirm) { setError('Senhas não coincidem'); return; }
-    if (pw === current) { setError('A nova senha deve ser diferente da atual'); return; }
-    setLoading(true); setError('');
-    try {
-      await api(`/api/users/${currentUser.id}/change-password`, 'POST', { current_password: current, new_password: pw });
-      setSuccess(true);
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Alterar Minha Senha"
-      footer={success ? <button className="btn btn-primary" onClick={onClose}>Fechar</button> : <><button className="btn btn-secondary" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={loading}>{loading?'Salvando...':'Alterar Senha'}</button></>}>
-      {success ? (
-        <div className="alert alert-success"><Icon name="check" size={16}/>Senha alterada com sucesso!</div>
-      ) : (
-        <>
-          {error && <div className="alert alert-error">{error}</div>}
-          <div className="form-group"><label className="form-label">Senha atual<span>*</span></label><PasswordInput value={current} onChange={setCurrent} placeholder="Sua senha atual"/></div>
-          <div className="divider"/>
-          <div className="form-group"><label className="form-label">Nova senha<span>*</span></label><PasswordInput value={pw} onChange={setPw} showStrength={true}/></div>
-          <div className="form-group"><label className="form-label">Confirmar nova senha<span>*</span></label><PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirme"/>{confirm && pw !== confirm && <div className="form-error">Senhas não coincidem</div>}</div>
-        </>
-      )}
-    </Modal>
-  );
-};
-
-/* ─── GROUPS PAGE ─── */
-const GroupsPage = ({ user }) => {
-  const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showNew, setShowNew] = useState(false);
-  const [showEdit, setShowEdit] = useState(null);
-  const [showDel, setShowDel] = useState(null);
-
-  const load = async () => {
-    setLoading(true);
-    try { const g = await api('/api/groups'); setGroups(g); }
-    catch { setGroups([]); }
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
-
-  const del = async () => {
-    await api(`/api/groups/${showDel.id}`, 'DELETE');
-    setShowDel(null); load();
-  };
-
-  return (
-    <div>
-      <div className="card">
-        <div className="card-header">
-          <div><div className="card-title">Grupos de Acesso</div><div style={{fontSize:'12px',color:'var(--text-3)',marginTop:'2px'}}>{groups.length} grupo{groups.length!==1?'s':''}</div></div>
-          <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={15} color="#fff"/> Novo Grupo</button>
-        </div>
-        <div className="card-body" style={{padding:'0'}}>
-          {loading ? <div className="empty"><div className="empty-sub">Carregando...</div></div> :
-          groups.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="shield" size={28}/></div><div className="empty-text">Nenhum grupo</div></div> :
-          groups.map(g => {
-            const perms = typeof g.permissions === 'string' ? JSON.parse(g.permissions||'[]') : (g.permissions||[]);
-            return (
-              <div key={g.id} style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'flex-start',gap:'16px'}}>
-                <div style={{width:'36px',height:'36px',borderRadius:'8px',background:'var(--accent-bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <Icon name="shield" size={16} color="var(--accent)"/>
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
-                    <span style={{fontWeight:'600',fontSize:'14px'}}>{g.name}</span>
-                    {g.is_system && <span className="badge badge-gray">Sistema</span>}
-                  </div>
-                  {g.description && <div style={{fontSize:'12.5px',color:'var(--text-2)',marginBottom:'8px'}}>{g.description}</div>}
-                  <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
-                    {perms.slice(0,8).map(p => <span key={p} style={{fontSize:'11px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'4px',padding:'2px 7px',color:'var(--text-2)'}}>{p}</span>)}
-                    {perms.length > 8 && <span style={{fontSize:'11px',color:'var(--text-3)',padding:'2px 4px'}}>+{perms.length-8} mais</span>}
-                    {perms.length === 0 && <span style={{fontSize:'12px',color:'var(--text-3)'}}>Sem permissões</span>}
-                  </div>
-                </div>
-                <div style={{display:'flex',gap:'6px',flexShrink:0}}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(g)}><Icon name="edit" size={13}/></button>
-                  {!g.is_system && <button className="btn btn-ghost btn-sm" onClick={() => setShowDel(g)} style={{color:'var(--red)'}}><Icon name="trash" size={13}/></button>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <GroupModal open={showNew} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load(); }} />
-      {showEdit && <GroupModal open={true} onClose={() => setShowEdit(null)} group={showEdit} onSaved={() => { setShowEdit(null); load(); }} />}
-      <Modal open={!!showDel} onClose={() => setShowDel(null)} title="Excluir Grupo"
-        footer={<><button className="btn btn-secondary" onClick={() => setShowDel(null)}>Cancelar</button><button className="btn btn-danger" onClick={del}>Excluir</button></>}>
-        <div className="alert alert-error"><Icon name="alert" size={15}/>Tem certeza que deseja excluir o grupo <strong>{showDel?.name}</strong>? Os usuários desse grupo ficarão sem permissões.</div>
-      </Modal>
-    </div>
-  );
-};
-
-/* ─── GROUP MODAL ─── */
-const GroupModal = ({ open, onClose, group: editGroup, onSaved }) => {
-  const isEdit = !!editGroup;
-  const [form, setForm] = useState({ name:'', description:'' });
-  const [selected, setSelected] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (editGroup) {
-      setForm({ name:editGroup.name||'', description:editGroup.description||'' });
-      const perms = typeof editGroup.permissions === 'string' ? JSON.parse(editGroup.permissions||'[]') : (editGroup.permissions||[]);
-      setSelected(perms);
-    } else {
-      setForm({ name:'', description:'' }); setSelected([]);
-    }
-    setError('');
-  }, [editGroup, open]);
-
-  const toggle = (p) => setSelected(s => s.includes(p) ? s.filter(x=>x!==p) : [...s,p]);
-
-  const save = async () => {
-    if (!form.name.trim()) { setError('Nome é obrigatório'); return; }
-    setLoading(true); setError('');
-    try {
-      const payload = { ...form, permissions: JSON.stringify(selected) };
-      if (isEdit) await api(`/api/groups/${editGroup.id}`, 'PUT', payload);
-      else await api('/api/groups', 'POST', payload);
-      onSaved();
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={isEdit ? `Editar Grupo — ${editGroup?.name}` : 'Novo Grupo'} size="modal-lg"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={loading}>{loading?'Salvando...':isEdit?'Salvar':'Criar Grupo'}</button></>}>
-      {error && <div className="alert alert-error">{error}</div>}
-      <div className="form-row">
-        <div className="form-group"><label className="form-label">Nome do grupo<span>*</span></label><input className="form-input" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
-        <div className="form-group"><label className="form-label">Descrição</label><input className="form-input" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/></div>
-      </div>
-      <div className="form-label" style={{marginBottom:'10px'}}>Permissões ({selected.length} selecionadas)</div>
-      {ALL_PERMS.map(sec => (
-        <div key={sec.group} style={{marginBottom:'14px'}}>
-          <div style={{fontSize:'11.5px',fontWeight:'600',color:'var(--text-3)',letterSpacing:'.4px',textTransform:'uppercase',marginBottom:'6px'}}>{sec.group}</div>
-          <div className="checkbox-group">
-            {sec.perms.map(p => (
-              <label key={p} className={`checkbox-item ${selected.includes(p)?'checked':''}`}>
-                <input type="checkbox" checked={selected.includes(p)} onChange={() => toggle(p)} style={{display:'none'}}/>
-                {selected.includes(p) && <Icon name="check" size={12} color="var(--accent)"/>}
-                {PERM_LABEL(p)}
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
-    </Modal>
-  );
-};
-
-/* ─── AUDIT PAGE ─── */
-const AuditPage = () => (
-  <div className="card">
-    <div className="card-header"><span className="card-title">Auditoria e Logs</span></div>
-    <div className="card-body">
-      <div className="empty">
-        <div className="empty-icon"><Icon name="log" size={32}/></div>
-        <div className="empty-text">Histórico de auditoria</div>
-        <div className="empty-sub">Todas as ações do sistema serão registradas aqui</div>
-      </div>
-    </div>
+const Avatar = ({name, size=28}) => (
+  <div style={{width:size,height:size,borderRadius:'50%',background:C.accent+'22',color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.35,fontWeight:700,flexShrink:0}}>
+    {initials(name)}
   </div>
 );
 
-/* ─── MAIN APP ─── */
-const MODULES = [
-  { key:'ro',    label:'Reg. de Ocorrência',  icon:'clipboard',  section:'Módulos SGQ' },
-  { key:'nc',    label:'Não Conformidade',     icon:'alert',      section:'Módulos SGQ' },
-  { key:'riacp', label:'RIACP',               icon:'activity',   section:'Módulos SGQ' },
-  { key:'sa',    label:'Controle de Mudanças', icon:'change',    section:'Módulos SGQ' },
-];
+const Btn = ({children, onClick, variant='primary', size='md', disabled, style:sx, type}) => {
+  const base = { display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit',fontWeight:600,borderRadius:8,cursor:disabled?'not-allowed':'pointer',border:'none',transition:'all .15s',opacity:disabled?.6:1,...sx };
+  const sz = size==='sm' ? {padding:'5px 12px',fontSize:12} : size==='lg' ? {padding:'10px 22px',fontSize:14} : {padding:'7px 16px',fontSize:13};
+  const variants = {
+    primary: {background:C.accent, color:'#fff', ...(!disabled&&{'&:hover':{background:C.accent2}})},
+    secondary: {background:C.border, color:C.text},
+    ghost: {background:'transparent', color:C.muted},
+    danger: {background:C.danger, color:'#fff'},
+    outline: {background:'transparent', color:C.accent, border:`1px solid ${C.accent}22`},
+  };
+  return <button type={type||'button'} onClick={onClick} disabled={disabled} style={{...base,...sz,...variants[variant]}}>{children}</button>;
+};
 
-const App = () => {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('sgq_user')); } catch { return null; }
+const Input = ({label, value, onChange, placeholder, type='text', required, disabled, hint, error}) => (
+  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+    {label && <label style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{label}{required&&<span style={{color:C.danger,marginLeft:2}}>*</span>}</label>}
+    <input type={type} value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
+      style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${error?C.danger:C.border}`,background:disabled?C.bg:C.surface,fontSize:13,color:C.text,outline:'none',transition:'border .15s'}}
+      onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=error?C.danger:C.border}/>
+    {hint && <span style={{fontSize:11,color:C.dim}}>{hint}</span>}
+    {error && <span style={{fontSize:11,color:C.danger}}>{error}</span>}
+  </div>
+);
+
+const Textarea = ({label, value, onChange, placeholder, rows=3, required, disabled}) => (
+  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+    {label && <label style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{label}{required&&<span style={{color:C.danger,marginLeft:2}}>*</span>}</label>}
+    <textarea value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} disabled={disabled}
+      style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:disabled?C.bg:C.surface,fontSize:13,color:C.text,outline:'none',resize:'vertical',transition:'border .15s'}}
+      onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
+  </div>
+);
+
+const Select = ({label, value, onChange, options, required, disabled, placeholder}) => (
+  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+    {label && <label style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{label}{required&&<span style={{color:C.danger,marginLeft:2}}>*</span>}</label>}
+    <select value={value||''} onChange={e=>onChange(e.target.value)} disabled={disabled}
+      style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:disabled?C.bg:C.surface,fontSize:13,color:value?C.text:C.dim,outline:'none',cursor:'pointer'}}>
+      {placeholder && <option value="" disabled>{placeholder}</option>}
+      {options.map(o => typeof o==='string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  </div>
+);
+
+const Card = ({children, style:sx}) => (
+  <div style={{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,padding:20,...sx}}>{children}</div>
+);
+
+const Modal = ({open, onClose, title, children, width=560}) => {
+  if (!open) return null;
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={onClose}>
+    <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:width,maxHeight:'90vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.15)'}} onClick={e=>e.stopPropagation()}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontWeight:700,fontSize:15,color:C.text}}>{title}</div>
+        <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1}}>✕</button>
+      </div>
+      <div style={{padding:20}}>{children}</div>
+    </div>
+  </div>;
+};
+
+const Divider = ({label}) => (
+  <div style={{display:'flex',alignItems:'center',gap:12,margin:'4px 0'}}>
+    {label && <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8,whiteSpace:'nowrap'}}>{label}</span>}
+    <div style={{flex:1,height:1,background:C.border}}/>
+  </div>
+);
+
+const Stepper = ({steps, current}) => (
+  <div style={{display:'flex',alignItems:'center',gap:0,overflowX:'auto',padding:'4px 0'}}>
+    {steps.map((s,i)=>{
+      const done = i < current;
+      const active = i === current;
+      return <React.Fragment key={i}>
+        {i>0 && <div style={{flex:1,height:2,background:done?C.accent:C.border,minWidth:16,transition:'background .3s'}}/>}
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,flexShrink:0}}>
+          <div style={{width:28,height:28,borderRadius:'50%',background:done?C.accent:active?C.accent+'22':C.border,border:`2px solid ${done||active?C.accent:C.border}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .3s'}}>
+            {done ? <span style={{color:'#fff',fontSize:12}}>✓</span> : <span style={{fontSize:11,fontWeight:700,color:active?C.accent:C.dim}}>{i+1}</span>}
+          </div>
+          <span style={{fontSize:10,fontWeight:active?700:500,color:active?C.accent:done?C.muted:C.dim,whiteSpace:'nowrap'}}>{s}</span>
+        </div>
+      </React.Fragment>;
+    })}
+  </div>
+);
+
+// ─── SIGN MODAL ───────────────────────────────────────────────────────────────
+function SignModal({ open, onClose, onSign, title, meaning, saId, action, detail }) {
+  const [pwd, setPwd] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => { if (open) { setPwd(''); setErr(''); } }, [open]);
+  const submit = async () => {
+    if (!pwd.trim()) { setErr('Informe a senha'); return; }
+    setLoading(true); setErr('');
+    try {
+      const data = await apiPost('/api/auth?_route=verify', { password:pwd, record_id:saId, action, action_detail:detail, meaning });
+      if (data?.ok) { onSign(data.signature); onClose(); }
+      else setErr('Resposta inválida');
+    } catch(e) { setErr(e.message || 'Senha incorreta'); }
+    finally { setLoading(false); }
+  };
+  return <Modal open={open} onClose={onClose} title="Assinatura Digital" width={400}>
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      <div style={{background:C.accent+'0D',borderRadius:8,padding:'12px 14px'}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:4}}>Ação a assinar</div>
+        <div style={{fontSize:13,color:C.text,fontWeight:500}}>{title}</div>
+        {meaning && <div style={{fontSize:11,color:C.muted,marginTop:4}}>{meaning}</div>}
+      </div>
+      <Input label="Confirme sua senha" type="password" value={pwd} onChange={setPwd} placeholder="••••••••" error={err}/>
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+        <Btn onClick={submit} disabled={loading}>{loading ? 'Verificando...' : 'Assinar'}</Btn>
+      </div>
+    </div>
+  </Modal>;
+}
+
+// ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [pwd, setPwd] = useState('');
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('login'); // login | forgot | reset
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+
+  const submit = async () => {
+    setLoading(true); setErr('');
+    try {
+      const e = await onLogin(email, pwd);
+      if (e) setErr(e);
+    } catch(ex) { setErr(ex.message || 'Erro'); }
+    finally { setLoading(false); }
+  };
+
+  const submitForgot = async () => {
+    if (!resetEmail) { setErr('Informe o e-mail'); return; }
+    setLoading(true); setErr('');
+    try {
+      await apiPost('/api/auth?_route=forgot', { email: resetEmail });
+      setResetSent(true);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg, #EFF6FF 0%, #F5F7FA 60%, #EDE9FE 100%)'}}>
+    <div style={{width:'100%',maxWidth:380,padding:16}}>
+      <div style={{textAlign:'center',marginBottom:32}}>
+        <div style={{display:'inline-flex',alignItems:'center',gap:10,marginBottom:8}}>
+          <div style={{width:36,height:36,borderRadius:10,background:C.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          </div>
+          <div style={{textAlign:'left'}}>
+            <div style={{fontSize:18,fontWeight:800,color:C.text,letterSpacing:-.5}}>Vydence SGQ</div>
+            <div style={{fontSize:11,color:C.muted,letterSpacing:.5}}>Sistema de Gestão da Qualidade</div>
+          </div>
+        </div>
+      </div>
+      <Card style={{boxShadow:'0 8px 40px rgba(37,99,235,.1)'}}>
+        {mode === 'login' && <>
+          <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:20}}>Entrar</div>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <Input label="E-mail" type="email" value={email} onChange={setEmail} placeholder="seu@email.com"/>
+            <Input label="Senha" type="password" value={pwd} onChange={setPwd} placeholder="••••••••" error={err}/>
+            <Btn size="lg" onClick={submit} disabled={loading} style={{width:'100%',marginTop:4}}>
+              {loading ? 'Entrando...' : 'Entrar'}
+            </Btn>
+            <button onClick={()=>{setMode('forgot');setErr('');}} style={{background:'none',border:'none',cursor:'pointer',color:C.accent,fontSize:12,textAlign:'center',fontFamily:'inherit'}}>
+              Esqueci minha senha
+            </button>
+          </div>
+        </>}
+        {mode === 'forgot' && <>
+          <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:8}}>Recuperar Senha</div>
+          {!resetSent ? <>
+            <div style={{fontSize:13,color:C.muted,marginBottom:16}}>Informe seu e-mail para receber o link de redefinição.</div>
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <Input label="E-mail" type="email" value={resetEmail} onChange={setResetEmail} placeholder="seu@email.com" error={err}/>
+              <Btn size="lg" onClick={submitForgot} disabled={loading} style={{width:'100%'}}>
+                {loading ? 'Enviando...' : 'Enviar link'}
+              </Btn>
+              <button onClick={()=>{setMode('login');setErr('');}} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:12,textAlign:'center',fontFamily:'inherit'}}>
+                ← Voltar ao login
+              </button>
+            </div>
+          </> : <>
+            <div style={{background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:8,padding:'12px 14px',fontSize:13,color:'#16A34A',marginBottom:16}}>
+              E-mail enviado! Verifique sua caixa de entrada.
+            </div>
+            <Btn variant="secondary" onClick={()=>{setMode('login');setResetSent(false);}} style={{width:'100%'}}>Voltar ao login</Btn>
+          </>}
+        </>}
+      </Card>
+    </div>
+  </div>;
+}
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+function Sidebar({ view, setView, loggedIn, logout, navItems }) {
+  return <div style={{width:220,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',height:'100vh',position:'fixed',left:0,top:0,zIndex:10}}>
+    <div style={{padding:'18px 16px 14px',borderBottom:`1px solid ${C.border}`}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:32,height:32,borderRadius:8,background:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        <div>
+          <div style={{fontSize:14,fontWeight:800,color:C.text,letterSpacing:-.3}}>Vydence SGQ</div>
+          <div style={{fontSize:10,color:C.dim,letterSpacing:.4}}>v1.0 · {loggedIn.role.toUpperCase()}</div>
+        </div>
+      </div>
+    </div>
+    <div style={{flex:1,padding:'8px 8px',overflowY:'auto'}}>
+      {navItems.map(item => {
+        if (item.divider) return <div key={item.id} style={{padding:'12px 8px 4px'}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.dim,textTransform:'uppercase',letterSpacing:.8}}>{item.label}</span>
+        </div>;
+        const active = view === item.id;
+        return <button key={item.id} onClick={()=>setView(item.id)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',borderRadius:8,background:active?C.accent+'10':'transparent',border:'none',cursor:'pointer',marginBottom:1,transition:'background .12s'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:16,lineHeight:1}}>{item.icon}</span>
+            <span style={{fontSize:13,fontWeight:active?700:500,color:active?C.accent:C.muted}}>{item.label}</span>
+          </div>
+          {item.badge > 0 && <span style={{background:C.danger,color:'#fff',borderRadius:10,fontSize:10,fontWeight:700,padding:'1px 6px',minWidth:18,textAlign:'center'}}>{item.badge}</span>}
+        </button>;
+      })}
+    </div>
+    <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+        <Avatar name={loggedIn.name} size={32}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{loggedIn.name}</div>
+          <div style={{fontSize:11,color:C.dim,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{loggedIn.email}</div>
+        </div>
+      </div>
+      <button onClick={logout} style={{width:'100%',background:'transparent',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px',cursor:'pointer',fontSize:12,color:C.muted,fontFamily:'inherit',fontWeight:500}}>Sair</button>
+    </div>
+  </div>;
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function Dashboard({ records, currentUser, allUsers, onNav }) {
+  const isAdmin = ['admin','sgq'].includes(currentUser.role);
+  const myActions = records.flatMap(r => (r.actions||[]).filter(a => a.responsible === currentUser.id && a.status !== 'concluida' && a.status !== 'cancelada'));
+  const overdue = myActions.filter(a => a.dueDate && new Date(a.dueDate) < new Date());
+
+  const stats = [
+    { label:'Controles Ativos', value: records.filter(r=>!['concluida','cancelada'].includes(r.status)).length, color: C.accent, icon:'📋' },
+    { label:'Minhas Tarefas', value: myActions.length, color: C.purple, icon:'✅' },
+    { label:'Atrasadas', value: overdue.length, color: C.danger, icon:'⚠️' },
+    { label:'Concluídas', value: records.filter(r=>r.status==='concluida').length, color: C.success, icon:'🎯' },
+  ];
+
+  const recent = [...records].sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)).slice(0,5);
+
+  return <div style={{padding:24}}>
+    <div style={{marginBottom:24}}>
+      <div style={{fontSize:22,fontWeight:800,color:C.text,letterSpacing:-.5}}>Olá, {currentUser.name.split(' ')[0]} 👋</div>
+      <div style={{fontSize:14,color:C.muted,marginTop:4}}>{new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:14,marginBottom:24}}>
+      {stats.map(s => <Card key={s.label} style={{cursor:'default'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <div style={{fontSize:24}}>{s.icon}</div>
+          <div>
+            <div style={{fontSize:24,fontWeight:800,color:s.color}}>{s.value}</div>
+            <div style={{fontSize:12,color:C.muted,fontWeight:500}}>{s.label}</div>
+          </div>
+        </div>
+      </Card>)}
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+      <Card>
+        <div style={{fontWeight:700,fontSize:14,color:C.text,marginBottom:14}}>Controles Recentes</div>
+        {recent.length === 0 ? <div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'20px 0'}}>Nenhum controle encontrado</div>
+        : recent.map(r => <div key={r.id} onClick={()=>onNav('detail',r.id)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${C.border}`,cursor:'pointer',gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.id}</div>
+            <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.title}</div>
+          </div>
+          <Badge status={r.status}/>
+        </div>)}
+      </Card>
+      <Card>
+        <div style={{fontWeight:700,fontSize:14,color:C.text,marginBottom:14}}>Minhas Tarefas Pendentes</div>
+        {myActions.length === 0 ? <div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'20px 0'}}>Nenhuma tarefa pendente 🎉</div>
+        : myActions.slice(0,5).map((a,i) => {
+          const rec = records.find(r=>(r.actions||[]).some(x=>x.id===a.id));
+          const late = a.dueDate && new Date(a.dueDate) < new Date();
+          return <div key={i} onClick={()=>rec&&onNav('detail',rec.id)} style={{padding:'8px 0',borderBottom:`1px solid ${C.border}`,cursor:'pointer'}}>
+            <div style={{fontSize:12,fontWeight:600,color:late?C.danger:C.text,marginBottom:2}}>{a.description}</div>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              {rec && <span style={{fontSize:10,color:C.muted}}>{rec.id}</span>}
+              {a.dueDate && <span style={{fontSize:10,color:late?C.danger:C.dim}}>• Prazo: {fmt(a.dueDate)}</span>}
+            </div>
+          </div>;
+        })}
+      </Card>
+    </div>
+  </div>;
+}
+
+// ─── SA LIST ──────────────────────────────────────────────────────────────────
+function SAList({ records, currentUser, allUsers, onNav, onNew }) {
+  const [q, setQ] = useState('');
+  const [statusF, setStatusF] = useState('');
+  const [typeF, setTypeF] = useState('');
+  const isAdmin = ['admin','sgq'].includes(currentUser.role);
+
+  const filtered = records.filter(r => {
+    if (statusF && r.status !== statusF) return false;
+    if (typeF && r.type !== typeF) return false;
+    if (q) { const lq = q.toLowerCase(); return (r.id||'').toLowerCase().includes(lq)||(r.title||'').toLowerCase().includes(lq)||(r.createdByName||'').toLowerCase().includes(lq); }
+    return true;
+  }).sort((a,b) => new Date(b.updatedAt||b.createdAt) - new Date(a.updatedAt||a.createdAt));
+
+  return <div style={{padding:24}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+      <div>
+        <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4}}>Controle de Mudanças</div>
+        <div style={{fontSize:13,color:C.muted,marginTop:2}}>{records.length} registros</div>
+      </div>
+      <Btn onClick={onNew} size="lg">+ Nova SA</Btn>
+    </div>
+    <Card style={{marginBottom:16}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:200}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍  Buscar por código, título..." style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,color:C.text,outline:'none'}}/>
+        </div>
+        <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,color:C.muted,outline:'none',cursor:'pointer'}}>
+          <option value="">Todos os status</option>
+          {Object.entries(STATUS_CONFIG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <select value={typeF} onChange={e=>setTypeF(e.target.value)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,color:C.muted,outline:'none',cursor:'pointer'}}>
+          <option value="">Todos os tipos</option>
+          {SA_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+    </Card>
+    <Card style={{padding:0,overflow:'hidden'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead>
+          <tr style={{background:C.bg}}>
+            {['Código','Título','Tipo','Criticidade','Status','Criado em','Criado por',''].map(h => (
+              <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,borderBottom:`1px solid ${C.border}`}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length === 0 ? <tr><td colSpan={8} style={{padding:'32px',textAlign:'center',color:C.dim,fontSize:13}}>Nenhum registro encontrado</td></tr>
+          : filtered.map(r => {
+            const critCfg = { 'Baixa':C.success,'Média':C.warning,'Alta':'#EA580C','Crítica':C.danger };
+            return <tr key={r.id} onClick={()=>onNav('detail',r.id)} style={{cursor:'pointer',transition:'background .1s'}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,fontWeight:700,color:C.accent}}>{r.id}</td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text,maxWidth:240}}>
+                <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</div>
+              </td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>{r.type}</td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`}}>
+                <span style={{fontSize:11,fontWeight:700,color:critCfg[r.criticality]||C.muted}}>{r.criticality||'—'}</span>
+              </td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`}}><Badge status={r.status}/></td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>{fmt(r.createdAt)}</td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>{r.createdByName||'—'}</td>
+              <td style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`}}>
+                <span style={{fontSize:11,color:C.muted}}>→</span>
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </Card>
+  </div>;
+}
+
+// ─── NEW SA FORM ──────────────────────────────────────────────────────────────
+function NewSAForm({ currentUser, onSave, onCancel, matrix }) {
+  const [form, setForm] = useState({ title:'', type:'', criticality:'', description:'', justification:'', scope:'' });
+  const [err, setErr] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const requiredAreas = () => {
+    if (!form.type || !form.criticality) return [];
+    const mat = matrix || DEFAULT_MATRIX;
+    return mat[form.type]?.[form.criticality] || [];
+  };
+
+  const submit = async () => {
+    const e = {};
+    if (!form.title.trim()) e.title = 'Obrigatório';
+    if (!form.type) e.type = 'Obrigatório';
+    if (!form.criticality) e.criticality = 'Obrigatório';
+    if (!form.description.trim()) e.description = 'Obrigatório';
+    if (Object.keys(e).length) { setErr(e); return; }
+    setLoading(true);
+    try {
+      const sa = {
+        ...form,
+        status: 'aberta',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: currentUser.id,
+        createdByName: currentUser.name,
+        requiredAreas: requiredAreas(),
+        evaluations: {},
+        actions: [],
+        attachments: [],
+        log: [{ at: new Date().toISOString(), by: currentUser.name, text: 'SA criada' }],
+      };
+      await onSave(sa);
+    } catch(ex) { setErr({ _: ex.message }); }
+    finally { setLoading(false); }
+  };
+
+  const areas = requiredAreas();
+
+  return <div style={{padding:24,maxWidth:760,margin:'0 auto'}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24}}>
+      <button onClick={onCancel} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18}}>←</button>
+      <div>
+        <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4}}>Nova Solicitação de Análise</div>
+        <div style={{fontSize:13,color:C.muted}}>Preencha os dados iniciais</div>
+      </div>
+    </div>
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      <Card>
+        <Divider label="Identificação"/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
+          <div style={{gridColumn:'1/-1'}}>
+            <Input label="Título" value={form.title} onChange={v=>set('title',v)} required error={err.title} placeholder="Ex.: Mudança no processo de soldagem"/>
+          </div>
+          <Select label="Tipo de Mudança" value={form.type} onChange={v=>set('type',v)} options={SA_TYPES} required placeholder="Selecione..." error={err.type}/>
+          <Select label="Criticidade" value={form.criticality} onChange={v=>set('criticality',v)} options={SA_CRITS} required placeholder="Selecione..." error={err.criticality}/>
+        </div>
+      </Card>
+      {areas.length > 0 && <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#92400E'}}>
+        <strong>Áreas obrigatórias para avaliação:</strong> {areas.join(', ')}
+      </div>}
+      <Card>
+        <Divider label="Descrição"/>
+        <div style={{display:'flex',flexDirection:'column',gap:14,marginTop:14}}>
+          <Textarea label="Descrição da Mudança" value={form.description} onChange={v=>set('description',v)} required rows={4} placeholder="Descreva detalhadamente a mudança proposta..."/>
+          <Textarea label="Justificativa" value={form.justification} onChange={v=>set('justification',v)} rows={3} placeholder="Por que essa mudança é necessária?"/>
+          <Textarea label="Escopo / Impacto" value={form.scope} onChange={v=>set('scope',v)} rows={2} placeholder="Quais processos, produtos ou áreas são afetados?"/>
+        </div>
+      </Card>
+      {err._ && <div style={{background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:8,padding:'10px 14px',fontSize:13,color:C.danger}}>{err._}</div>}
+      <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
+        <Btn onClick={submit} disabled={loading} size="lg">{loading ? 'Salvando...' : 'Criar SA'}</Btn>
+      </div>
+    </div>
+  </div>;
+}
+
+// ─── SA DETAIL ────────────────────────────────────────────────────────────────
+function SADetail({ record: r, allUsers, matrix, deptQuestions, currentUser, onBack, onUpdate }) {
+  const [tab, setTab] = useState('info');
+  const [sign, setSign] = useState(null); // { action, title, meaning, detail, onDone }
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const isAdmin = ['admin','sgq'].includes(currentUser.role);
+
+  const addLog = (text) => ({ at: new Date().toISOString(), by: currentUser.name, text });
+
+  const update = async (changes) => {
+    setLoading(true); setErr('');
+    try {
+      const updated = { ...r, ...changes, updatedAt: new Date().toISOString() };
+      await onUpdate(updated);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const FLOW_STEPS = ['Aberta','Triagem','Avaliação','Aprovação','Execução','Concluída'];
+  const STATUS_STEP = { 'aberta':0,'triagem':1,'avaliacao':2,'aprovacao':3,'execucao':4,'concluida':5,'cancelada':5 };
+  const curStep = STATUS_STEP[r.status] || 0;
+
+  const tabs = [
+    { id:'info', label:'Informações' },
+    { id:'triagem', label:'Triagem' },
+    { id:'avaliacao', label:'Avaliação' },
+    { id:'aprovacao', label:'Aprovação' },
+    { id:'execucao', label:'Execução' },
+    { id:'acoes', label:`Ações (${(r.actions||[]).length})` },
+    { id:'log', label:'Histórico' },
+  ];
+
+  const crit = { 'Baixa':C.success,'Média':C.warning,'Alta':'#EA580C','Crítica':C.danger };
+
+  return <div style={{padding:24}}>
+    <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:20}}>
+      <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,marginTop:2}}>←</button>
+      <div style={{flex:1}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
+          <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4}}>{r.id}</div>
+          <Badge status={r.status}/>
+          {r.criticality && <span style={{fontSize:11,fontWeight:700,color:crit[r.criticality]||C.muted,background:crit[r.criticality]+'15',padding:'3px 8px',borderRadius:20}}>{r.criticality}</span>}
+          <span style={{fontSize:12,color:C.muted,background:C.bg,padding:'3px 10px',borderRadius:20,border:`1px solid ${C.border}`}}>{r.type}</span>
+        </div>
+        <div style={{fontSize:15,fontWeight:600,color:C.text}}>{r.title}</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:2}}>Criado por {r.createdByName} · {fmt(r.createdAt)}</div>
+      </div>
+    </div>
+
+    <Card style={{marginBottom:16}}>
+      <Stepper steps={FLOW_STEPS} current={curStep}/>
+    </Card>
+
+    {err && <div style={{background:'#FEF2F2',borderRadius:8,padding:'10px 14px',fontSize:13,color:C.danger,marginBottom:12}}>{err}</div>}
+
+    <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16,overflowX:'auto'}}>
+      {tabs.map(t => <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:'9px 14px',background:'none',border:'none',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500,color:tab===t.id?C.accent:C.muted,borderBottom:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent',whiteSpace:'nowrap',transition:'all .15s'}}>{t.label}</button>)}
+    </div>
+
+    {tab === 'info' && <InfoTab r={r} allUsers={allUsers} currentUser={currentUser} isAdmin={isAdmin} onUpdate={update} loading={loading}/>}
+    {tab === 'triagem' && <TriagemTab r={r} allUsers={allUsers} currentUser={currentUser} isAdmin={isAdmin} onUpdate={update} matrix={matrix} onSign={setSign} loading={loading}/>}
+    {tab === 'avaliacao' && <AvaliacaoTab r={r} allUsers={allUsers} currentUser={currentUser} isAdmin={isAdmin} onUpdate={update} deptQuestions={deptQuestions} onSign={setSign} loading={loading}/>}
+    {tab === 'aprovacao' && <AprovacaoTab r={r} allUsers={allUsers} currentUser={currentUser} isAdmin={isAdmin} onUpdate={update} onSign={setSign} loading={loading}/>}
+    {tab === 'execucao' && <ExecucaoTab r={r} allUsers={allUsers} currentUser={currentUser} isAdmin={isAdmin} onUpdate={update} onSign={setSign} loading={loading}/>}
+    {tab === 'acoes' && <AcoesTab r={r} allUsers={allUsers} currentUser={currentUser} isAdmin={isAdmin} onUpdate={update} onSign={setSign} loading={loading}/>}
+    {tab === 'log' && <LogTab r={r}/>}
+
+    {sign && <SignModal open={!!sign} onClose={()=>setSign(null)} title={sign.title} meaning={sign.meaning} saId={r.id} action={sign.action} detail={sign.detail} onSign={(sig) => { sign.onDone(sig); setSign(null); }}/>}
+  </div>;
+}
+
+function InfoTab({ r, allUsers, currentUser, isAdmin, onUpdate, loading }) {
+  const [edit, setEdit] = useState(false);
+  const [form, setForm] = useState({ title: r.title, description: r.description, justification: r.justification||'', scope: r.scope||'' });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const save = () => { onUpdate({ title: form.title, description: form.description, justification: form.justification, scope: form.scope, log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: 'Informações atualizadas' }] }); setEdit(false); };
+  const canEdit = isAdmin || r.createdBy === currentUser.id;
+  return <div style={{display:'flex',flexDirection:'column',gap:14}}>
+    <Card>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <Divider label="Detalhes da Mudança"/>
+        {canEdit && !edit && <Btn variant="outline" size="sm" onClick={()=>setEdit(true)}>Editar</Btn>}
+        {edit && <div style={{display:'flex',gap:8}}><Btn variant="secondary" size="sm" onClick={()=>setEdit(false)}>Cancelar</Btn><Btn size="sm" onClick={save} disabled={loading}>Salvar</Btn></div>}
+      </div>
+      {edit ? <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <Input label="Título" value={form.title} onChange={v=>set('title',v)} required/>
+        <Textarea label="Descrição" value={form.description} onChange={v=>set('description',v)} rows={4}/>
+        <Textarea label="Justificativa" value={form.justification} onChange={v=>set('justification',v)} rows={3}/>
+        <Textarea label="Escopo / Impacto" value={form.scope} onChange={v=>set('scope',v)} rows={2}/>
+      </div> : <div style={{display:'flex',flexDirection:'column',gap:12}}>
+        <Row label="Título" value={r.title}/>
+        <Row label="Tipo" value={r.type}/>
+        <Row label="Criticidade" value={r.criticality}/>
+        <Row label="Criado por" value={r.createdByName}/>
+        <Row label="Criado em" value={fmt(r.createdAt)}/>
+        <Row label="Atualizado em" value={fmt(r.updatedAt)}/>
+        {r.description && <><Divider/><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Descrição</div><div style={{fontSize:13,color:C.text,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{r.description}</div></>}
+        {r.justification && <><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:4,marginTop:8}}>Justificativa</div><div style={{fontSize:13,color:C.text,lineHeight:1.6}}>{r.justification}</div></>}
+        {r.scope && <><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:4,marginTop:8}}>Escopo</div><div style={{fontSize:13,color:C.text,lineHeight:1.6}}>{r.scope}</div></>}
+      </div>}
+    </Card>
+    {(r.requiredAreas||[]).length > 0 && <Card>
+      <Divider label="Áreas Envolvidas"/>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:10}}>
+        {(r.requiredAreas||[]).map(a => <span key={a} style={{background:C.accent+'10',color:C.accent,borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600}}>{a}</span>)}
+      </div>
+    </Card>}
+  </div>;
+}
+
+function Row({ label, value }) {
+  return <div style={{display:'flex',gap:12}}>
+    <span style={{fontSize:12,fontWeight:600,color:C.muted,width:120,flexShrink:0}}>{label}</span>
+    <span style={{fontSize:13,color:C.text}}>{value||'—'}</span>
+  </div>;
+}
+
+function TriagemTab({ r, allUsers, currentUser, isAdmin, onUpdate, matrix, onSign, loading }) {
+  const [form, setForm] = useState({
+    assignedAreas: r.triage?.assignedAreas || [],
+    assignments: r.triage?.assignments || {},
+    observations: r.triage?.observations || '',
+    deadline: r.triage?.deadline || '',
   });
-  const [page, setPage] = useState('dashboard');
-  const [records, setRecords] = useState({ ro:[], nc:[], riacp:[], sa:[] });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const canTriage = isAdmin && r.status === 'aberta';
+  const alreadyDone = ['triagem','avaliacao','aprovacao','execucao','concluida'].includes(r.status);
+
+  const reqAreas = () => {
+    const mat = matrix || DEFAULT_MATRIX;
+    return mat[r.type]?.[r.criticality] || [];
+  };
+
+  const toggleArea = (a) => {
+    const cur = form.assignedAreas;
+    if (cur.includes(a)) set('assignedAreas', cur.filter(x=>x!==a));
+    else set('assignedAreas', [...cur, a]);
+  };
+
+  const assignUser = (area, uid) => set('assignments', {...form.assignments, [area]: uid ? parseInt(uid) : null });
+
+  const submit = () => {
+    onSign({
+      action: 'triagem',
+      title: `Triagem da ${r.id}`,
+      meaning: 'Confirmo que realizei a triagem e defini as áreas de avaliação',
+      detail: `Áreas: ${form.assignedAreas.join(', ')}`,
+      onDone: (sig) => {
+        onUpdate({
+          status: 'triagem',
+          triage: { ...form, doneAt: new Date().toISOString(), doneBy: currentUser.name, signature: sig },
+          log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: 'Triagem realizada — enviado para avaliação' }],
+        });
+      }
+    });
+  };
+
+  const sendToEval = () => {
+    if (!form.assignedAreas.length) { alert('Selecione ao menos uma área para avaliação'); return; }
+    submit();
+  };
+
+  return <div style={{display:'flex',flexDirection:'column',gap:14}}>
+    <Card>
+      <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:12}}>Gate 1 — Triagem SGQ</div>
+      {alreadyDone && r.triage?.doneAt ? <div style={{background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:8,padding:'10px 14px',fontSize:12,color:C.success,marginBottom:12}}>
+        ✓ Triagem concluída por {r.triage.doneBy} em {fmtDT(r.triage.doneAt)}
+      </div> : null}
+      <Divider label="Áreas de Avaliação"/>
+      <div style={{marginTop:10}}>
+        <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Obrigatórias: <strong style={{color:C.text}}>{reqAreas().join(', ')||'—'}</strong></div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
+          {DEPT_LIST.map(a => {
+            const required = reqAreas().includes(a);
+            const selected = form.assignedAreas.includes(a);
+            return <button key={a} onClick={()=>canTriage && toggleArea(a)} disabled={!canTriage} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${selected?(required?C.accent:C.purple):C.border}`,background:selected?(required?C.accent+'15':C.purple+'15'):'transparent',fontSize:12,fontWeight:selected?700:500,color:selected?(required?C.accent:C.purple):C.muted,cursor:canTriage?'pointer':'default',transition:'all .15s'}}>
+              {required ? '★ ' : ''}{a}
+            </button>;
+          })}
+        </div>
+      </div>
+      {form.assignedAreas.length > 0 && <>
+        <Divider label="Responsáveis por Área"/>
+        <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:10}}>
+          {form.assignedAreas.map(a => <div key={a} style={{display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:12,fontWeight:600,color:C.text,width:120,flexShrink:0}}>{a}</span>
+            <select value={form.assignments[a]||''} onChange={e=>assignUser(a,e.target.value)} disabled={!canTriage}
+              style={{flex:1,padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,color:C.text,outline:'none'}}>
+              <option value="">Selecionar responsável...</option>
+              {allUsers.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.name} ({u.area||'—'})</option>)}
+            </select>
+          </div>)}
+        </div>
+      </>}
+      <div style={{marginTop:14,display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <Input label="Prazo para Avaliação" type="date" value={form.deadline} onChange={v=>set('deadline',v)} disabled={!canTriage}/>
+        <div/>
+      </div>
+      <div style={{marginTop:12}}>
+        <Textarea label="Observações da Triagem" value={form.observations} onChange={v=>set('observations',v)} rows={2} disabled={!canTriage}/>
+      </div>
+      {canTriage && <div style={{marginTop:14,display:'flex',justifyContent:'flex-end'}}>
+        <Btn onClick={sendToEval} disabled={loading}>Confirmar Triagem ✎</Btn>
+      </div>}
+    </Card>
+  </div>;
+}
+
+function AvaliacaoTab({ r, allUsers, currentUser, isAdmin, onUpdate, deptQuestions, onSign, loading }) {
+  const canEvaluate = (area) => {
+    const assign = r.triage?.assignments?.[area];
+    return assign === currentUser.id || isAdmin;
+  };
+
+  const alreadyEval = (area) => !!(r.evaluations?.[area]?.at);
+  const evalStatus = r.status;
+
+  const DEPT_Q = deptQuestions || DEFAULT_DEPT_Q;
+
+  const submitEval = (area, answers, obs) => {
+    onSign({
+      action: `avaliacao_${area}`,
+      title: `Avaliação — ${area}`,
+      meaning: `Confirmo minha avaliação da área ${area}`,
+      detail: area,
+      onDone: (sig) => {
+        const newEvals = { ...(r.evaluations||{}), [area]: { answers, observations: obs, at: new Date().toISOString(), by: currentUser.name, signature: sig } };
+        const allDone = (r.triage?.assignedAreas||[]).every(a => newEvals[a]?.at);
+        onUpdate({
+          evaluations: newEvals,
+          status: allDone ? 'aprovacao' : r.status,
+          log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: `Avaliação da área ${area} concluída${allDone?' — todas as áreas avaliadas, enviado para aprovação':''}` }],
+        });
+      }
+    });
+  };
+
+  const areas = r.triage?.assignedAreas || [];
+  if (!areas.length) return <Card><div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'24px 0'}}>Nenhuma área definida. Complete a triagem primeiro.</div></Card>;
+
+  return <div style={{display:'flex',flexDirection:'column',gap:12}}>
+    {isAdmin && <Card style={{padding:'10px 14px'}}>
+      <div style={{fontSize:12,color:C.muted}}>Progresso: {areas.filter(a=>alreadyEval(a)).length}/{areas.length} áreas avaliadas</div>
+      <div style={{display:'flex',gap:4,marginTop:6}}>
+        {areas.map(a => <div key={a} style={{flex:1,height:4,borderRadius:4,background:alreadyEval(a)?C.success:C.border,transition:'background .3s'}}/>)}
+      </div>
+    </Card>}
+    {areas.map(a => <EvalAreaCard key={a} area={a} record={r} allUsers={allUsers} currentUser={currentUser} questions={DEPT_Q[a]||[]} canEval={canEvaluate(a)} done={alreadyEval(a)} onSubmit={(ans,obs)=>submitEval(a,ans,obs)} loading={loading}/>)}
+  </div>;
+}
+
+function EvalAreaCard({ area, record: r, allUsers, currentUser, questions, canEval, done, onSubmit, loading }) {
+  const existing = r.evaluations?.[area];
+  const [expanded, setExpanded] = useState(!done);
+  const [answers, setAnswers] = useState(existing?.answers || {});
+  const [obs, setObs] = useState(existing?.observations || '');
+
+  const assignedId = r.triage?.assignments?.[area];
+  const assignedUser = allUsers.find(u => u.id === assignedId);
+
+  const answerQ = (q, v) => setAnswers(p=>({...p,[q]:v}));
+  const allAnswered = questions.every(q => answers[q] !== undefined);
+
+  return <Card>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}} onClick={()=>setExpanded(p=>!p)}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:8,height:8,borderRadius:'50%',background:done?C.success:canEval?C.accent:C.dim,flexShrink:0}}/>
+        <span style={{fontSize:13,fontWeight:700,color:C.text}}>{area}</span>
+        {assignedUser && <span style={{fontSize:11,color:C.muted}}>→ {assignedUser.name}</span>}
+        {done && <span style={{fontSize:11,color:C.success,fontWeight:600}}>✓ Avaliado</span>}
+      </div>
+      <span style={{fontSize:12,color:C.muted}}>{expanded?'▲':'▼'}</span>
+    </div>
+    {expanded && <div style={{marginTop:14}}>
+      {done && existing && <div style={{background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:8,padding:'10px 14px',fontSize:12,color:C.success,marginBottom:12}}>
+        Avaliado por {existing.by} em {fmtDT(existing.at)}
+      </div>}
+      {questions.length > 0 && <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:12}}>
+        {questions.map((q,i) => <div key={i} style={{background:C.bg,borderRadius:8,padding:'10px 12px'}}>
+          <div style={{fontSize:12,fontWeight:500,color:C.text,marginBottom:6}}>{i+1}. {q}</div>
+          <div style={{display:'flex',gap:8}}>
+            {['Sim','Não','N/A'].map(opt => {
+              const sel = (done?existing?.answers[q]:answers[q]) === opt;
+              return <button key={opt} onClick={()=>!done&&canEval&&answerQ(q,opt)} disabled={done||!canEval}
+                style={{padding:'4px 14px',borderRadius:20,border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.accent+'10':'transparent',fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.muted,cursor:(done||!canEval)?'default':'pointer',transition:'all .12s'}}>
+                {opt}
+              </button>;
+            })}
+          </div>
+        </div>)}
+      </div>}
+      <Textarea label="Observações" value={done?existing?.observations||'':obs} onChange={setObs} rows={2} disabled={done||!canEval}/>
+      {!done && canEval && <div style={{marginTop:10,display:'flex',justifyContent:'flex-end'}}>
+        <Btn onClick={()=>onSubmit(answers,obs)} disabled={loading || (questions.length > 0 && !allAnswered)} size="sm">
+          Concluir Avaliação ✎
+        </Btn>
+      </div>}
+    </div>}
+  </Card>;
+}
+
+function AprovacaoTab({ r, allUsers, currentUser, isAdmin, onUpdate, onSign, loading }) {
+  const [plano, setPlano] = useState(r.planoAcao || '');
+  const [risco, setRisco] = useState(r.risco || '');
+  const [obs, setObs] = useState(r.aprovacao?.obs || '');
+  const canApprove = isAdmin && r.status === 'aprovacao';
+  const alreadyDone = r.aprovacao?.at;
+
+  const approve = () => onSign({
+    action: 'aprovacao',
+    title: 'Aprovação do Plano de Ação',
+    meaning: 'Aprovo o plano de ação e autorizo a execução da mudança',
+    detail: `Plano: ${plano.substring(0,100)}`,
+    onDone: (sig) => onUpdate({
+      status: 'execucao',
+      aprovacao: { at: new Date().toISOString(), by: currentUser.name, obs, signature: sig },
+      planoAcao: plano,
+      risco,
+      log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: 'Plano aprovado — SA em execução' }],
+    }),
+  });
+
+  const reject = () => onSign({
+    action: 'rejeicao',
+    title: 'Rejeição do Plano de Ação',
+    meaning: 'Rejeito o plano proposto e retorno a SA para reavaliação',
+    detail: obs,
+    onDone: (sig) => onUpdate({
+      status: 'avaliacao',
+      log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: `Plano rejeitado — retornado para avaliação. Motivo: ${obs}` }],
+    }),
+  });
+
+  return <div style={{display:'flex',flexDirection:'column',gap:14}}>
+    {alreadyDone && <div style={{background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:8,padding:'10px 14px',fontSize:12,color:C.success}}>
+      ✓ Aprovado por {r.aprovacao.by} em {fmtDT(r.aprovacao.at)}
+    </div>}
+    <Card>
+      <Divider label="Gate 3 — Aprovação SGQ"/>
+      <div style={{display:'flex',flexDirection:'column',gap:14,marginTop:14}}>
+        <Textarea label="Plano de Ação" value={plano} onChange={setPlano} rows={4} disabled={!canApprove&&!isAdmin} placeholder="Descreva as ações planejadas para implementação..."/>
+        <Textarea label="Análise de Risco" value={risco} onChange={setRisco} rows={3} disabled={!canApprove&&!isAdmin} placeholder="Identifique riscos e medidas de mitigação..."/>
+        <Textarea label="Observações SGQ" value={obs} onChange={setObs} rows={2} disabled={!canApprove} placeholder="Comentários adicionais..."/>
+      </div>
+      {canApprove && <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:14}}>
+        <Btn variant="danger" onClick={reject} disabled={loading}>Rejeitar ✎</Btn>
+        <Btn onClick={approve} disabled={loading}>Aprovar e Executar ✎</Btn>
+      </div>}
+    </Card>
+    {r.evaluations && Object.keys(r.evaluations).length > 0 && <Card>
+      <Divider label="Resumo das Avaliações"/>
+      <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:10}}>
+        {Object.entries(r.evaluations).map(([area, ev]) => ev && <div key={area} style={{background:C.bg,borderRadius:8,padding:'10px 12px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+            <span style={{fontSize:12,fontWeight:700,color:C.text}}>{area}</span>
+            <span style={{fontSize:11,color:C.muted}}>{ev.by} · {fmt(ev.at)}</span>
+          </div>
+          {ev.observations && <div style={{fontSize:12,color:C.muted}}>{ev.observations}</div>}
+        </div>)}
+      </div>
+    </Card>}
+  </div>;
+}
+
+function ExecucaoTab({ r, allUsers, currentUser, isAdmin, onUpdate, onSign, loading }) {
+  const [result, setResult] = useState(r.resultado || '');
+  const [lessions, setLessions] = useState(r.licoesAprendidas || '');
+  const canClose = isAdmin && r.status === 'execucao';
+  const alreadyDone = r.status === 'concluida';
+
+  const conclude = () => onSign({
+    action: 'conclusao',
+    title: 'Conclusão da SA',
+    meaning: 'Confirmo a conclusão da implementação e encerramento desta SA',
+    detail: result.substring(0,100),
+    onDone: (sig) => onUpdate({
+      status: 'concluida',
+      conclusao: { at: new Date().toISOString(), by: currentUser.name, result, signature: sig },
+      resultado: result,
+      licoesAprendidas: lessions,
+      log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: 'SA concluída' }],
+    }),
+  });
+
+  const cancel = () => {
+    if (!window.confirm('Cancelar esta SA?')) return;
+    onUpdate({ status: 'cancelada', log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: 'SA cancelada' }] });
+  };
+
+  return <div style={{display:'flex',flexDirection:'column',gap:14}}>
+    {alreadyDone && r.conclusao && <div style={{background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:8,padding:'10px 14px',fontSize:12,color:C.success}}>
+      ✓ Concluída por {r.conclusao.by} em {fmtDT(r.conclusao.at)}
+    </div>}
+    <Card>
+      <Divider label="Gate 5 — Conclusão"/>
+      <div style={{display:'flex',flexDirection:'column',gap:14,marginTop:14}}>
+        <Textarea label="Resultado da Implementação" value={result} onChange={setResult} rows={4} disabled={!canClose} placeholder="Descreva o resultado obtido com a implementação..."/>
+        <Textarea label="Lições Aprendidas" value={lessions} onChange={setLessions} rows={3} disabled={!canClose} placeholder="O que aprendemos com essa mudança?"/>
+      </div>
+      {canClose && <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:14}}>
+        <Btn variant="secondary" onClick={cancel} disabled={loading}>Cancelar SA</Btn>
+        <Btn onClick={conclude} disabled={loading || !result.trim()}>Concluir SA ✎</Btn>
+      </div>}
+    </Card>
+  </div>;
+}
+
+function AcoesTab({ r, allUsers, currentUser, isAdmin, onUpdate, onSign, loading }) {
+  const [newAc, setNewAc] = useState(null);
+  const [form, setForm] = useState({ description:'', responsible:'', dueDate:'', status:'pendente' });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const actions = r.actions || [];
+
+  const openNew = () => { setForm({ description:'', responsible:'', dueDate:'', status:'pendente' }); setNewAc(true); };
+
+  const addAction = () => {
+    if (!form.description.trim()) return;
+    const ac = { ...form, id: Date.now(), responsible: form.responsible ? parseInt(form.responsible) : null, createdAt: new Date().toISOString(), createdBy: currentUser.name };
+    onUpdate({ actions: [...actions, ac], log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: `Ação adicionada: ${form.description}` }] });
+    setNewAc(false);
+  };
+
+  const conclude = (ac) => onSign({
+    action: `conclusao_acao_${ac.id}`,
+    title: `Concluir: ${ac.description}`,
+    meaning: 'Confirmo a conclusão desta ação',
+    detail: ac.description,
+    onDone: (sig) => {
+      const updated = actions.map(a => a.id === ac.id ? { ...a, status:'concluida', doneAt: new Date().toISOString(), doneBy: currentUser.name, signature: sig } : a);
+      onUpdate({ actions: updated, log: [...(r.log||[]), { at: new Date().toISOString(), by: currentUser.name, text: `Ação concluída: ${ac.description}` }] });
+    }
+  });
+
+  const canAdd = isAdmin || r.status === 'execucao';
+  const getUser = (id) => allUsers.find(u => u.id === id);
+
+  return <div style={{display:'flex',flexDirection:'column',gap:12}}>
+    <div style={{display:'flex',justifyContent:'flex-end'}}>
+      {canAdd && <Btn size="sm" onClick={openNew}>+ Nova Ação</Btn>}
+    </div>
+    {actions.length === 0 && <Card><div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'24px 0'}}>Nenhuma ação cadastrada</div></Card>}
+    {actions.map(ac => {
+      const resp = getUser(ac.responsible);
+      const canConclude = ac.status !== 'concluida' && ac.status !== 'cancelada' && (isAdmin || ac.responsible === currentUser.id);
+      const late = ac.dueDate && ac.status !== 'concluida' && new Date(ac.dueDate) < new Date();
+      return <Card key={ac.id} style={{borderLeft:`3px solid ${ac.status==='concluida'?C.success:late?C.danger:C.accent}`}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>{ac.description}</div>
+            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+              {resp && <span style={{fontSize:11,color:C.muted}}>👤 {resp.name}</span>}
+              {ac.dueDate && <span style={{fontSize:11,color:late?C.danger:C.muted}}>📅 {fmt(ac.dueDate)}{late?' (atrasada)':''}</span>}
+              <span style={{fontSize:11,color:ACTION_STATUS[ac.status]?.color||C.muted,fontWeight:600}}>{ACTION_STATUS[ac.status]?.label||ac.status}</span>
+            </div>
+            {ac.doneAt && <div style={{fontSize:11,color:C.success,marginTop:4}}>✓ Concluída por {ac.doneBy} em {fmtDT(ac.doneAt)}</div>}
+          </div>
+          {canConclude && <Btn size="sm" onClick={()=>conclude(ac)} variant="outline">Concluir ✎</Btn>}
+        </div>
+      </Card>;
+    })}
+    <Modal open={!!newAc} onClose={()=>setNewAc(false)} title="Nova Ação" width={460}>
+      <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <Textarea label="Descrição" value={form.description} onChange={v=>set('description',v)} required rows={2}/>
+        <Select label="Responsável" value={form.responsible} onChange={v=>set('responsible',v)} placeholder="Selecionar..." options={allUsers.filter(u=>u.active).map(u=>({value:String(u.id),label:u.name}))}/>
+        <Input label="Prazo" type="date" value={form.dueDate} onChange={v=>set('dueDate',v)}/>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <Btn variant="secondary" onClick={()=>setNewAc(false)}>Cancelar</Btn>
+          <Btn onClick={addAction} disabled={!form.description.trim()}>Adicionar</Btn>
+        </div>
+      </div>
+    </Modal>
+  </div>;
+}
+
+function LogTab({ r }) {
+  return <Card>
+    <Divider label="Histórico de Atividades"/>
+    <div style={{display:'flex',flexDirection:'column',gap:0,marginTop:10}}>
+      {(r.log||[]).length === 0 ? <div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'24px 0'}}>Nenhum histórico</div>
+      : [...(r.log||[])].reverse().map((l,i) => <div key={i} style={{display:'flex',gap:12,padding:'8px 0',borderBottom:i<(r.log||[]).length-1?`1px solid ${C.border}`:'none'}}>
+        <div style={{flexShrink:0,marginTop:2}}>
+          <Avatar name={l.by} size={24}/>
+        </div>
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:C.text}}>{l.by}</div>
+          <div style={{fontSize:12,color:C.muted}}>{l.text}</div>
+          <div style={{fontSize:11,color:C.dim,marginTop:2}}>{fmtDT(l.at)}</div>
+        </div>
+      </div>)}
+    </div>
+  </Card>;
+}
+
+// ─── ACTIONS PAGE ─────────────────────────────────────────────────────────────
+function ActionsPage({ records, currentUser, allUsers, onNav }) {
+  const isAdmin = ['admin','sgq'].includes(currentUser.role);
+  const myActions = records.flatMap(r => (r.actions||[]).filter(a => isAdmin || a.responsible === currentUser.id).map(a => ({ ...a, saId: r.id, saTitle: r.title })));
+  const pending = myActions.filter(a => a.status !== 'concluida' && a.status !== 'cancelada');
+  const done = myActions.filter(a => a.status === 'concluida');
+
+  const evalPending = isAdmin ? [] : records.filter(r => r.status === 'avaliacao' && (r.triage?.assignedAreas||[]).some(d => r.triage?.assignments?.[d] === currentUser.id && !r.evaluations?.[d]?.at));
+
+  return <div style={{padding:24}}>
+    <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4,marginBottom:20}}>Minhas Tarefas</div>
+    {evalPending.length > 0 && <><div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:10}}>Avaliações Pendentes</div>
+    <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:20}}>
+      {evalPending.map(r => {
+        const pendAreas = (r.triage?.assignedAreas||[]).filter(d => r.triage?.assignments?.[d] === currentUser.id && !r.evaluations?.[d]?.at);
+        return <Card key={r.id} style={{cursor:'pointer'}} onClick={()=>onNav('detail',r.id)}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{r.id}</div>
+              <div style={{fontSize:12,color:C.muted}}>{r.title}</div>
+              <div style={{fontSize:11,color:C.warning,marginTop:4}}>Áreas pendentes: {pendAreas.join(', ')}</div>
+            </div>
+            <span style={{fontSize:12,color:C.muted}}>→</span>
+          </div>
+        </Card>;
+      })}
+    </div></>}
+    <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:10}}>Ações Pendentes ({pending.length})</div>
+    {pending.length === 0 ? <Card><div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'20px 0'}}>Nenhuma ação pendente 🎉</div></Card>
+    : pending.map(a => {
+      const late = a.dueDate && new Date(a.dueDate) < new Date();
+      return <Card key={a.id} style={{marginBottom:8,borderLeft:`3px solid ${late?C.danger:C.accent}`,cursor:'pointer'}} onClick={()=>onNav('detail',a.saId)}>
+        <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:2}}>{a.saId}</div>
+        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{a.description}</div>
+        {a.dueDate && <div style={{fontSize:11,color:late?C.danger:C.muted,marginTop:4}}>📅 {fmt(a.dueDate)}{late?' — Atrasada':''}</div>}
+      </Card>;
+    })}
+    {done.length > 0 && <>
+      <div style={{fontWeight:700,fontSize:13,color:C.text,marginTop:20,marginBottom:10}}>Concluídas ({done.length})</div>
+      {done.slice(0,10).map(a => <Card key={a.id} style={{marginBottom:8,opacity:.7,borderLeft:`3px solid ${C.success}`}}>
+        <div style={{fontSize:12,color:C.muted}}>{a.saId} · {a.description}</div>
+        <div style={{fontSize:11,color:C.success,marginTop:2}}>✓ {fmtDT(a.doneAt)}</div>
+      </Card>)}
+    </>}
+  </div>;
+}
+
+// ─── USER MANAGER ─────────────────────────────────────────────────────────────
+function UserManager({ users, roles, currentUser, isSuperAdmin, onSaveUser, onRefresh }) {
+  const [sel, setSel] = useState(null);
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState({});
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState('users'); // users | roles
+  const [roleModal, setRoleModal] = useState(false);
+  const [roleForm, setRoleForm] = useState({});
+  const [q, setQ] = useState('');
+
+  const openNew = () => { setForm({ name:'', email:'', area:'', role:'geral', pwd:'', active:true, groupIds:[] }); setErr(''); setModal(true); setSel(null); };
+  const openEdit = (u) => { setForm({ ...u, pwd:'', newPwd:'' }); setErr(''); setModal(true); setSel(u); };
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const save = async () => {
+    if (!form.name?.trim()) { setErr('Nome obrigatório'); return; }
+    if (!form.email?.trim()) { setErr('E-mail obrigatório'); return; }
+    if (!sel && !form.pwd?.trim()) { setErr('Senha obrigatória para novo usuário'); return; }
+    setLoading(true); setErr('');
+    try {
+      if (sel) {
+        const body = { id: sel.id, name: form.name, email: form.email, area: form.area||'', role: form.role, active: form.active!==false, groupIds: form.groupIds||[], evalDepts: form.evalDepts||[] };
+        if (form.newPwd?.trim()) body.pwd = form.newPwd;
+        await apiPut('/api/users', body);
+      } else {
+        await apiPost('/api/users', { name: form.name, email: form.email, area: form.area||'', role: form.role||'geral', pwd: form.pwd, groupIds: form.groupIds||[], evalDepts: form.evalDepts||[] });
+      }
+      await onRefresh();
+      setModal(false);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const filtered = users.filter(u => { if (!q) return true; const l = q.toLowerCase(); return u.name.toLowerCase().includes(l)||u.email.toLowerCase().includes(l); });
+
+  const ALL_PERMS = ['sa.criar','sa.triagem','sa.avaliar','sa.aprovar','sa.concluir','admin.users','admin.grupos','admin.audit'];
+
+  return <div style={{padding:24}}>
+    <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4,marginBottom:20}}>Administração</div>
+    <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
+      {['users','roles'].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:'8px 16px',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:tab===t?700:500,color:tab===t?C.accent:C.muted,borderBottom:tab===t?`2px solid ${C.accent}`:'2px solid transparent'}}>{t==='users'?`Usuários (${users.length})`:`Grupos (${(roles||[]).length})`}</button>)}
+    </div>
+    {tab === 'users' && <>
+      <div style={{display:'flex',gap:10,marginBottom:14}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Buscar..." style={{flex:1,padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,outline:'none'}}/>
+        <Btn onClick={openNew}>+ Novo Usuário</Btn>
+      </div>
+      <Card style={{padding:0,overflow:'hidden'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:C.bg}}>
+            {['Nome','E-mail','Área','Perfil','Status','Grupos',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,borderBottom:`1px solid ${C.border}`}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{filtered.map(u=><tr key={u.id} style={{cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}><div style={{display:'flex',alignItems:'center',gap:8}}><Avatar name={u.name} size={28}/><span style={{fontSize:13,fontWeight:600,color:C.text}}>{u.name}</span></div></td>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>{u.email}</td>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>{u.area||'—'}</td>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:11,fontWeight:600,color:u.role==='admin'?C.danger:u.role==='sgq'?C.accent:C.muted,background:u.role==='admin'?C.danger+'10':u.role==='sgq'?C.accent+'10':C.bg,padding:'2px 8px',borderRadius:20}}>{u.role}</span></td>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:11,fontWeight:600,color:u.active?C.success:C.danger}}>{u.active?'Ativo':'Inativo'}</span></td>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>{(u.groups||[]).map(g=>g.name).join(', ')||'—'}</td>
+            <td style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}><Btn size="sm" variant="ghost" onClick={()=>openEdit(u)}>Editar</Btn></td>
+          </tr>)}</tbody>
+        </table>
+      </Card>
+    </>}
+    {tab === 'roles' && <RolesManager roles={roles||[]} currentUser={currentUser} isSuperAdmin={isSuperAdmin} allPerms={ALL_PERMS} onRefresh={onRefresh}/>}
+    <Modal open={modal} onClose={()=>setModal(false)} title={sel?'Editar Usuário':'Novo Usuário'} width={520}>
+      <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{gridColumn:'1/-1'}}><Input label="Nome" value={form.name} onChange={v=>set('name',v)} required/></div>
+          <Input label="E-mail" type="email" value={form.email} onChange={v=>set('email',v)} required/>
+          <Input label="Área / Departamento" value={form.area} onChange={v=>set('area',v)}/>
+          <Select label="Perfil" value={form.role} onChange={v=>set('role',v)} options={[{value:'geral',label:'Geral'},{value:'sgq',label:'SGQ'},{value:'admin',label:'Admin'}]}/>
+          <Select label="Status" value={String(form.active!==false)} onChange={v=>set('active',v==='true')} options={[{value:'true',label:'Ativo'},{value:'false',label:'Inativo'}]}/>
+          {!sel && <div style={{gridColumn:'1/-1'}}><Input label="Senha" type="password" value={form.pwd} onChange={v=>set('pwd',v)} required/></div>}
+          {sel && <div style={{gridColumn:'1/-1'}}><Input label="Nova Senha (deixe em branco para não alterar)" type="password" value={form.newPwd||''} onChange={v=>set('newPwd',v)}/></div>}
+        </div>
+        {err && <div style={{fontSize:12,color:C.danger,background:'#FEF2F2',padding:'8px 12px',borderRadius:8}}>{err}</div>}
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
+          <Btn onClick={save} disabled={loading}>{loading?'Salvando...':'Salvar'}</Btn>
+        </div>
+      </div>
+    </Modal>
+  </div>;
+}
+
+function RolesManager({ roles, currentUser, isSuperAdmin, allPerms, onRefresh }) {
+  const [modal, setModal] = useState(false);
+  const [sel, setSel] = useState(null);
+  const [form, setForm] = useState({ name:'', description:'', permissions:[] });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const togglePerm = (p) => set('permissions', form.permissions.includes(p) ? form.permissions.filter(x=>x!==p) : [...form.permissions, p]);
+
+  const openNew = () => { setForm({ name:'', description:'', permissions:[] }); setSel(null); setErr(''); setModal(true); };
+  const openEdit = (r) => { setForm({ name:r.name, description:r.description||'', permissions:r.permissions||[] }); setSel(r); setErr(''); setModal(true); };
+
+  const save = async () => {
+    if (!form.name.trim()) { setErr('Nome obrigatório'); return; }
+    setLoading(true); setErr('');
+    try {
+      if (sel) await apiPut('/api/users?_route=roles', { id: sel.id, ...form });
+      else await apiPost('/api/users?_route=roles', form);
+      await onRefresh();
+      setModal(false);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const del = async (r) => {
+    if (!window.confirm(`Excluir grupo "${r.name}"?`)) return;
+    try { await apiDel('/api/users?_route=roles', { id: r.id }); await onRefresh(); }
+    catch(e) { alert(e.message); }
+  };
+
+  return <div>
+    <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}><Btn onClick={openNew}>+ Novo Grupo</Btn></div>
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {roles.map(r => <Card key={r.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.name} {r.is_system&&<span style={{fontSize:10,color:C.muted,background:C.bg,padding:'1px 6px',borderRadius:20,marginLeft:4}}>sistema</span>}</div>
+          {r.description && <div style={{fontSize:12,color:C.muted,marginTop:2}}>{r.description}</div>}
+          <div style={{fontSize:11,color:C.dim,marginTop:4}}>{(r.permissions||[]).join(', ')||'Sem permissões'}</div>
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          <Btn size="sm" variant="ghost" onClick={()=>openEdit(r)}>Editar</Btn>
+          {!r.is_system && isSuperAdmin && <Btn size="sm" variant="ghost" onClick={()=>del(r)} style={{color:C.danger}}>Excluir</Btn>}
+        </div>
+      </Card>)}
+    </div>
+    <Modal open={modal} onClose={()=>setModal(false)} title={sel?'Editar Grupo':'Novo Grupo'} width={500}>
+      <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <Input label="Nome" value={form.name} onChange={v=>set('name',v)} required disabled={sel?.is_system}/>
+        <Input label="Descrição" value={form.description} onChange={v=>set('description',v)}/>
+        <div>
+          <label style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:8}}>Permissões</label>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {allPerms.map(p => { const sel = form.permissions.includes(p); return <button key={p} onClick={()=>togglePerm(p)} style={{padding:'4px 12px',borderRadius:20,border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.accent+'10':'transparent',fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.muted,cursor:'pointer'}}>{p}</button>; })}
+          </div>
+        </div>
+        {err && <div style={{fontSize:12,color:C.danger,background:'#FEF2F2',padding:'8px 12px',borderRadius:8}}>{err}</div>}
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
+          <Btn onClick={save} disabled={loading}>{loading?'Salvando...':'Salvar'}</Btn>
+        </div>
+      </div>
+    </Modal>
+  </div>;
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+function AuditLog({ sysLog, records }) {
+  const TYPE_C = { usuarios:C.accent, config:C.purple, criacao:C.success, sistema:C.muted };
+  return <div style={{padding:24}}>
+    <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4,marginBottom:20}}>Auditoria</div>
+    <Card style={{padding:0,overflow:'hidden'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr style={{background:C.bg}}>
+          {['Data/Hora','Usuário','Tipo','Evento','Detalhe'].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,borderBottom:`1px solid ${C.border}`}}>{h}</th>)}
+        </tr></thead>
+        <tbody>{sysLog.length===0?<tr><td colSpan={5} style={{padding:'24px',textAlign:'center',color:C.dim,fontSize:13}}>Nenhum registro de auditoria</td></tr>
+        :sysLog.slice(0,200).map((l,i)=><tr key={i} style={{transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+          <td style={{padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>{fmtDT(l.at)}</td>
+          <td style={{padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,fontWeight:600,color:C.text}}>{l.by}</td>
+          <td style={{padding:'9px 14px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10,fontWeight:700,color:TYPE_C[l.type]||C.muted,textTransform:'uppercase',letterSpacing:.5}}>{l.type}</span></td>
+          <td style={{padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.text}}>{l.event}</td>
+          <td style={{padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>{l.detail}</td>
+        </tr>)}
+        </tbody>
+      </table>
+    </Card>
+  </div>;
+}
+
+// ─── INDICATORS ───────────────────────────────────────────────────────────────
+function Indicators({ records }) {
+  const total = records.length;
+  const byStatus = Object.entries(STATUS_CONFIG).map(([k,v]) => ({ label: v.label, count: records.filter(r=>r.status===k).length, color: v.color }));
+  const byType = SA_TYPES.map(t => ({ label: t, count: records.filter(r=>r.type===t).length }));
+  const byCrit = SA_CRITS.map(c => { const cc = { 'Baixa':C.success,'Média':C.warning,'Alta':'#EA580C','Crítica':C.danger }; return { label: c, count: records.filter(r=>r.criticality===c).length, color: cc[c] }; });
+  const maxStatus = Math.max(1, ...byStatus.map(x=>x.count));
+  const maxType = Math.max(1, ...byType.map(x=>x.count));
+
+  return <div style={{padding:24}}>
+    <div style={{fontSize:20,fontWeight:800,color:C.text,letterSpacing:-.4,marginBottom:20}}>Indicadores</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:14}}>Por Status</div>
+        {byStatus.filter(x=>x.count>0).map(x=><div key={x.label} style={{marginBottom:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+            <span style={{fontSize:12,color:C.muted}}>{x.label}</span>
+            <span style={{fontSize:12,fontWeight:700,color:x.color}}>{x.count}</span>
+          </div>
+          <div style={{height:6,borderRadius:4,background:C.border}}><div style={{height:'100%',borderRadius:4,background:x.color,width:`${(x.count/maxStatus)*100}%`,transition:'width .5s'}}/></div>
+        </div>)}
+        {byStatus.every(x=>x.count===0) && <div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'16px 0'}}>Sem dados</div>}
+      </Card>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:14}}>Por Tipo</div>
+        {byType.filter(x=>x.count>0).map(x=><div key={x.label} style={{marginBottom:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+            <span style={{fontSize:12,color:C.muted}}>{x.label}</span>
+            <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{x.count}</span>
+          </div>
+          <div style={{height:6,borderRadius:4,background:C.border}}><div style={{height:'100%',borderRadius:4,background:C.accent,width:`${(x.count/maxType)*100}%`,transition:'width .5s'}}/></div>
+        </div>)}
+        {byType.every(x=>x.count===0) && <div style={{fontSize:13,color:C.dim,textAlign:'center',padding:'16px 0'}}>Sem dados</div>}
+      </Card>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:14}}>Por Criticidade</div>
+        <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+          {byCrit.map(x=><div key={x.label} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+            <div style={{fontSize:28,fontWeight:800,color:x.color}}>{x.count}</div>
+            <div style={{fontSize:11,color:C.muted,fontWeight:600}}>{x.label}</div>
+          </div>)}
+        </div>
+      </Card>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,color:C.text,marginBottom:14}}>Resumo Geral</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <Row label="Total de SAs" value={total}/>
+          <Row label="Em andamento" value={records.filter(r=>!['concluida','cancelada'].includes(r.status)).length}/>
+          <Row label="Concluídas" value={records.filter(r=>r.status==='concluida').length}/>
+          <Row label="Canceladas" value={records.filter(r=>r.status==='cancelada').length}/>
+          <Row label="Com ações" value={records.filter(r=>(r.actions||[]).length>0).length}/>
+        </div>
+      </Card>
+    </div>
+  </div>;
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [loggedIn, setLoggedIn] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('dashboard');
+  const [selId, setSel] = useState(null);
+  const [records, setRecords] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [matrix, setMatrix] = useState(null);
+  const [deptQ, setDeptQ] = useState(null);
+  const [sysLog, setSysLog] = useState([]);
 
   useEffect(() => {
-    if (!user) return;
-    ['ro','nc','riacp','sa'].forEach(mod => {
-      api(`/api/${mod}`).then(d => setRecords(r => ({...r,[mod]:d}))).catch(() => {});
-    });
-  }, [user]);
+    const token = sessionStorage.getItem('sgq_token');
+    const userStr = sessionStorage.getItem('sgq_user');
+    if (token && userStr) { try { setLoggedIn(JSON.parse(userStr)); } catch {} }
+    setLoading(false);
+  }, []);
 
-  if (!user) return <LoginPage onLogin={u => { setUser(u); setPage('dashboard'); }} />;
+  useEffect(() => { if (loggedIn) loadAll(); }, [loggedIn]);
+
+  const loadAll = async () => {
+    const [recs, us, rls] = await Promise.all([
+      apiGet('/api/records?module=sa').catch(()=>null),
+      apiGet('/api/users').catch(()=>null),
+      apiGet('/api/users?_route=roles').catch(()=>null),
+    ]);
+    if (recs) setRecords(recs);
+    if (us) setUsers(us);
+    if (rls) setRoles(rls);
+    try { const mx = await apiGet('/api/config/matrix'); if (mx) setMatrix(mx); } catch {}
+    try { const dq = await apiGet('/api/config/deptq'); if (dq) setDeptQ(dq); } catch {}
+    try { const sl = await apiGet('/api/config/syslog'); if (sl && Array.isArray(sl)) setSysLog(sl); } catch {}
+  };
+
+  const login = async (email, password) => {
+    const data = await apiPost('/api/auth?_route=login', { email, password });
+    if (!data) return 'Erro de conexão';
+    sessionStorage.setItem('sgq_token', data.token);
+    sessionStorage.setItem('sgq_user', JSON.stringify(data.user));
+    setLoggedIn(data.user);
+    return null;
+  };
 
   const logout = () => {
     sessionStorage.removeItem('sgq_token');
     sessionStorage.removeItem('sgq_user');
-    setUser(null);
+    setLoggedIn(null); setView('dashboard');
   };
 
-  const navSections = [
-    { label:'Principal', items:[{ key:'dashboard', label:'Dashboard', icon:'home' }] },
-    { label:'Módulos SGQ', items: MODULES },
-    { label:'Administração', items:[
-      { key:'users', label:'Usuários', icon:'users' },
-      { key:'groups', label:'Grupos de Acesso', icon:'shield' },
-      { key:'audit', label:'Auditoria', icon:'log' },
-    ]},
+  const addLog = async (type, event, detail) => {
+    const e = { at: new Date().toISOString(), by: loggedIn.name, type, event, detail: detail||'' };
+    setSysLog(p => [e, ...p]);
+    try { await apiPut('/api/config?key=syslog', e); } catch {}
+  };
+
+  const updateRecord = async (rec) => {
+    const exists = records.find(r => r.id === rec.id);
+    if (exists) await apiPut(`/api/records?module=sa&id=${encodeURIComponent(rec.id)}`, rec);
+    else await apiPost('/api/records?module=sa', rec);
+    setRecords(p => exists ? p.map(r => r.id === rec.id ? rec : r) : [rec, ...p]);
+  };
+
+  const createRecord = async (rec) => {
+    const data = await apiPost('/api/records?module=sa', rec);
+    const id = data?.code || rec.id;
+    const created = { ...rec, id };
+    setRecords(p => [created, ...p]);
+    addLog('criacao', 'SA criada', `${id} — ${rec.title}`);
+    nav('detail', id);
+  };
+
+  const nav = (v, id) => { setView(v); if (id !== undefined) setSel(id); };
+  const isAdmin = loggedIn && ['admin','sgq'].includes(loggedIn.role);
+  const isSuperAdmin = loggedIn && loggedIn.role === 'admin';
+  const selected = records.find(r => r.id === selId);
+
+  const myPendAcs = loggedIn ? records.flatMap(r=>(r.actions||[]).filter(a=>a.responsible===loggedIn.id&&a.status!=='concluida'&&a.status!=='cancelada')).length : 0;
+  const myPendEvals = loggedIn ? records.filter(r=>r.status==='avaliacao'&&(r.triage?.assignedAreas||[]).some(d=>r.triage?.assignments?.[d]===loggedIn.id&&!r.evaluations?.[d]?.at)).length : 0;
+
+  const navItems = [
+    { id:'dashboard', label:'Início', icon:'🏠', badge:0 },
+    { id:'changes', label:'Controles SA', icon:'📋', badge:0 },
+    { id:'acoes', label:'Tarefas', icon:'✅', badge:(myPendAcs+myPendEvals)||0 },
+    { id:'indicators', label:'Indicadores', icon:'📊', badge:0 },
+    ...(isAdmin ? [
+      { divider:true, id:'adm-div', label:'Administração' },
+      { id:'users', label:'Usuários', icon:'👥', badge:0 },
+      { id:'log', label:'Auditoria', icon:'🔍', badge:0 },
+    ] : []),
   ];
 
-  const currentMod = MODULES.find(m => m.key === page);
-  const pageTitle = currentMod?.label || { dashboard:'Dashboard', users:'Usuários', groups:'Grupos de Acesso', audit:'Auditoria' }[page] || '';
+  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:C.muted,fontSize:14}}>Carregando...</div>;
+  if (!loggedIn) return <LoginScreen onLogin={login}/>;
 
-  return (
-    <div className="app">
-      {/* NAV */}
-      <nav className="nav">
-        <div className="nav-logo">
-          <div className="nav-logo-mark">
-            <div className="nav-logo-icon"><Icon name="logo" size={16} color="#fff"/></div>
-            <div>
-              <div className="nav-logo-name">Vydence Medical</div>
-              <div className="nav-logo-sub">SGQ v1.0</div>
-            </div>
-          </div>
-        </div>
-
-        {navSections.map(sec => (
-          <div className="nav-section" key={sec.label}>
-            <div className="nav-section-label">{sec.label}</div>
-            {sec.items.map(item => (
-              <div key={item.key} className={`nav-item ${page===item.key?'active':''}`} onClick={() => setPage(item.key)}>
-                <Icon name={item.icon} size={15}/>
-                {item.label}
-              </div>
-            ))}
-          </div>
-        ))}
-
-        <div className="nav-footer">
-          <div className="nav-user" onClick={logout} title="Sair">
-            <div className="nav-avatar">{initials(user.name)}</div>
-            <div className="nav-user-info">
-              <div className="nav-user-name">{user.name}</div>
-              <div className="nav-user-role">{user.is_admin ? 'Administrador' : 'Usuário'}</div>
-            </div>
-            <Icon name="logout" size={14} color="var(--text-3)"/>
-          </div>
-        </div>
-      </nav>
-
-      {/* MAIN */}
-      <div className="main">
-        <div className="topbar">
-          <div className="topbar-title">{pageTitle}</div>
-          <div className="topbar-actions">
-            <button className="btn btn-ghost btn-icon"><Icon name="bell" size={16}/></button>
-            <div style={{width:'1px',height:'20px',background:'var(--border)'}}/>
-            <div style={{fontSize:'13px',color:'var(--text-2)'}}>{user.email}</div>
-          </div>
-        </div>
-
-        <div className="content">
-          {page === 'dashboard' && <Dashboard user={user} records={records}/>}
-          {MODULES.map(m => page === m.key && <ModuleView key={m.key} mod={m} user={user} modKey={m.key} records={records[m.key]||[]}/>)}
-          {page === 'users'  && <UsersPage user={user}/>}
-          {page === 'groups' && <GroupsPage user={user}/>}
-          {page === 'audit'  && <AuditPage/>}
-        </div>
-      </div>
+  return <div style={{display:'flex',minHeight:'100vh',background:C.bg}}>
+    <Sidebar view={view} setView={v=>nav(v)} loggedIn={loggedIn} logout={logout} navItems={navItems}/>
+    <div style={{marginLeft:220,flex:1,minHeight:'100vh',overflowY:'auto'}}>
+      {view==='dashboard'  && <Dashboard records={records} currentUser={loggedIn} allUsers={users} onNav={nav}/>}
+      {view==='changes'    && <SAList records={records} currentUser={loggedIn} allUsers={users} onNav={nav} onNew={()=>nav('new')}/>}
+      {view==='new'        && <NewSAForm currentUser={loggedIn} matrix={matrix} onSave={createRecord} onCancel={()=>nav('changes')}/>}
+      {view==='detail' && selId && <SADetail record={selected || {id:selId,title:'Carregando...',status:'aberta',log:[],actions:[],evaluations:{}}} allUsers={users} matrix={matrix} deptQuestions={deptQ} currentUser={loggedIn} onBack={()=>nav('changes')} onUpdate={async (changes)=>{ await updateRecord({ ...(records.find(r=>r.id===selId)||{}), ...changes, id:selId }); }}/>}
+      {view==='acoes'      && <ActionsPage records={records} currentUser={loggedIn} allUsers={users} onNav={nav}/>}
+      {view==='indicators' && <Indicators records={records}/>}
+      {view==='users'      && isAdmin && <UserManager users={users} roles={roles} currentUser={loggedIn} isSuperAdmin={isSuperAdmin} onSaveUser={updateRecord} onRefresh={loadAll}/>}
+      {view==='log'        && isAdmin && <AuditLog sysLog={sysLog} records={records}/>}
     </div>
-  );
-};
+  </div>;
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
