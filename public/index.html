@@ -3214,7 +3214,7 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     </div>
 
     {/* Cards de módulos */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:16}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
       {[
         {key:'ro', label:'Ocorrências', pend:pendRO, tags:[
           roParaAnalisar.length>0&&{label:roParaAnalisar.length+" analisar",color:C.warning},
@@ -3225,7 +3225,8 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
           analises.length>0&&{label:analises.length+" avaliar",color:C.accent},
           acoes.length>0&&{label:acoes.length+" ações",color:C.success},
         ].filter(Boolean)},
-        {key:'nc', label:'Não Conformidade', pend:0, tags:[], disabled:true},
+        {key:'nc',    label:'Não Conformidade', pend:0, tags:[], disabled:true},
+        {key:'riacp', label:'RIACP',             pend:0, tags:[], disabled:true},
       ].map(mod=>(
         <div key={mod.key}
           onClick={()=>!mod.disabled&&setActiveModule(activeModule===mod.key?null:mod.key)}
@@ -3314,6 +3315,7 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     </div>}
 
 
+    {(activeModule==='cm'||activeModule===null)&&<>
     {total===0&&pendExt.length===0&&<div style={{...Sg.card({textAlign:"center",padding:48})}}>
       <div style={{fontSize:32,marginBottom:8}}>✓</div>
       <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>Tudo em dia!</div>
@@ -3540,6 +3542,7 @@ function ResizableTable({cols:initialCols,headers,rows,onRowClick,C,storageKey})
         </div>
       ))}
       {rows.length===0&&<div style={{textAlign:"center",padding:28,color:C.muted,fontSize:13}}>Nenhum registro encontrado.</div>}
+    </>
     </div>
   </div>;
 }
