@@ -4115,58 +4115,212 @@ function ProdutoAutocomplete({value, onChange, onSelect, C, Sg, placeholder}){
 }
 
 // ── Linha de item (produto afetado) ─────────────────────────────
-function ItemRow({item, idx, onChange, onRemove, C, Sg}){
-  return <tr>
-    <td style={{padding:"4px 6px",width:140}}>
-      <ProdutoAutocomplete
-        value={item.codigo||""}
-        onChange={v=>onChange({...item,codigo:v,descricao:item.descricao})}
-        onSelect={p=>onChange({...item,codigo:p.codigo,descricao:p.descricao})}
-        C={C} Sg={Sg} placeholder="Código..."/>
-    </td>
-    <td style={{padding:"4px 6px"}}>
-      <input style={{...Sg.input(),fontSize:12}} value={item.descricao||""} onChange={e=>onChange({...item,descricao:e.target.value})} placeholder="Descrição (auto ou manual)"/>
-    </td>
-    <td style={{padding:"4px 6px",width:110}}>
-      <input style={{...Sg.input(),fontSize:12}} value={item.lote||""} onChange={e=>onChange({...item,lote:e.target.value})} placeholder="Lote"/>
-    </td>
-    <td style={{padding:"4px 6px",width:80}}>
-      <input style={{...Sg.input(),fontSize:12}} type="number" min="0" value={item.qtdNC||""} onChange={e=>onChange({...item,qtdNC:e.target.value})} placeholder="0"/>
-    </td>
-    <td style={{padding:"4px 6px",width:28,textAlign:"center"}}>
-      <button onClick={onRemove} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:16,padding:0,lineHeight:1}}>×</button>
-    </td>
-  </tr>;
+// ── Textarea com altura automática ───────────────────────────────
+function AutoTextarea({value, onChange, placeholder, style, ...rest}){
+  const ref = React.useRef(null);
+  const resize = () => {
+    const t = ref.current;
+    if(!t) return;
+    t.style.height = 'auto';
+    t.style.height = t.scrollHeight + 'px';
+  };
+  React.useEffect(()=>{ resize(); }, [value]);
+  return <textarea
+    ref={ref}
+    rows={1}
+    value={value||""}
+    onChange={e=>{ onChange(e); resize(); }}
+    placeholder={placeholder}
+    style={{
+      width:"100%", fontSize:12, padding:"7px 8px", resize:"none",
+      fontFamily:"inherit", lineHeight:1.4, overflow:"hidden",
+      boxSizing:"border-box", display:"block",
+      ...(style||{})
+    }}
+    {...rest}
+  />;
+}
+
+// ── Opções de disposição na abertura (operador) ──────────────────
+const RO_DISPOSICOES_ABERTURA = [
+  {v:"", label:"—"},
+  {v:"correcao", label:"Correção"},
+  {v:"concessao", label:"Concessão"},
+  {v:"segregar", label:"Segregar"}
+];
+
+function ItemRow({item, idx, onChange, onRemove, C, Sg, allUsers}){
+  const disp = item.disposicao || "";
+  const upd = (patch) => onChange({...item, ...patch});
+
+  const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
+  const inputStyle = {...Sg.input(), fontSize:12, height:32, boxSizing:"border-box"};
+  const selectStyle = {...Sg.input(), fontSize:12, minHeight:32, height:"auto", boxSizing:"border-box", padding:"4px 8px"};
+  const taStyle = {border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text};
+
+  return <React.Fragment>
+    <tr>
+      <td style={{...cellMid, width:140}}>
+        <ProdutoAutocomplete
+          value={item.codigo||""}
+          onChange={v=>upd({codigo:v})}
+          onSelect={p=>upd({codigo:p.codigo, descricao:p.descricao})}
+          C={C} Sg={Sg} placeholder="Código..."/>
+      </td>
+      <td style={cellMid}>
+        <AutoTextarea
+          value={item.descricao||""}
+          onChange={e=>upd({descricao:e.target.value})}
+          placeholder="Descrição"
+          style={taStyle}
+        />
+      </td>
+      <td style={{...cellMid, width:110}}>
+        <input style={inputStyle} value={item.lote||""} onChange={e=>upd({lote:e.target.value})} placeholder="Lote"/>
+      </td>
+      <td style={{...cellMid, width:60}}>
+        <input style={inputStyle} type="number" min="0" value={item.qtdNC||""} onChange={e=>upd({qtdNC:e.target.value})} placeholder="0"/>
+      </td>
+      <td style={{...cellMid, width:140}}>
+        <select style={selectStyle} value={disp} onChange={e=>upd({disposicao:e.target.value})}>
+          {RO_DISPOSICOES_ABERTURA.map(d=><option key={d.v} value={d.v}>{d.label}</option>)}
+        </select>
+      </td>
+      <td style={{...cellMid, width:28, textAlign:"center"}}>
+        <button onClick={onRemove} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:16,padding:0,lineHeight:1}}>×</button>
+      </td>
+    </tr>
+    {disp==="correcao" && <tr>
+      <td colSpan={6} style={{padding:0}}>
+        <div style={{padding:"8px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10}}>
+          <div style={{display:"flex", gap:16, alignItems:"flex-end"}}>
+            <div style={{flex:1, minWidth:0}}>
+              <p style={{margin:"0 0 4px", fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4}}>O que foi feito</p>
+              <AutoTextarea
+                value={item.acaoCorrecao||""}
+                onChange={e=>upd({acaoCorrecao:e.target.value})}
+                placeholder="Descreva a correção realizada"
+                style={taStyle}
+              />
+            </div>
+            <label style={{display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:C.muted, cursor:"pointer", whiteSpace:"nowrap", paddingBottom:7}}>
+              <input type="checkbox" checked={!!item.solicitarReposicao} onChange={e=>upd({solicitarReposicao:e.target.checked})}/>
+              Solicitar reposição
+            </label>
+          </div>
+        </div>
+      </td>
+    </tr>}
+    {disp==="concessao" && <tr>
+      <td colSpan={6} style={{padding:0}}>
+        <div style={{padding:"8px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10}}>
+          <div style={{display:"flex", gap:16, alignItems:"flex-end"}}>
+            <div style={{flex:1, minWidth:0}}>
+              <p style={{margin:"0 0 4px", fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4}}>Justificativa</p>
+              <AutoTextarea
+                value={item.justificativaConcessao||""}
+                onChange={e=>upd({justificativaConcessao:e.target.value})}
+                placeholder="Por que liberar com concessão?"
+                style={taStyle}
+              />
+            </div>
+            <div style={{width:200}}>
+              <p style={{margin:"0 0 4px", fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4}}>Aprovador</p>
+              <select style={selectStyle} value={item.aprovadorConcessao||""} onChange={e=>upd({aprovadorConcessao:e.target.value})}>
+                <option value="">—</option>
+                {(allUsers||[]).filter(u=>u.active!==false).map(u=>(
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>}
+    {disp==="segregar" && <tr>
+      <td colSpan={6} style={{padding:0}}>
+        <div style={{padding:"8px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, display:"flex", alignItems:"center", gap:16}}>
+          <span style={{fontSize:11, color:C.muted}}>Qualidade decidirá o destino.</span>
+          <label style={{display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:C.muted, cursor:"pointer", marginLeft:"auto"}}>
+            <input type="checkbox" checked={item.solicitarReposicao!==false} onChange={e=>upd({solicitarReposicao:e.target.checked})}/>
+            Solicitar reposição
+          </label>
+        </div>
+      </td>
+    </tr>}
+  </React.Fragment>;
+}
+
+// ── Linha read-only com mesma estrutura expandida ────────────────
+function ItemRowReadOnly({item, C}){
+  const disp = item.disposicao||"";
+  const dispLabel = (RO_DISPOSICOES_ABERTURA.find(d=>d.v===disp)||{}).label || "—";
+  const cellRO = {padding:"8px 8px", fontSize:12, verticalAlign:"middle"};
+  return <React.Fragment>
+    <tr style={{borderBottom:"1px solid "+C.border}}>
+      <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
+      <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
+      <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
+      <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
+      <td style={{...cellRO, color:C.text, width:140}}>{dispLabel}</td>
+      <td style={{width:28}}/>
+    </tr>
+    {disp==="correcao" && (item.acaoCorrecao || item.solicitarReposicao) && <tr>
+      <td colSpan={6} style={{padding:0}}>
+        <div style={{padding:"6px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, fontSize:12, color:C.text}}>
+          {item.acaoCorrecao && <div><span style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginRight:6}}>O que foi feito:</span>{item.acaoCorrecao}</div>}
+          {item.solicitarReposicao && <div style={{marginTop:4, fontSize:11, color:C.muted}}>Reposição solicitada</div>}
+        </div>
+      </td>
+    </tr>}
+    {disp==="concessao" && (item.justificativaConcessao || item.aprovadorConcessao) && <tr>
+      <td colSpan={6} style={{padding:0}}>
+        <div style={{padding:"6px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, fontSize:12, color:C.text}}>
+          {item.justificativaConcessao && <div><span style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginRight:6}}>Justificativa:</span>{item.justificativaConcessao}</div>}
+          {item.aprovadorConcessao && <div style={{marginTop:4, fontSize:11, color:C.muted}}>Aprovador: {item.aprovadorConcessao}</div>}
+        </div>
+      </td>
+    </tr>}
+    {disp==="segregar" && <tr>
+      <td colSpan={6} style={{padding:0}}>
+        <div style={{padding:"6px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, fontSize:11, color:C.muted}}>
+          Aguardando decisão da qualidade. {item.solicitarReposicao!==false && "Reposição solicitada."}
+        </div>
+      </td>
+    </tr>}
+  </React.Fragment>;
 }
 
 // ── Tabela de itens dinâmica ─────────────────────────────────────
-function ItensTable({itens, onChange, readOnly, C, Sg}){
-  const addItem = () => onChange([...itens,{codigo:"",descricao:"",lote:"",qtdNC:""}]);
+function ItensTable({itens, onChange, readOnly, C, Sg, allUsers}){
+  const addItem = () => onChange([...itens,{codigo:"",descricao:"",lote:"",qtdNC:"",disposicao:""}]);
   const updItem = (i,v) => { const n=[...itens]; n[i]=v; onChange(n); };
   const remItem = i => onChange(itens.filter((_,j)=>j!==i));
 
   return <div>
-    <div style={{overflowX:"auto"}}>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+    <div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,tableLayout:"fixed"}}>
+        <colgroup>
+          <col style={{width:140}}/>
+          <col/>
+          <col style={{width:110}}/>
+          <col style={{width:60}}/>
+          <col style={{width:140}}/>
+          <col style={{width:28}}/>
+        </colgroup>
         <thead>
           <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
-            {["Código","Descrição","Lote","Qtd NC",""].map((h,i)=>(
-              <th key={i} style={{padding:"6px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>{h}</th>
+            {["Código","Descrição","Lote","Qtd","Disposição",""].map((h,i)=>(
+              <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {itens.length===0&&<tr><td colSpan={5} style={{padding:"12px 8px",color:C.muted,fontSize:12,textAlign:"center"}}>Nenhum item adicionado</td></tr>}
+          {itens.length===0&&<tr><td colSpan={6} style={{padding:"12px 8px",color:C.muted,fontSize:12,textAlign:"center"}}>Nenhum item adicionado</td></tr>}
           {itens.map((item,i)=>(
             readOnly
-              ? <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
-                  <td style={{padding:"6px 8px",fontWeight:700,color:C.accent,fontSize:12}}>{item.codigo||"—"}</td>
-                  <td style={{padding:"6px 8px",color:C.text,fontSize:12}}>{item.descricao||"—"}</td>
-                  <td style={{padding:"6px 8px",color:C.dim,fontSize:12}}>{item.lote||"—"}</td>
-                  <td style={{padding:"6px 8px",color:C.text,fontSize:12}}>{item.qtdNC||"—"}</td>
-                  <td/>
-                </tr>
-              : <ItemRow key={i} item={item} idx={i} onChange={v=>updItem(i,v)} onRemove={()=>remItem(i)} C={C} Sg={Sg}/>
+              ? <ItemRowReadOnly key={i} item={item} C={C}/>
+              : <ItemRow key={i} item={item} idx={i} onChange={v=>updItem(i,v)} onRemove={()=>remItem(i)} C={C} Sg={Sg} allUsers={allUsers}/>
           ))}
         </tbody>
       </table>
@@ -4251,7 +4405,7 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
 }
 
 // ── NewRO ────────────────────────────────────────────────────────
-function NewRO({currentUser, onSave, onCancel}){
+function NewRO({currentUser, allUsers, onSave, onCancel}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [f,setF]=useState({tipo:"",local:"",opChamado:"",descricao:"",classificacao:"",disposicao:""});
   const [itens,setItens]=useState([]);
@@ -4292,7 +4446,7 @@ function NewRO({currentUser, onSave, onCancel}){
       {/* Itens afetados — só mostra se tipo Produto */}
       {f.tipo==="Produto"&&<div style={{padding:12,background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
         <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Itens Afetados</div>
-        <ItensTable itens={itens} onChange={setItens} readOnly={false} C={C} Sg={Sg}/>
+        <ItensTable itens={itens} onChange={setItens} readOnly={false} C={C} Sg={Sg} allUsers={allUsers}/>
       </div>}
 
       {/* Classificação da ocorrência */}
@@ -4518,7 +4672,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
           }}>Salvar itens</button>
         </div>}
       </div>
-      <ItensTable itens={editingItens?itensEdit:(d.itens||[])} onChange={v=>{if(editingItens)setItensEdit(v);}} readOnly={!editingItens} C={C} Sg={Sg}/>
+      <ItensTable itens={editingItens?itensEdit:(d.itens||[])} onChange={v=>{if(editingItens)setItensEdit(v);}} readOnly={!editingItens} C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
 
     {/* Análise */}
@@ -6578,7 +6732,7 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
-      {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
+      {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
         const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[],attachments:atts||[]},log:[{at:now,by:loggedIn.name,type:"criacao",event:"RO aberta",detail:"Tipo: "+f.tipo+(itens&&itens.length?" | "+itens.length+" item(ns)":"")}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveRO(r);
