@@ -3337,7 +3337,7 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
       </div>
     </div>}
 
-    {(activeModule==='cm')&&<React.Fragment>
+    {(activeModule==='cm')&&<div>
     {total===0&&pendExt.length===0&&<div style={{...Sg.card({textAlign:"center",padding:48})}}>
       <div style={{fontSize:32,marginBottom:8}}>✓</div>
       <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>Tudo em dia!</div>
@@ -3564,7 +3564,7 @@ function ResizableTable({cols:initialCols,headers,rows,onRowClick,C,storageKey})
         </div>
       ))}
       {rows.length===0&&<div style={{textAlign:"center",padding:28,color:C.muted,fontSize:13}}>Nenhum registro encontrado.</div>}
-    </React.Fragment>
+    </div>}
     </div>
   </div>;
 }
