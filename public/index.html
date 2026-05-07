@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet"/>
-<title>SGQ - Controle de Mudancas</title>
+<title>Vydence — Plataforma SGQ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -29,8 +29,8 @@ const {useState,useEffect,useMemo,useRef}=React;
 // ================================================================
 // CHANGE v10 — CONSTANTS & SEED DATA
 // ================================================================
-const APP_VERSION = "10.3.9";
-const APP_DATE = "2026-03-11";
+const APP_VERSION = "1.0.0";
+const APP_DATE = "2026-05-07";
 
 // ── Permissões ─────────────────────────────────────────────
 const hasPermission = (user, perm) => {
@@ -546,8 +546,9 @@ function getPhaseDeadline(r){
   return <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
     <div style={{width:360,...Sg.card({padding:36,borderRadius:16})}}>
       <div style={{textAlign:"center",marginBottom:24}}>
-        <div style={{fontSize:20,fontWeight:900,color:C.accent}}>CHANGE</div>
-        <div style={{fontSize:13,color:C.text,marginTop:8}}>Redefinir senha</div>
+        <div style={{fontSize:18,fontWeight:700,color:C.accent,letterSpacing:1}}>VYDENCE</div>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,marginTop:2}}>PLATAFORMA SGQ</div>
+        <div style={{fontSize:13,color:C.text,marginTop:14}}>Redefinir senha</div>
       </div>
       {done?<div style={{textAlign:"center",color:C.accent,fontSize:14}}>Senha alterada com sucesso! <a href="/" style={{color:C.accent}}>Entrar</a></div>:<>
         <div style={{marginBottom:10}}><label style={Sg.lbl}>Nova senha</label><input type="password" style={Sg.input()} value={pwd} onChange={e=>setPwd(e.target.value)}/></div>
@@ -573,10 +574,11 @@ function Login({users,onLogin}){
   return <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
     <div style={{width:380,...Sg.card({padding:36,borderRadius:16})}}>
       <div style={{textAlign:"center",marginBottom:28}}>
-        <div style={{fontSize:24,fontWeight:900,letterSpacing:3,color:C.accent,marginBottom:3}}>CHANGE</div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <div style={{fontSize:22,fontWeight:700,letterSpacing:2,color:C.accent,marginBottom:4}}>VYDENCE</div>
+        <div style={{fontSize:11,color:C.text,letterSpacing:1.5,marginBottom:10}}>PLATAFORMA SGQ</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <div title="Dados atualizados automaticamente a cada 30s" className="refresh-dot" style={{width:7,height:7,borderRadius:"50%",background:C.success}}/>
-          <div style={{fontSize:9,color:C.muted,letterSpacing:2}}>GESTAO DE MUDANCAS v{APP_VERSION}</div>
+          <div style={{fontSize:9,color:C.muted,letterSpacing:1.5}}>SISTEMA DA GESTÃO DA QUALIDADE · v{APP_VERSION}</div>
         </div>
       </div>
       <div style={{marginBottom:12}}>
@@ -1863,7 +1865,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
       };
       return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         <button style={{...Sg.btn(),padding:"4px 10px",fontSize:12}} onClick={onBack}>← Voltar</button>
-        <span style={{fontSize:16,fontWeight:700,color:C.text,flex:1}}>Change Management</span>
+        <span style={{fontSize:16,fontWeight:700,color:C.text,flex:1}}>Controle de Mudanças</span>
         {isAdmin&&<div style={{position:"relative"}} ref={sgqRef}>
           <button style={{...Sg.btn("primary"),fontSize:12,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}} onClick={()=>setSgqOpen(o=>!o)}>
              Acoes SGQ <span style={{fontSize:10,opacity:.7}}>{sgqOpen?"▲":"▼"}</span>
@@ -6097,7 +6099,7 @@ const go=async()=>{
     {/* Version info */}
     <div style={{...Sg.card({marginTop:10,padding:"10px 14px"})}}>
       <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:.7}}>SOBRE O SISTEMA</div>
-      <div style={{fontSize:13,fontWeight:700,color:C.text}}>CHANGE — Gestao de Mudancas</div>
+      <div style={{fontSize:13,fontWeight:700,color:C.text}}>Vydence — Plataforma SGQ</div>
       <div style={{fontSize:11,color:C.muted,marginTop:2}}>Versao {APP_VERSION} | Release {APP_DATE}</div>
       <div style={{fontSize:10,color:C.muted,marginTop:1}}>Build validado e auditavel | Single-file HTML</div>
     </div>
