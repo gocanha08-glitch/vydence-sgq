@@ -3135,7 +3135,6 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
 
   const pendExt=isAdmin?requests.filter(r=>(r.deadlineExtensions||[]).some(e=>e.status==="pending")):[];
 
-  // Analises — prazo específico da área do avaliador
   const analises=[];
   requests.forEach(r=>{
     if(!(["avaliacao_areas","aprovacao_plano"].includes(r.status))||!r.triage)return;
@@ -3147,7 +3146,6 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     });
   });
 
-  // Acoes — só aparece no dashboard quando SA estiver em execucao
   const acoes=[];
   requests.forEach(r=>{
     if(r.status!=="execucao")return;
@@ -3155,13 +3153,8 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
       acoes.push({r,a,dl:a.deadline,urg:urgCls(a.deadline,a.status)});
     });
   });
-  
-  // SAs aguardando aprovacao do plano (responsavel pelo plano ou admin)
-  const planosAguardando=requests.filter(r=>
-    r.status==="montagem_plano"&&
-    parseInt(r.planResponsible)===parseInt(currentUser.id)
-  );
 
+  const planosAguardando=requests.filter(r=>r.status==="montagem_plano"&&parseInt(r.planResponsible)===parseInt(currentUser.id));
   const minhasSAs=requests.filter(r=>r.createdBy===currentUser.id&&!["concluida","cancelada"].includes(r.status));
   const O={overdue:0,today:1,soon:2,normal:3};
   const sortU=arr=>[...arr].sort((a,b)=>(O[a.urg||"normal"]||3)-(O[b.urg||"normal"]||3));
@@ -3176,32 +3169,53 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     </div>;
   };
 
-  const Th=({cols,labels})=>(
-    <div style={{display:"grid",gridTemplateColumns:cols,background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
-      {labels.map(h=><div key={h} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6}}>{h}</div>)}
-    </div>
-  );
-  const Row=({cols,children,i,onClick})=>(
-    <div onClick={onClick} style={{display:"grid",gridTemplateColumns:cols,padding:"7px 11px",borderBottom:"1px solid "+C.border+"22",gap:8,alignItems:"center",background:i%2===0?"transparent":C.surface+"44",cursor:onClick?"pointer":"default"}}
-      onMouseEnter={e=>{if(onClick)e.currentTarget.style.background=C.accent+"0D";}}
-      onMouseLeave={e=>{e.currentTarget.style.background=i%2===0?"transparent":C.surface+"44";}}>
-      {children}
-    </div>
-  );
-
   const total=aprovSGQ.length+analises.length+acoes.length+minhasSAs.length;
 
-  // ── Pendências RO ────────────────────────────────────────────
-  const canAnalyzeRO = hasPerm(currentUser,'ro.analisar');
-  const canCloseRO   = hasPerm(currentUser,'ro.fechar');
-  const roParaAnalisar  = canAnalyzeRO ? (roRecs||[]).filter(r=>r.status==='aberta'||r.status==='em_analise') : [];
-  const roParaConcluir  = canCloseRO   ? (roRecs||[]).filter(r=>r.status==='aguardando_conclusao') : [];
-  const pendRO = roParaAnalisar.length + roParaConcluir.length;
-  const pendCMTotal = aprovSGQ.length + analises.length + acoes.length;
+  const canAnalyzeRO=hasPerm(currentUser,'ro.analisar');
+  const canCloseRO=hasPerm(currentUser,'ro.fechar');
+  const roParaAnalisar=canAnalyzeRO?(roRecs||[]).filter(r=>r.status==='aberta'||r.status==='em_analise'):[];
+  const roParaConcluir=canCloseRO?(roRecs||[]).filter(r=>r.status==='aguardando_conclusao'):[];
+  const pendRO=roParaAnalisar.length+roParaConcluir.length;
+  const pendCMTotal=aprovSGQ.length+analises.length+acoes.length;
+  const daysSince=d=>d?Math.floor((Date.now()-new Date(d))/(1000*60*60*24)):null;
 
-  const daysSince = d => d ? Math.floor((Date.now()-new Date(d))/(1000*60*60*24)) : null;
+  const [activeModule,setActiveModule]=React.useState(null);
 
-  const [activeModule, setActiveModule] = React.useState(null);
+  const ModuleCards=()=>(
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
+      {[
+        {key:'ro',label:'Ocorrências',pend:pendRO,tags:[
+          roParaAnalisar.length>0&&{label:roParaAnalisar.length+" analisar",color:C.warning},
+          roParaConcluir.length>0&&{label:roParaConcluir.length+" concluir",color:C.purple},
+        ].filter(Boolean)},
+        {key:'cm',label:'Controle de Mudanças',pend:pendCMTotal,tags:[
+          aprovSGQ.length>0&&{label:aprovSGQ.length+" aprovações",color:C.warning},
+          analises.length>0&&{label:analises.length+" avaliar",color:C.accent},
+          acoes.length>0&&{label:acoes.length+" ações",color:C.success},
+        ].filter(Boolean)},
+        {key:'nc',label:'Não Conformidade',pend:0,tags:[],disabled:true},
+        {key:'riacp',label:'RIACP',pend:0,tags:[],disabled:true},
+      ].map(mod=>(
+        <div key={mod.key}
+          onClick={()=>!mod.disabled&&setActiveModule(activeModule===mod.key?null:mod.key)}
+          style={{background:C.card,border:"1px solid "+(activeModule===mod.key?C.accent:C.border),borderRadius:10,padding:"12px 14px",cursor:mod.disabled?"default":"pointer",transition:"border-color .15s",opacity:mod.disabled?.5:1}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:12,fontWeight:600,color:C.text}}>{mod.label}</span>
+            {mod.pend>0
+              ?<span style={{background:C.danger,color:"#fff",borderRadius:9,fontSize:10,fontWeight:700,padding:"1px 7px",minWidth:18,textAlign:"center"}}>{mod.pend}</span>
+              :<span style={{fontSize:11,color:C.muted}}>{mod.disabled?"em breve":"—"}</span>
+            }
+          </div>
+          {mod.tags.length>0
+            ?<div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {mod.tags.map((t,i)=><span key={i} style={{fontSize:10,padding:"2px 7px",borderRadius:4,fontWeight:500,background:t.color+"18",color:t.color}}>{t.label}</span>)}
+            </div>
+            :!mod.disabled&&<div style={{fontSize:11,color:C.muted}}>Sem pendências</div>
+          }
+        </div>
+      ))}
+    </div>
+  );
 
   return <div style={{padding:"18px 22px"}}>
     <div style={{marginBottom:16}}>
@@ -3213,57 +3227,44 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
       </div>
     </div>
 
-    {/* Cards de módulos */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
-      {[
-        {key:'ro', label:'Ocorrências', pend:pendRO, tags:[
-          roParaAnalisar.length>0&&{label:roParaAnalisar.length+" analisar",color:C.warning},
-          roParaConcluir.length>0&&{label:roParaConcluir.length+" concluir",color:C.purple},
-        ].filter(Boolean)},
-        {key:'cm', label:'Controle de Mudanças', pend:pendCMTotal, tags:[
-          aprovSGQ.length>0&&{label:aprovSGQ.length+" aprovações",color:C.warning},
-          analises.length>0&&{label:analises.length+" avaliar",color:C.accent},
-          acoes.length>0&&{label:acoes.length+" ações",color:C.success},
-        ].filter(Boolean)},
-        {key:'nc',    label:'Não Conformidade', pend:0, tags:[], disabled:true},
-        {key:'riacp', label:'RIACP',             pend:0, tags:[], disabled:true},
-      ].map(mod=>(
-        <div key={mod.key}
-          onClick={()=>!mod.disabled&&setActiveModule(activeModule===mod.key?null:mod.key)}
-          style={{background:C.card,border:"1px solid "+(activeModule===mod.key?C.accent:C.border),borderRadius:10,padding:"12px 14px",cursor:mod.disabled?"default":"pointer",transition:"border-color .15s",opacity:mod.disabled?.5:1}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:12,fontWeight:600,color:C.text}}>{mod.label}</span>
-            {mod.pend>0
-              ? <span style={{background:C.danger,color:"#fff",borderRadius:9,fontSize:10,fontWeight:700,padding:"1px 7px",minWidth:18,textAlign:"center"}}>{mod.pend}</span>
-              : <span style={{fontSize:11,color:C.muted}}>{mod.disabled?"em breve":"—"}</span>
-            }
-          </div>
-          {mod.tags.length>0
-            ? <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                {mod.tags.map((t,i)=><span key={i} style={{fontSize:10,padding:"2px 7px",borderRadius:4,fontWeight:500,background:t.color+"18",color:t.color}}>{t.label}</span>)}
-              </div>
-            : !mod.disabled&&<div style={{fontSize:11,color:C.muted}}>Sem pendências</div>
-          }
-        </div>
-      ))}
-    </div>
+    <ModuleCards/>
 
-    {/* Painel de pendências RO */}
+    {activeModule===null&&<div style={{marginBottom:16}}>
+      {(pendRO+pendCMTotal)>0
+        ?<div style={{...Sg.card({marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px"})}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:C.text}}>{pendRO+pendCMTotal} pendência{(pendRO+pendCMTotal)!==1?"s":""} no total</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>Selecione um módulo acima para ver os detalhes</div>
+          </div>
+        </div>
+        :<div style={{...Sg.card({marginBottom:12,padding:"12px 16px"})}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.success,marginBottom:2}}>Tudo em dia!</div>
+          <div style={{fontSize:11,color:C.muted}}>Nenhuma pendência no momento.</div>
+        </div>
+      }
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase",marginBottom:8}}>Ações rápidas</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {hasPerm(currentUser,'ro.abrir')&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('ro_new')}>+ Nova RO</button>}
+        {isAdmin&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNew()}>+ Nova SA</button>}
+        {hasPerm(currentUser,'ro.abrir')&&<button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('ro_list')}>Ver Ocorrências</button>}
+        <button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('changes')}>Ver Controles</button>
+      </div>
+    </div>}
+
     {activeModule==='ro'&&<div style={{marginBottom:16}}>
       {roParaAnalisar.length>0&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>PARA ANALISAR ({roParaAnalisar.length})</div>
         <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
           <div style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 90px 80px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
-            {["Código","Descrição","Tipo","Local","Dias aberto","Pendência"].map(h=>(
-              <div key={h} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{h}</div>
+            {["Código","Descrição","Tipo","Local","Dias aberto","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
             ))}
           </div>
           {roParaAnalisar.map((r,i)=>{
             const d=r.data||{};
             const dias=daysSince(r.createdAt);
             const diasColor=dias>5?C.danger:dias>2?C.warning:C.muted;
-            return <div key={i}
-              onClick={()=>onNavRO(r.id||r.code)}
+            return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
               style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 90px 80px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
               onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
               onMouseLeave={e=>e.currentTarget.style.background=""}>
@@ -3277,20 +3278,18 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
           })}
         </div>
       </div>}
-
       {roParaConcluir.length>0&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,fontWeight:700,color:C.purple,letterSpacing:.7,marginBottom:6}}>AGUARDANDO CONCLUSÃO ({roParaConcluir.length})</div>
         <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 120px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
-            {["Código","Descrição","Tipo","Disposição","Pendência"].map(h=>(
-              <div key={h} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{h}</div>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 130px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["Código","Descrição","Tipo","Disposição","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
             ))}
           </div>
           {roParaConcluir.map((r,i)=>{
             const d=r.data||{};
-            return <div key={i}
-              onClick={()=>onNavRO(r.id||r.code)}
-              style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 120px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+            return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 130px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
               onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
               onMouseLeave={e=>e.currentTarget.style.background=""}>
               <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
@@ -3302,186 +3301,150 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
           })}
         </div>
       </div>}
-
       {pendRO===0&&<div style={{...Sg.card({textAlign:"center",padding:24})}}>
         <div style={{fontSize:13,color:C.muted}}>Sem pendências em Ocorrências.</div>
       </div>}
     </div>}
 
-    {/* Painel CM — navega para ActionsPage */}
-    {activeModule==='cm'&&pendCMTotal>0&&<div style={{marginBottom:16,padding:"10px 14px",background:C.accent+"0D",border:"1px solid "+C.accent+"30",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <span style={{fontSize:13,color:C.text}}><strong>{pendCMTotal}</strong> pendência{pendCMTotal!==1?"s":""} no Controle de Mudanças</span>
-      <button style={{...Sg.btn("primary"),fontSize:12,padding:"5px 14px"}} onClick={()=>onNav("acoes")}>Ver tarefas CM</button>
-    </div>}
-
-
-    {activeModule===null&&<div style={{marginBottom:16}}>
-      {(pendRO+pendCMTotal)>0
-        ? <div style={{...Sg.card({marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px"})}}>
-            <div>
-              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{pendRO+pendCMTotal} pendência{(pendRO+pendCMTotal)!==1?"s":""} no total</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Selecione um módulo acima para ver os detalhes</div>
-            </div>
-          </div>
-        : <div style={{...Sg.card({marginBottom:12,padding:"12px 16px"})}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.success,marginBottom:2}}>Tudo em dia!</div>
-            <div style={{fontSize:11,color:C.muted}}>Nenhuma pendência no momento.</div>
-          </div>
-      }
-      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase",marginBottom:8}}>Ações rápidas</div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {hasPerm(currentUser,'ro.abrir')&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('ro_new')}>+ Nova RO</button>}
-        {hasPerm(currentUser,'sa.criar')&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNew()}>+ Nova SA</button>}
-        {hasPerm(currentUser,'ro.abrir')&&<button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('ro_list')}>Ver Ocorrências</button>}
-        <button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('changes')}>Ver Controles</button>
-      </div>
-    </div>}
-
-    {(activeModule==='cm')&&<div>
-    {total===0&&pendExt.length===0&&<div style={{...Sg.card({textAlign:"center",padding:48})}}>
-      <div style={{fontSize:32,marginBottom:8}}>✓</div>
-      <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>Tudo em dia!</div>
-      <div style={{fontSize:12,color:C.muted}}>Nenhuma tarefa pendente no momento.</div>
-      <button style={{...Sg.btn("primary"),marginTop:14}} onClick={()=>onNav("changes")}>Ver Controles</button>
-    </div>}
-
-    {/* APROVAÇÕES SGQ — admin */}
-    {aprovSGQ.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>APROVACOES SGQ ({aprovSGQ.length})</div>
-      <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-        <ResizableTable
-          storageKey="cm_dash_aprov_cols_v5"
-          cols={[105,220,300,135,42,88,120,180]}
-          headers={["ID","Título","Descrição","Tipo","Crit.","Prazo Etapa","Ação","Status"]}
-          C={C}
-          onRowClick={row=>{
-            const item=row.r;
-            const rid=item.r&&item.r.id;
-            if(item.type==="triage") onNav("detail",rid,"triage");
-            else if(item.type==="revisao") onNav("detail",rid,"revisao");
-            else if(item.type==="plano"||item.type==="montarplano") onNav("detail",rid,"plano");
-            else if(item.type==="extensao") onNav("detail",rid,"extensoes");
-            else onNav("detail",rid);
-          }}
-          rows={sortU(aprovSGQ).map(item=>{
-            const cr=getCrit(item.r.triage&&item.r.triage.criticality);const st=REQ_ST[item.r.status]||{};
-            return {r:item,type:item.type,cells:[
-              <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{item.r.id}</span>,
-              <div style={{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.3,maxHeight:56,overflowY:"auto",wordBreak:"break-word"}}>{item.r.title}</div>,
-              <span style={{fontSize:11,color:C.muted,display:"block",lineHeight:1.3,marginTop:2,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{item.r.description||"—"}</span>,
-              <span style={{fontSize:11,color:C.dim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{item.r.type}</span>,
-              <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
-              <UrgChip urg={item.urg} dl={item.deadline}/>,
-              <span style={{fontSize:11,fontWeight:700,color:item.tagColor,whiteSpace:"nowrap"}}>{item.tag}</span>,
-              <Badge label={st.label||""} color={st.color||C.muted}/>
-            ]};
-          })}
-        />
-      </div>
-    </div>}
-
-    {/* ANÁLISES — avaliador */}
-    {analises.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>ANALISES PENDENTES ({analises.length})</div>
-      <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-        <ResizableTable
-          storageKey="cm_dash_analises_cols_v3"
-          cols={[110,260,380,44,95,120]}
-          headers={["SA","Título SA","Área","Crit.","Prazo","Ação"]}
-          C={C}
-          rows={sortU(analises).map(item=>{
-            const cr=getCrit(item.r.triage&&item.r.triage.criticality);
-            return {r:item,cells:[
-              <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{item.r.id}</span>,
-              <span style={{fontSize:11,color:C.text,display:"block",lineHeight:1.3,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{item.r.title}</span>,
-              <span style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{item.dept}</span>,
-              <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
-              <UrgChip urg={item.urg} dl={item.dl}/>,
-              <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();onOpenEval(item.r,item.dept);}}>Avaliar</button>
-            ]};
-          })}
-        />
-      </div>
-    </div>}
-
-    {/* AÇÕES — responsável */}
-    {acoes.length>0&&<div style={{marginBottom:14}}>
-      {planosAguardando.length>0&&<div style={{marginBottom:20}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.accent||"#7C3AED",letterSpacing:.7,marginBottom:6}}>PLANOS AGUARDANDO APROVACAO ({planosAguardando.length})</div>
-        <div style={{border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+    {activeModule==='cm'&&<div style={{marginBottom:16}}>
+      {total===0&&pendExt.length===0&&<div style={{...Sg.card({textAlign:"center",padding:48})}}>
+        <div style={{fontSize:32,marginBottom:8}}>✓</div>
+        <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>Tudo em dia no CM!</div>
+        <div style={{fontSize:12,color:C.muted}}>Nenhuma tarefa pendente.</div>
+        <button style={{...Sg.btn("primary"),marginTop:14}} onClick={()=>onNav("changes")}>Ver Controles</button>
+      </div>}
+      {aprovSGQ.length>0&&<div style={{marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>APROVACOES SGQ ({aprovSGQ.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
           <ResizableTable
-            storageKey="cm_dash_planos_cols_v4"
-            cols={[105,220,320,135,44,130,115]}
-            headers={["ID","Titulo","Descricao","Tipo","Crit.","Acoes no Plano","Acao"]}
-            onRowClick={row=>onNav("detail",row.r.id,"plano")}
+            storageKey="cm_dash_aprov_cols_v5"
+            cols={[105,220,300,135,42,88,120,180]}
+            headers={["ID","Título","Descrição","Tipo","Crit.","Prazo Etapa","Ação","Status"]}
             C={C}
-            rows={planosAguardando.map(r=>{
-              const cr=crits.find(c=>c.v===(r.triage&&r.triage.criticality));
-              return {r,cells:[
-                <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{r.id}</span>,
-                <span style={{fontSize:12,fontWeight:600,color:C.text,display:"block",wordBreak:"break-word",lineHeight:1.3,maxHeight:56,overflowY:"auto"}}>{r.title}</span>,
-                <span style={{fontSize:11,color:C.dim,display:"block",lineHeight:1.3,marginTop:2,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{r.description||"—"}</span>,
-                <span title={r.type} style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{r.type}</span>,
-                cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>,
-                <div style={{fontSize:12,color:C.text}}>{(r.actions||[]).length} ação{(r.actions||[]).length!==1?"ões":""}</div>,
-                <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();onNav("detail",r.id,"plano");}}>Ver Plano</button>
+            onRowClick={row=>{
+              const item=row.r;
+              const rid=item.r&&item.r.id;
+              if(item.type==="triage") onNav("detail",rid,"triage");
+              else if(item.type==="revisao") onNav("detail",rid,"revisao");
+              else if(item.type==="plano"||item.type==="montarplano") onNav("detail",rid,"plano");
+              else if(item.type==="extensao") onNav("detail",rid,"extensoes");
+              else onNav("detail",rid);
+            }}
+            rows={sortU(aprovSGQ).map(item=>{
+              const cr=getCrit(item.r.triage&&item.r.triage.criticality);const st=REQ_ST[item.r.status]||{};
+              return {r:item,type:item.type,cells:[
+                <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{item.r.id}</span>,
+                <div style={{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.3,maxHeight:56,overflowY:"auto",wordBreak:"break-word"}}>{item.r.title}</div>,
+                <span style={{fontSize:11,color:C.muted,display:"block",lineHeight:1.3,marginTop:2,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{item.r.description||"—"}</span>,
+                <span style={{fontSize:11,color:C.dim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{item.r.type}</span>,
+                <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
+                <UrgChip urg={item.urg} dl={item.deadline}/>,
+                <span style={{fontSize:11,fontWeight:700,color:item.tagColor,whiteSpace:"nowrap"}}>{item.tag}</span>,
+                <Badge label={st.label||""} color={st.color||C.muted}/>
               ]};
             })}
           />
         </div>
       </div>}
-      <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>ACOES DO PLANO ({acoes.length})</div>
-      <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-        <ResizableTable
-          storageKey="cm_dash_acoes_cols_v3"
-          cols={[110,220,78,350,44,95,120]}
-          headers={["SA","Título SA","ID Ação","Descrição Ação","Crit.","Prazo","Ação"]}
-          C={C}
-          rows={sortU(acoes).map(item=>{
-            const cr=getCrit(item.r.triage&&item.r.triage.criticality);
-            return {r:item,cells:[
-              <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{item.r.id}</span>,
-              <span style={{fontSize:11,color:C.text,display:"block",lineHeight:1.3,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{item.r.title}</span>,
-              <span style={{fontSize:11,fontWeight:700,color:C.muted,whiteSpace:"nowrap"}}>{item.a.id}</span>,
-              <span style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{item.a.desc}</span>,
-              <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
-              <UrgChip urg={item.urg} dl={item.a.deadline}/>,
-              <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();onOpenAction(item.r,item.a);}}>Executar</button>
-            ]};
-          })}
-        />
-      </div>
-    </div>}
-
-    {/* MINHAS SAs */}
-    {minhasSAs.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.7,marginBottom:6}}>MINHAS SOLICITACOES ({minhasSAs.length})</div>
-      <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-        <ResizableTable
-          storageKey="cm_dash_minhas_cols_v3"
-          cols={[105,220,340,130,44,90,170,60]}
-          headers={["ID","Título","Descrição","Tipo","Crit.","Prazo Etapa","Status",""]}
-          onRowClick={row=>onNav("detail",row.r.id)}
-          C={C}
-          rows={minhasSAs.map(r=>{
-            const cr=getCrit(r.triage&&r.triage.criticality);const st=REQ_ST[r.status]||{};
-            const dl=getPhaseDeadline(r);const urg=urgCls(dl,"");
-            return {r,cells:[
-              <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{r.id}</span>,
-              <span style={{fontSize:12,fontWeight:600,color:C.text,display:"block",wordBreak:"break-word",lineHeight:1.3,maxHeight:56,overflowY:"auto"}}>{r.title}</span>,
-              <span style={{fontSize:11,color:C.dim,display:"block",lineHeight:1.3,marginTop:2,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{r.description||"—"}</span>,
-              <span title={r.type} style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{r.type}</span>,
-              <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
-              <UrgChip urg={urg} dl={dl}/>,
-              <Badge label={st.label} color={st.color||C.muted}/>,
-              <span style={{fontSize:11,color:C.accent}}>Ver →</span>
-            ]};
-          })}
-        />
-      </div>
+      {analises.length>0&&<div style={{marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>ANALISES PENDENTES ({analises.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <ResizableTable
+            storageKey="cm_dash_analises_cols_v3"
+            cols={[110,260,380,44,95,120]}
+            headers={["SA","Título SA","Área","Crit.","Prazo","Ação"]}
+            C={C}
+            rows={sortU(analises).map(item=>{
+              const cr=getCrit(item.r.triage&&item.r.triage.criticality);
+              return {r:item,cells:[
+                <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{item.r.id}</span>,
+                <span style={{fontSize:11,color:C.text,display:"block",lineHeight:1.3,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{item.r.title}</span>,
+                <span style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{item.dept}</span>,
+                <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
+                <UrgChip urg={item.urg} dl={item.dl}/>,
+                <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();onOpenEval(item.r,item.dept);}}>Avaliar</button>
+              ]};
+            })}
+          />
+        </div>
+      </div>}
+      {acoes.length>0&&<div style={{marginBottom:14}}>
+        {planosAguardando.length>0&&<div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>PLANOS AGUARDANDO APROVACAO ({planosAguardando.length})</div>
+          <div style={{border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+            <ResizableTable
+              storageKey="cm_dash_planos_cols_v4"
+              cols={[105,220,320,135,44,130,115]}
+              headers={["ID","Titulo","Descricao","Tipo","Crit.","Acoes no Plano","Acao"]}
+              onRowClick={row=>onNav("detail",row.r.id,"plano")}
+              C={C}
+              rows={planosAguardando.map(r=>{
+                const cr=crits.find(c=>c.v===(r.triage&&r.triage.criticality));
+                return {r,cells:[
+                  <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{r.id}</span>,
+                  <span style={{fontSize:12,fontWeight:600,color:C.text,display:"block",wordBreak:"break-word",lineHeight:1.3,maxHeight:56,overflowY:"auto"}}>{r.title}</span>,
+                  <span style={{fontSize:11,color:C.dim,display:"block",lineHeight:1.3,marginTop:2,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{r.description||"—"}</span>,
+                  <span title={r.type} style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{r.type}</span>,
+                  cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>,
+                  <div style={{fontSize:12,color:C.text}}>{(r.actions||[]).length} ação{(r.actions||[]).length!==1?"ões":""}</div>,
+                  <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();onNav("detail",r.id,"plano");}}>Ver Plano</button>
+                ]};
+              })}
+            />
+          </div>
+        </div>}
+        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>ACOES DO PLANO ({acoes.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <ResizableTable
+            storageKey="cm_dash_acoes_cols_v3"
+            cols={[110,220,78,350,44,95,120]}
+            headers={["SA","Título SA","ID Ação","Descrição Ação","Crit.","Prazo","Ação"]}
+            C={C}
+            rows={sortU(acoes).map(item=>{
+              const cr=getCrit(item.r.triage&&item.r.triage.criticality);
+              return {r:item,cells:[
+                <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{item.r.id}</span>,
+                <span style={{fontSize:11,color:C.text,display:"block",lineHeight:1.3,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{item.r.title}</span>,
+                <span style={{fontSize:11,fontWeight:700,color:C.muted,whiteSpace:"nowrap"}}>{item.a.id}</span>,
+                <span style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{item.a.desc}</span>,
+                <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
+                <UrgChip urg={item.urg} dl={item.a.deadline}/>,
+                <button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();onOpenAction(item.r,item.a);}}>Executar</button>
+              ]};
+            })}
+          />
+        </div>
+      </div>}
+      {minhasSAs.length>0&&<div style={{marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.7,marginBottom:6}}>MINHAS SOLICITACOES ({minhasSAs.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <ResizableTable
+            storageKey="cm_dash_minhas_cols_v3"
+            cols={[105,220,340,130,44,90,170,60]}
+            headers={["ID","Título","Descrição","Tipo","Crit.","Prazo Etapa","Status",""]}
+            onRowClick={row=>onNav("detail",row.r.id)}
+            C={C}
+            rows={minhasSAs.map(r=>{
+              const cr=getCrit(r.triage&&r.triage.criticality);const st=REQ_ST[r.status]||{};
+              const dl=getPhaseDeadline(r);const urg=urgCls(dl,"");
+              return {r,cells:[
+                <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{r.id}</span>,
+                <span style={{fontSize:12,fontWeight:600,color:C.text,display:"block",wordBreak:"break-word",lineHeight:1.3,maxHeight:56,overflowY:"auto"}}>{r.title}</span>,
+                <span style={{fontSize:11,color:C.dim,display:"block",lineHeight:1.3,marginTop:2,maxHeight:48,overflowY:"auto",wordBreak:"break-word"}}>{r.description||"—"}</span>,
+                <span title={r.type} style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{r.type}</span>,
+                <div>{cr?<span style={{fontSize:13,fontWeight:800,color:cr.color}}>{cr.v}</span>:<span style={{color:C.muted}}>—</span>}</div>,
+                <UrgChip urg={urg} dl={dl}/>,
+                <Badge label={st.label} color={st.color||C.muted}/>,
+                <span style={{fontSize:11,color:C.accent}}>Ver →</span>
+              ]};
+            })}
+          />
+        </div>
+      </div>}
     </div>}
   </div>;
 }
+
 
 // ================================================================
 // CONTROLES DE MUDANCA v10 — lista de SAs com data abertura + prazo etapa
