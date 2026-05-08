@@ -4143,191 +4143,295 @@ function AutoTextarea({value, onChange, placeholder, style, ...rest}){
   />;
 }
 
-// ── Opções de disposição na abertura (operador) ──────────────────
-const RO_DISPOSICOES_ABERTURA = [
-  {v:"", label:"—"},
-  {v:"correcao", label:"Correção"},
-  {v:"concessao", label:"Concessão"},
-  {v:"segregar", label:"Segregar"}
-];
+// ── Disposições da abertura (operador) ───────────────────────────
+const RO_DISP_ABERTURA = {
+  correcao:  {label:"Correção imediata", short:"Correção", color:"success"},
+  segregar:  {label:"Segregar com Qualidade", short:"Segregar", color:"warning"}
+};
 
-function ItemRow({item, idx, onChange, onRemove, C, Sg, allUsers}){
-  const disp = item.disposicao || "";
-  const upd = (patch) => onChange({...item, ...patch});
+function dispLabel(disp){ return (RO_DISP_ABERTURA[disp]||{}).short || "—"; }
 
-  const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
-  const inputStyle = {...Sg.input(), fontSize:12, height:32, boxSizing:"border-box"};
-  const selectStyle = {...Sg.input(), fontSize:12, minHeight:32, height:"auto", boxSizing:"border-box", padding:"4px 8px"};
-  const taStyle = {border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text};
-
-  return <React.Fragment>
-    <tr>
-      <td style={{...cellMid, width:140}}>
-        <ProdutoAutocomplete
-          value={item.codigo||""}
-          onChange={v=>upd({codigo:v})}
-          onSelect={p=>upd({codigo:p.codigo, descricao:p.descricao})}
-          C={C} Sg={Sg} placeholder="Código..."/>
-      </td>
-      <td style={cellMid}>
-        <AutoTextarea
-          value={item.descricao||""}
-          onChange={e=>upd({descricao:e.target.value})}
-          placeholder="Descrição"
-          style={taStyle}
-        />
-      </td>
-      <td style={{...cellMid, width:110}}>
-        <input style={inputStyle} value={item.lote||""} onChange={e=>upd({lote:e.target.value})} placeholder="Lote"/>
-      </td>
-      <td style={{...cellMid, width:60}}>
-        <input style={inputStyle} type="number" min="0" value={item.qtdNC||""} onChange={e=>upd({qtdNC:e.target.value})} placeholder="0"/>
-      </td>
-      <td style={{...cellMid, width:140}}>
-        <select style={selectStyle} value={disp} onChange={e=>upd({disposicao:e.target.value})}>
-          {RO_DISPOSICOES_ABERTURA.map(d=><option key={d.v} value={d.v}>{d.label}</option>)}
-        </select>
-      </td>
-      <td style={{...cellMid, width:28, textAlign:"center"}}>
-        <button onClick={onRemove} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:16,padding:0,lineHeight:1}}>×</button>
-      </td>
-    </tr>
-    {disp==="correcao" && <tr>
-      <td colSpan={6} style={{padding:0}}>
-        <div style={{padding:"8px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10}}>
-          <div style={{display:"flex", gap:16, alignItems:"flex-end"}}>
-            <div style={{flex:1, minWidth:0}}>
-              <p style={{margin:"0 0 4px", fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4}}>O que foi feito</p>
-              <AutoTextarea
-                value={item.acaoCorrecao||""}
-                onChange={e=>upd({acaoCorrecao:e.target.value})}
-                placeholder="Descreva a correção realizada"
-                style={taStyle}
-              />
-            </div>
-            <label style={{display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:C.muted, cursor:"pointer", whiteSpace:"nowrap", paddingBottom:7}}>
-              <input type="checkbox" checked={!!item.solicitarReposicao} onChange={e=>upd({solicitarReposicao:e.target.checked})}/>
-              Solicitar reposição
-            </label>
-          </div>
-        </div>
-      </td>
-    </tr>}
-    {disp==="concessao" && <tr>
-      <td colSpan={6} style={{padding:0}}>
-        <div style={{padding:"8px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10}}>
-          <div style={{display:"flex", gap:16, alignItems:"flex-end"}}>
-            <div style={{flex:1, minWidth:0}}>
-              <p style={{margin:"0 0 4px", fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4}}>Justificativa</p>
-              <AutoTextarea
-                value={item.justificativaConcessao||""}
-                onChange={e=>upd({justificativaConcessao:e.target.value})}
-                placeholder="Por que liberar com concessão?"
-                style={taStyle}
-              />
-            </div>
-            <div style={{width:200}}>
-              <p style={{margin:"0 0 4px", fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4}}>Aprovador</p>
-              <select style={selectStyle} value={item.aprovadorConcessao||""} onChange={e=>upd({aprovadorConcessao:e.target.value})}>
-                <option value="">—</option>
-                {(allUsers||[]).filter(u=>u.active!==false).map(u=>(
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </td>
-    </tr>}
-    {disp==="segregar" && <tr>
-      <td colSpan={6} style={{padding:0}}>
-        <div style={{padding:"8px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, display:"flex", alignItems:"center", gap:16}}>
-          <span style={{fontSize:11, color:C.muted}}>Qualidade decidirá o destino.</span>
-          <label style={{display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:C.muted, cursor:"pointer", marginLeft:"auto"}}>
-            <input type="checkbox" checked={item.solicitarReposicao!==false} onChange={e=>upd({solicitarReposicao:e.target.checked})}/>
-            Solicitar reposição
-          </label>
-        </div>
-      </td>
-    </tr>}
-  </React.Fragment>;
+function DispBadge({disp, status, C}){
+  if(!disp) return <span style={{fontSize:11, color:C.muted, fontStyle:"italic"}}>definir...</span>;
+  const meta = RO_DISP_ABERTURA[disp]||{};
+  const colorMap = {success:C.success, warning:C.warning, danger:C.danger, info:C.accent};
+  const col = colorMap[meta.color]||C.muted;
+  const isPending = status==="pendente" || (disp==="segregar" && !status);
+  return <span style={{
+    display:"inline-flex", alignItems:"center", gap:5,
+    fontSize:11, color:col, fontWeight:600,
+    padding:"3px 8px",
+    background:col+"15", borderRadius:10,
+    whiteSpace:"nowrap"
+  }}>
+    {meta.short||"—"}
+    <span style={{fontSize:9, opacity:.8}}>{isPending?"⏳":"✓"}</span>
+  </span>;
 }
 
-// ── Linha read-only com mesma estrutura expandida ────────────────
-function ItemRowReadOnly({item, C}){
-  const disp = item.disposicao||"";
-  const dispLabel = (RO_DISPOSICOES_ABERTURA.find(d=>d.v===disp)||{}).label || "—";
+// ── Modal pra escolher/registrar disposição ──────────────────────
+function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
+  const [disp, setDisp] = useState(item?.disposicao||"");
+  const [acao, setAcao] = useState(item?.acaoCorrecao||"");
+  const [repor, setRepor] = useState(item?.solicitarReposicao!==false);
+
+  React.useEffect(()=>{
+    if(open){
+      setDisp(item?.disposicao||"");
+      setAcao(item?.acaoCorrecao||"");
+      setRepor(item?.disposicao==="correcao" ? !!item?.solicitarReposicao : (item?.solicitarReposicao!==false));
+    }
+  }, [open, item]);
+
+  if(!open) return null;
+  const canSave = disp==="segregar" || (disp==="correcao" && acao.trim().length>0);
+
+  return <Modal open={open} onClose={onClose} title="Definir disposição" width={500}>
+    <div style={{display:"flex", flexDirection:"column", gap:14}}>
+      {item && <div style={{padding:"8px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted}}>
+        <strong style={{color:C.accent}}>{item.codigo||"—"}</strong>
+        {item.descricao && <span> · {item.descricao}</span>}
+        {item.lote && <span> · Lote {item.lote}</span>}
+        {item.qtdNC && <span> · Qtd {item.qtdNC}</span>}
+      </div>}
+
+      <div>
+        <label style={Sg.lbl}>Disposição *</label>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:4}}>
+          <button
+            onClick={()=>setDisp("correcao")}
+            style={{
+              padding:"12px 10px", textAlign:"left", cursor:"pointer",
+              border:"1px solid "+(disp==="correcao"?C.accent:C.border),
+              background:disp==="correcao"?C.accent+"10":C.card,
+              borderRadius:8, fontSize:12, color:C.text
+            }}>
+            <div style={{fontWeight:600, marginBottom:2}}>Correção imediata</div>
+            <div style={{fontSize:11, color:C.muted}}>Já resolvi, vou registrar o que foi feito</div>
+          </button>
+          <button
+            onClick={()=>setDisp("segregar")}
+            style={{
+              padding:"12px 10px", textAlign:"left", cursor:"pointer",
+              border:"1px solid "+(disp==="segregar"?C.accent:C.border),
+              background:disp==="segregar"?C.accent+"10":C.card,
+              borderRadius:8, fontSize:12, color:C.text
+            }}>
+            <div style={{fontWeight:600, marginBottom:2}}>Segregar com Qualidade</div>
+            <div style={{fontSize:11, color:C.muted}}>Não resolvo agora, qualidade decide</div>
+          </button>
+        </div>
+      </div>
+
+      {disp==="correcao" && <div>
+        <label style={Sg.lbl}>O que foi feito *</label>
+        <textarea
+          style={{...Sg.input(), minHeight:80, resize:"vertical", fontFamily:"inherit"}}
+          value={acao}
+          onChange={e=>setAcao(e.target.value)}
+          placeholder="Ex: Solda refeita no ponto J3, inspecionada visualmente."
+        />
+      </div>}
+
+      {disp && <label style={{display:"inline-flex", alignItems:"center", gap:8, fontSize:12, color:C.muted, cursor:"pointer"}}>
+        <input type="checkbox" checked={repor} onChange={e=>setRepor(e.target.checked)}/>
+        Solicitar peça de reposição
+        {disp==="correcao" && <span style={{fontSize:10, color:C.dim}}>(não usual)</span>}
+      </label>}
+
+      <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:6}}>
+        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+        <button
+          style={{...Sg.btn("primary"), opacity:canSave?1:.4}}
+          disabled={!canSave}
+          onClick={()=>{
+            onSave({
+              disposicao: disp,
+              acaoCorrecao: disp==="correcao" ? acao.trim() : "",
+              solicitarReposicao: repor,
+              status: disp==="segregar" ? "pendente" : "concluida",
+              dispDefinedAt: new Date().toISOString()
+            });
+          }}>
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </Modal>;
+}
+
+// ── Linha de item editável ───────────────────────────────────────
+function ItemRow({item, idx, onChange, onRemove, onOpenDisp, onOpenHist, C, Sg}){
+  const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
+  const inputStyle = {...Sg.input(), fontSize:12, height:32, boxSizing:"border-box"};
+  const taStyle = {border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text};
+
+  return <tr style={{borderBottom:"1px solid "+C.border}}>
+    <td style={{...cellMid, width:140}}>
+      <ProdutoAutocomplete
+        value={item.codigo||""}
+        onChange={v=>onChange({...item, codigo:v})}
+        onSelect={p=>onChange({...item, codigo:p.codigo, descricao:p.descricao})}
+        C={C} Sg={Sg} placeholder="Código..."/>
+    </td>
+    <td style={cellMid}>
+      <AutoTextarea
+        value={item.descricao||""}
+        onChange={e=>onChange({...item, descricao:e.target.value})}
+        placeholder="Descrição"
+        style={taStyle}
+      />
+    </td>
+    <td style={{...cellMid, width:110}}>
+      <input style={inputStyle} value={item.lote||""} onChange={e=>onChange({...item, lote:e.target.value})} placeholder="Lote"/>
+    </td>
+    <td style={{...cellMid, width:60}}>
+      <input style={inputStyle} type="number" min="0" value={item.qtdNC||""} onChange={e=>onChange({...item, qtdNC:e.target.value})} placeholder="0"/>
+    </td>
+    <td style={{...cellMid, width:140}}>
+      <button
+        onClick={()=>onOpenDisp(idx)}
+        style={{
+          background:"transparent", border:"0.5px dashed "+C.border,
+          padding:"5px 10px", borderRadius:6, cursor:"pointer",
+          width:"100%", textAlign:"left"
+        }}>
+        <DispBadge disp={item.disposicao} status={item.status} C={C}/>
+      </button>
+    </td>
+    <td style={{...cellMid, width:54, textAlign:"center", whiteSpace:"nowrap"}}>
+      <button
+        onClick={()=>onOpenHist(idx)}
+        title="Ver histórico desta linha"
+        style={{background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, padding:"0 4px"}}>⏱</button>
+      <button
+        onClick={onRemove}
+        title="Remover item"
+        style={{background:"none", border:"none", cursor:"pointer", color:C.danger, fontSize:16, padding:"0 4px", lineHeight:1}}>×</button>
+    </td>
+  </tr>;
+}
+
+// ── Linha read-only ──────────────────────────────────────────────
+function ItemRowReadOnly({item, idx, onOpenHist, C}){
   const cellRO = {padding:"8px 8px", fontSize:12, verticalAlign:"middle"};
-  return <React.Fragment>
-    <tr style={{borderBottom:"1px solid "+C.border}}>
-      <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
-      <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
-      <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
-      <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
-      <td style={{...cellRO, color:C.text, width:140}}>{dispLabel}</td>
-      <td style={{width:28}}/>
-    </tr>
-    {disp==="correcao" && (item.acaoCorrecao || item.solicitarReposicao) && <tr>
-      <td colSpan={6} style={{padding:0}}>
-        <div style={{padding:"6px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, fontSize:12, color:C.text}}>
-          {item.acaoCorrecao && <div><span style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginRight:6}}>O que foi feito:</span>{item.acaoCorrecao}</div>}
-          {item.solicitarReposicao && <div style={{marginTop:4, fontSize:11, color:C.muted}}>Reposição solicitada</div>}
-        </div>
-      </td>
-    </tr>}
-    {disp==="concessao" && (item.justificativaConcessao || item.aprovadorConcessao) && <tr>
-      <td colSpan={6} style={{padding:0}}>
-        <div style={{padding:"6px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, fontSize:12, color:C.text}}>
-          {item.justificativaConcessao && <div><span style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginRight:6}}>Justificativa:</span>{item.justificativaConcessao}</div>}
-          {item.aprovadorConcessao && <div style={{marginTop:4, fontSize:11, color:C.muted}}>Aprovador: {item.aprovadorConcessao}</div>}
-        </div>
-      </td>
-    </tr>}
-    {disp==="segregar" && <tr>
-      <td colSpan={6} style={{padding:0}}>
-        <div style={{padding:"6px 10px 10px 16px", borderLeft:"2px solid "+C.border, marginLeft:10, fontSize:11, color:C.muted}}>
-          Aguardando decisão da qualidade. {item.solicitarReposicao!==false && "Reposição solicitada."}
-        </div>
-      </td>
-    </tr>}
-  </React.Fragment>;
+  return <tr style={{borderBottom:"1px solid "+C.border}}>
+    <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
+    <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
+    <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
+    <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
+    <td style={{...cellRO, width:140}}><DispBadge disp={item.disposicao} status={item.status} C={C}/></td>
+    <td style={{...cellRO, width:54, textAlign:"center"}}>
+      {onOpenHist && <button
+        onClick={()=>onOpenHist(idx)}
+        title="Ver histórico desta linha"
+        style={{background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14}}>⏱</button>}
+    </td>
+  </tr>;
 }
 
 // ── Tabela de itens dinâmica ─────────────────────────────────────
-function ItensTable({itens, onChange, readOnly, C, Sg, allUsers}){
-  const addItem = () => onChange([...itens,{codigo:"",descricao:"",lote:"",qtdNC:"",disposicao:""}]);
+function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHistory, C, Sg, allUsers}){
+  const [dispModalIdx, setDispModalIdx] = useState(null);
+  const [histLineIdx, setHistLineIdx] = useState(null);
+
+  const addItem = () => onChange([...itens, {codigo:"", descricao:"", lote:"", qtdNC:"", disposicao:"", status:""}]);
   const updItem = (i,v) => { const n=[...itens]; n[i]=v; onChange(n); };
   const remItem = i => onChange(itens.filter((_,j)=>j!==i));
 
+  const handleSaveDisp = (changes) => {
+    if(dispModalIdx===null) return;
+    const cur = itens[dispModalIdx]||{};
+    const next = {...cur, ...changes};
+    updItem(dispModalIdx, next);
+    if(onAddHistory){
+      const dispText = (RO_DISP_ABERTURA[changes.disposicao]||{}).label || changes.disposicao;
+      let detail = "Disposição definida: " + dispText;
+      if(changes.disposicao==="correcao" && changes.acaoCorrecao){
+        detail += "\nO que foi feito: " + changes.acaoCorrecao;
+      }
+      if(changes.solicitarReposicao){
+        detail += "\nReposição solicitada.";
+      }
+      onAddHistory({
+        type: "disposicao",
+        itemIdx: dispModalIdx,
+        itemCodigo: cur.codigo||"",
+        detail
+      });
+    }
+    setDispModalIdx(null);
+  };
+
+  const lineHist = histLineIdx!==null && history
+    ? (history||[]).filter(h=>h.itemIdx===histLineIdx || h.itemCodigo===itens[histLineIdx]?.codigo)
+    : [];
+
   return <div>
     <div>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,tableLayout:"fixed"}}>
+      <table style={{width:"100%", borderCollapse:"collapse", fontSize:12, tableLayout:"fixed"}}>
         <colgroup>
           <col style={{width:140}}/>
           <col/>
           <col style={{width:110}}/>
           <col style={{width:60}}/>
           <col style={{width:140}}/>
-          <col style={{width:28}}/>
+          <col style={{width:54}}/>
         </colgroup>
         <thead>
-          <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+          <tr style={{background:C.surface, borderBottom:"1px solid "+C.border}}>
             {["Código","Descrição","Lote","Qtd","Disposição",""].map((h,i)=>(
-              <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>{h}</th>
+              <th key={i} style={{padding:"7px 10px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {itens.length===0&&<tr><td colSpan={6} style={{padding:"12px 8px",color:C.muted,fontSize:12,textAlign:"center"}}>Nenhum item adicionado</td></tr>}
+          {itens.length===0 && <tr><td colSpan={6} style={{padding:"12px 8px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhum item adicionado</td></tr>}
           {itens.map((item,i)=>(
             readOnly
-              ? <ItemRowReadOnly key={i} item={item} C={C}/>
-              : <ItemRow key={i} item={item} idx={i} onChange={v=>updItem(i,v)} onRemove={()=>remItem(i)} C={C} Sg={Sg} allUsers={allUsers}/>
+              ? <ItemRowReadOnly key={i} item={item} idx={i} onOpenHist={onAddHistory?(idx=>setHistLineIdx(idx)):null} C={C}/>
+              : <ItemRow key={i} item={item} idx={i}
+                  onChange={v=>updItem(i,v)}
+                  onRemove={()=>remItem(i)}
+                  onOpenDisp={(idx)=>setDispModalIdx(idx)}
+                  onOpenHist={(idx)=>setHistLineIdx(idx)}
+                  C={C} Sg={Sg}/>
           ))}
         </tbody>
       </table>
     </div>
-    {!readOnly&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px",marginTop:8}} onClick={addItem}>+ Adicionar item</button>}
+    {!readOnly && <button style={{...Sg.btn(), fontSize:11, padding:"4px 12px", marginTop:8}} onClick={addItem}>+ Adicionar item</button>}
+
+    <DisposicaoModal
+      open={dispModalIdx!==null}
+      item={dispModalIdx!==null?itens[dispModalIdx]:null}
+      onClose={()=>setDispModalIdx(null)}
+      onSave={handleSaveDisp}
+      C={C} Sg={Sg}
+    />
+
+    <Modal open={histLineIdx!==null} onClose={()=>setHistLineIdx(null)} title="Histórico da linha" width={560}>
+      {histLineIdx!==null && itens[histLineIdx] && <div style={{padding:"6px 0"}}>
+        <div style={{padding:"8px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted, marginBottom:12}}>
+          <strong style={{color:C.accent}}>{itens[histLineIdx].codigo||"—"}</strong>
+          {itens[histLineIdx].descricao && <span> · {itens[histLineIdx].descricao}</span>}
+        </div>
+        {lineHist.length===0
+          ? <div style={{textAlign:"center", padding:24, color:C.muted, fontSize:12}}>Nenhuma ação registrada ainda.</div>
+          : <div style={{display:"flex", flexDirection:"column", gap:10}}>
+              {lineHist.map((h,i)=>(
+                <div key={i} style={{padding:"10px 12px", background:C.card, border:"1px solid "+C.border, borderRadius:6}}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+                    <span style={{fontSize:11, fontWeight:600, color:C.text}}>{h.by||"—"}</span>
+                    <span style={{fontSize:10, color:C.muted}}>{fmt(h.at)}</span>
+                  </div>
+                  <div style={{fontSize:12, color:C.text, whiteSpace:"pre-wrap"}}>{h.detail||h.event||"—"}</div>
+                </div>
+              ))}
+            </div>
+        }
+      </div>}
+    </Modal>
   </div>;
 }
 
@@ -4412,7 +4516,17 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
   const [f,setF]=useState({tipo:"",local:"",opChamado:"",descricao:"",classificacao:"",disposicao:""});
   const [itens,setItens]=useState([]);
   const [attachments,setAttachments]=useState([]);
+  const [historico,setHistorico]=useState([]);
+  const [histOpen,setHistOpen]=useState(false);
   const set = (k,v)=>setF(p=>({...p,[k]:v}));
+  const addHist = (entry)=>{
+    setHistorico(p=>[...p, {
+      ...entry,
+      at: new Date().toISOString(),
+      by: currentUser?.name || currentUser?.email || "—",
+      byId: currentUser?.id
+    }]);
+  };
   const ok = f.tipo&&f.local&&f.descricao;
 
   return <div style={{padding:"18px 22px",maxWidth:760}}>
@@ -4428,7 +4542,7 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div>
           <label style={Sg.lbl}>Tipo *</label>
-          <select style={Sg.input()} value={f.tipo} onChange={e=>{set("tipo",e.target.value);set("disposicao","");}}>
+          <select style={Sg.input()} value={f.tipo} onChange={e=>{set("tipo",e.target.value);set("disposicao","");set("classificacao","");}}>
             <option value="">Selecione...</option>
             {RO_TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
           </select>
@@ -4445,38 +4559,60 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
       <div><label style={Sg.lbl}>Nº OP / Chamado</label><input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345"/></div>
       <div><label style={Sg.lbl}>Descrição da Ocorrência *</label><textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva o que foi identificado..."/></div>
 
+      {f.tipo&&<div>
+        <label style={Sg.lbl}>Classificação da Ocorrência</label>
+        <select style={Sg.input()} value={f.classificacao} onChange={e=>set("classificacao",e.target.value)}>
+          <option value="">Selecione...</option>
+          {f.tipo==="Processo"
+            ? RO_CLASS_PROCESSO.map(c=><option key={c} value={c}>{c}</option>)
+            : RO_CLASS_OCORRENCIA.map(c=><option key={c} value={c}>{c}</option>)
+          }
+        </select>
+      </div>}
+
       {/* Itens afetados — só mostra se tipo Produto */}
       {f.tipo==="Produto"&&<div style={{padding:12,background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
         <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Itens Afetados</div>
-        <ItensTable itens={itens} onChange={setItens} readOnly={false} C={C} Sg={Sg} allUsers={allUsers}/>
+        <ItensTable
+          itens={itens}
+          onChange={setItens}
+          readOnly={false}
+          currentUser={currentUser}
+          history={historico}
+          onAddHistory={addHist}
+          C={C} Sg={Sg} allUsers={allUsers}/>
       </div>}
-
-      {/* Classificação da ocorrência */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <div>
-          <label style={Sg.lbl}>Classificação da Ocorrência</label>
-          <select style={Sg.input()} value={f.classificacao} onChange={e=>set("classificacao",e.target.value)}>
-            <option value="">Selecione...</option>
-            {f.tipo==="Processo"
-              ? RO_CLASS_PROCESSO.map(c=><option key={c} value={c}>{c}</option>)
-              : RO_CLASS_OCORRENCIA.map(c=><option key={c} value={c}>{c}</option>)
-            }
-          </select>
-        </div>
-        {f.tipo&&<div>
-          <label style={Sg.lbl}>Disposição</label>
-          <select style={Sg.input()} value={f.disposicao} onChange={e=>set("disposicao",e.target.value)}>
-            <option value="">Nenhuma / A definir</option>
-            {(RO_DISPOSICOES[f.tipo]||[]).map(d=><option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>}
-      </div>
 
       <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura" currentUser={currentUser} C={C}/>
 
+      {historico.length>0 && <div style={{borderTop:"1px solid "+C.border, paddingTop:12}}>
+        <div
+          onClick={()=>setHistOpen(o=>!o)}
+          style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none"}}>
+          <span style={{fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
+            Histórico ({historico.length})
+          </span>
+          <span style={{fontSize:10, color:C.muted}}>{histOpen?"▲":"▼"}</span>
+        </div>
+        {histOpen && <div style={{marginTop:10, display:"flex", flexDirection:"column", gap:8}}>
+          {historico.slice().reverse().map((h,i)=>(
+            <div key={i} style={{padding:"10px 12px", background:C.surface, border:"1px solid "+C.border, borderRadius:6}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+                <span style={{fontSize:11, fontWeight:600, color:C.text}}>
+                  {h.by||"—"}
+                  {h.itemCodigo && <span style={{fontWeight:400, color:C.muted}}> · item {h.itemCodigo}</span>}
+                </span>
+                <span style={{fontSize:10, color:C.muted}}>{fmt(h.at)}</span>
+              </div>
+              <div style={{fontSize:12, color:C.text, whiteSpace:"pre-wrap"}}>{h.detail||h.event||"—"}</div>
+            </div>
+          ))}
+        </div>}
+      </div>}
+
       <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
         <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
-        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave(f,itens,attachments)}>Abrir Ocorrência</button>
+        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave({...f, historico},itens,attachments)}>Abrir Ocorrência</button>
       </div>
     </div>
   </div>;
@@ -4674,7 +4810,13 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
           }}>Salvar itens</button>
         </div>}
       </div>
-      <ItensTable itens={editingItens?itensEdit:(d.itens||[])} onChange={v=>{if(editingItens)setItensEdit(v);}} readOnly={!editingItens} C={C} Sg={Sg} allUsers={allUsers}/>
+      <ItensTable
+        itens={editingItens?itensEdit:(d.itens||[])}
+        onChange={v=>{if(editingItens)setItensEdit(v);}}
+        readOnly={!editingItens}
+        currentUser={currentUser}
+        history={d.historico||[]}
+        C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
 
     {/* Análise */}
