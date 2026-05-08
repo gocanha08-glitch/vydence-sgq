@@ -5063,28 +5063,18 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
 
-    {/* Análise */}
-    <div style={{...Sg.card(),marginBottom:14}}>
+    {/* Análise — visível pra qualidade (analisar) ou pra qualquer um quando já houver análise registrada */}
+    {(canAnalyze || d.analise) && <div style={{...Sg.card(),marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Análise / Conclusão da Qualidade</div>
       {status==="fechada"||status==="aguardando_conclusao"
         ? <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.analise||"—"}</div>
         : <>
           <textarea style={{...Sg.input(),minHeight:80,resize:"vertical",marginBottom:10}} value={analise} onChange={e=>setAnalise(e.target.value)} placeholder="Registre a análise e conclusão..." disabled={!canAnalyze}/>
-          {d.tipo&&<div style={{marginBottom:10}}>
-            <label style={Sg.lbl}>Disposição</label>
-            <select style={Sg.input()} value={disposicaoEdit} onChange={e=>setDisposicaoEdit(e.target.value)} disabled={!canAnalyze}>
-              <option value="">Nenhuma / A definir</option>
-              {(RO_DISPOSICOES[d.tipo]||[]).map(dsp=><option key={dsp} value={dsp}>{dsp}</option>)}
-            </select>
-          </div>}
-          {needsConclusao&&disposicaoEdit&&<div style={{padding:"8px 12px",background:C.purple+"12",border:"1px solid "+C.purple+"30",borderRadius:6,fontSize:12,color:C.purple,marginBottom:10}}>
-            Disposição "{disposicaoEdit}" requer conclusão da qualidade antes de fechar.
-          </div>}
           {canAnalyze&&<button style={{...Sg.btn("primary"),opacity:analise.trim()?1:.4}} disabled={!analise.trim()} onClick={()=>setSigModal({action:"analise",title:"Registrar Análise",confirmLabel:"Salvar Análise",confirmStyle:"primary"})}>Salvar Análise</button>}
         </>
       }
       {d.analiseAt&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>Análise por {d.analiseByName||"—"} em {fmt(d.analiseAt)}</div>}
-    </div>
+    </div>}
 
     {/* Conclusão final — Segregado/Sucatado */}
     {status==="aguardando_conclusao"&&canClose&&<div style={{...Sg.card(),marginBottom:14,border:"1px solid "+C.purple+"40"}}>
