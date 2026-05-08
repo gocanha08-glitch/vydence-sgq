@@ -1847,7 +1847,7 @@ const upd=(patch,type,ev,detail)=>{let r={...localReq,...patch};if(ev)r=mkLog(r,
     ...(localReq.actions||[]).filter(a=>a.doneAtt).map(a=>({...a.doneAtt,_src:"Acao "+a.id,_by:a.responsible})),
   ];
 
-  return <div style={{padding:"20px 24px",maxWidth:960,margin:"0 auto"}}>
+  return <div style={{padding:"20px 24px",maxWidth:1100,margin:"0 auto"}}>
 
     {/* ══ HEADER BAR ══ */}
     {(()=>{
@@ -3974,6 +3974,7 @@ const RO_STATUS_LABELS = {
   em_analise:          {label:"Em Análise",          color:"#D97706"},
   aguardando_conclusao:{label:"Aguard. Conclusão",   color:"#7C3AED"},
   fechada:             {label:"Fechada",             color:"#16A34A"},
+  cancelada:           {label:"Cancelada",           color:"#DC2626"},
 };
 
 function ROStatusBadge({status}){
@@ -4011,7 +4012,11 @@ function ProdutoAutocomplete({value, onChange, onSelect, C, Sg, placeholder}){
   const updateCoords = () => {
     if(inputRef.current){
       const r = inputRef.current.getBoundingClientRect();
-      setCoords({top: r.bottom + 2, left: r.left, width: r.width});
+      const minW = 540;
+      const desiredW = Math.max(r.width, minW);
+      const maxW = window.innerWidth - r.left - 16;
+      const width = Math.min(desiredW, maxW);
+      setCoords({top: r.bottom + 2, left: r.left, width});
     }
   };
 
@@ -4261,17 +4266,30 @@ function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
 }
 
 // ── Linha de item editável ───────────────────────────────────────
-function ItemRow({item, idx, onChange, onRemove, onOpenDisp, C, Sg}){
+function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
   const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
   const inputStyle = {...Sg.input(), fontSize:12, height:32, boxSizing:"border-box"};
   const taStyle = {border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text};
+
+  // Estado local pra não disparar histórico a cada teclada
+  const commitField = (field, value) => {
+    if((item[field]||"") !== (value||"")) {
+      onCommit(field, item[field]||"", value||"");
+    }
+  };
 
   return <tr style={{borderBottom:"1px solid "+C.border}}>
     <td style={{...cellMid, width:140}}>
       <ProdutoAutocomplete
         value={item.codigo||""}
         onChange={v=>onChange({...item, codigo:v})}
-        onSelect={p=>onChange({...item, codigo:p.codigo, descricao:p.descricao})}
+        onSelect={p=>{
+          const prevCode = item.codigo||"";
+          const next = {...item, codigo:p.codigo, descricao:p.descricao};
+          onChange(next);
+          // Autocomplete já é commit (usuário escolheu da lista)
+          if(prevCode !== p.codigo) onCommit("codigo", prevCode, p.codigo);
+        }}
         C={C} Sg={Sg} placeholder="Código..."/>
     </td>
     <td style={cellMid}>
@@ -4283,10 +4301,21 @@ function ItemRow({item, idx, onChange, onRemove, onOpenDisp, C, Sg}){
       />
     </td>
     <td style={{...cellMid, width:110}}>
-      <input style={inputStyle} value={item.lote||""} onChange={e=>onChange({...item, lote:e.target.value})} placeholder="Lote"/>
+      <input
+        style={inputStyle}
+        value={item.lote||""}
+        onChange={e=>onChange({...item, lote:e.target.value})}
+        onBlur={e=>commitField("lote", e.target.value)}
+        placeholder="Lote"/>
     </td>
     <td style={{...cellMid, width:60}}>
-      <input style={inputStyle} type="number" min="0" value={item.qtdNC||""} onChange={e=>onChange({...item, qtdNC:e.target.value})} placeholder="0"/>
+      <input
+        style={inputStyle}
+        type="number" min="0"
+        value={item.qtdNC||""}
+        onChange={e=>onChange({...item, qtdNC:e.target.value})}
+        onBlur={e=>commitField("qtdNC", e.target.value)}
+        placeholder="0"/>
     </td>
     <td style={{...cellMid, width:160}}>
       <button
@@ -4324,6 +4353,8 @@ function ItemRowReadOnly({item, idx, C}){
 // ── Tabela de itens dinâmica ─────────────────────────────────────
 function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg, allUsers}){
   const [dispModalIdx, setDispModalIdx] = useState(null);
+  // Rastreia quais itens já foram "anunciados" (têm código real) pra não duplicar
+  const announcedRef = React.useRef(new Set());
 
   const itemDesc = (it) => {
     const parts = [];
@@ -4332,40 +4363,60 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg
     return parts.join(" — ") || "(sem código)";
   };
 
+  // Adicionar linha NÃO registra no histórico (só registra quando ganhar código)
   const addItem = () => {
-    const newIdx = itens.length;
     onChange([...itens, {codigo:"", descricao:"", lote:"", qtdNC:"", disposicao:"", status:""}]);
-    if(onAddHistory) onAddHistory({type:"item_add", itemIdx:newIdx, detail:"Item adicionado à RO"});
   };
 
+  // Update sem registrar (a cada teclada) — usado no onChange dos inputs
   const updItem = (i, v) => {
-    const prev = itens[i] || {};
     const n = [...itens];
     n[i] = v;
     onChange(n);
-    if(onAddHistory){
-      const changes = [];
-      if((prev.codigo||"") !== (v.codigo||"") && v.codigo) changes.push("código: " + (prev.codigo||"vazio") + " → " + v.codigo);
-      if((prev.lote||"") !== (v.lote||"") && (prev.lote||v.lote)) changes.push("lote: " + (prev.lote||"vazio") + " → " + (v.lote||"vazio"));
-      if((prev.qtdNC||"") !== (v.qtdNC||"") && (prev.qtdNC||v.qtdNC)) changes.push("quantidade: " + (prev.qtdNC||"0") + " → " + (v.qtdNC||"0"));
-      if(changes.length>0){
-        onAddHistory({
-          type: "item_edit",
-          itemIdx: i,
-          itemCodigo: v.codigo||prev.codigo||"",
-          detail: "Item " + (v.codigo||prev.codigo||"#"+(i+1)) + " atualizado: " + changes.join("; ")
-        });
-      }
-    }
   };
 
+  // Commit de campo específico — registra no histórico
+  const commitField = (i, field, oldVal, newVal) => {
+    if(!onAddHistory) return;
+    const item = itens[i];
+    if(!item) return;
+    const code = item.codigo || newVal && field==="codigo" ? newVal : "";
+    const announceKey = "i_"+i+"_"+(code||"");
+
+    // Se item ainda não tem código identificável, não anuncia adição de campo
+    if(!code) return;
+
+    // Primeira vez que esse item é "real" (tem código) — anuncia adição
+    if(field==="codigo" && !announcedRef.current.has(announceKey)){
+      announcedRef.current.add(announceKey);
+      onAddHistory({
+        type: "item_add",
+        itemIdx: i,
+        itemCodigo: newVal,
+        detail: "Item adicionado: " + newVal + (item.descricao?" — "+item.descricao:"")
+      });
+      return;
+    }
+
+    // Mudanças de campo em item já existente
+    const labelMap = {codigo:"código", lote:"lote", qtdNC:"quantidade"};
+    const label = labelMap[field] || field;
+    onAddHistory({
+      type: "item_edit",
+      itemIdx: i,
+      itemCodigo: code,
+      detail: "Item " + code + ": " + label + " alterado de \"" + (oldVal||"vazio") + "\" para \"" + (newVal||"vazio") + "\""
+    });
+  };
+
+  // Remover — só registra se item tinha código (era real)
   const remItem = (i) => {
     const removed = itens[i];
     onChange(itens.filter((_,j)=>j!==i));
-    if(onAddHistory && (removed?.codigo || removed?.descricao)){
+    if(onAddHistory && removed?.codigo){
       onAddHistory({
         type: "item_remove",
-        itemCodigo: removed?.codigo||"",
+        itemCodigo: removed.codigo,
         detail: "Item removido: " + itemDesc(removed)
       });
     }
@@ -4420,6 +4471,7 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg
               ? <ItemRowReadOnly key={i} item={item} idx={i} C={C}/>
               : <ItemRow key={i} item={item} idx={i}
                   onChange={v=>updItem(i,v)}
+                  onCommit={(field, oldVal, newVal)=>commitField(i, field, oldVal, newVal)}
                   onRemove={()=>remItem(i)}
                   onOpenDisp={(idx)=>setDispModalIdx(idx)}
                   C={C} Sg={Sg}/>
@@ -4481,7 +4533,7 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-                {["Código","Tipo","Local","Descrição","Itens","Abertura","Status"].map(h=>(
+                {["Código","Tipo","Local","Descrição","Itens","Abertura","Status","Próxima ação"].map(h=>(
                   <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -4505,6 +4557,19 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
                   </td>
                   <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(r.createdAt)}</td>
                   <td style={{padding:"9px 12px"}}><ROStatusBadge status={r.status}/></td>
+                  <td style={{padding:"9px 12px",fontSize:11}}>
+                    {(()=>{
+                      // Conta linhas por status (calculado das disposições)
+                      if(r.status==="cancelada") return <span style={{color:C.muted}}>—</span>;
+                      if(r.status==="fechada"||r.status==="concluida") return <span style={{color:C.success}}>✓ concluída</span>;
+                      const semDisp = itens.filter(x=>!x.disposicao).length;
+                      const segregadas = itens.filter(x=>x.disposicao==="segregar"&&x.status!=="concluida").length;
+                      const partes = [];
+                      if(semDisp>0) partes.push(<span key="d" style={{color:C.muted}}>{semDisp} sem disposição</span>);
+                      if(segregadas>0) partes.push(<span key="s" style={{color:C.warning,fontWeight:500}}>⏳ {segregadas} aguardando qualidade</span>);
+                      return partes.length===0 ? <span style={{color:C.muted}}>—</span> : <span>{partes.reduce((acc,p,i)=>i===0?[p]:[...acc," · ",p],[])}</span>;
+                    })()}
+                  </td>
                 </tr>;
               })}
             </tbody>
@@ -4520,17 +4585,7 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
   const [f,setF]=useState({tipo:"",local:"",opChamado:"",descricao:"",classificacao:"",disposicao:""});
   const [itens,setItens]=useState([]);
   const [attachments,setAttachments]=useState([]);
-  const [historico,setHistorico]=useState([]);
-  const [histOpen,setHistOpen]=useState(true);
   const set = (k,v)=>setF(p=>({...p,[k]:v}));
-  const addHist = (entry)=>{
-    setHistorico(p=>[...p, {
-      ...entry,
-      at: new Date().toISOString(),
-      by: currentUser?.name || currentUser?.email || "—",
-      byId: currentUser?.id
-    }]);
-  };
   const ok = f.tipo&&f.local&&f.descricao;
 
   return <div style={{padding:"18px 22px",maxWidth:1100}}>
@@ -4582,58 +4637,41 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
           onChange={setItens}
           readOnly={false}
           currentUser={currentUser}
-          onAddHistory={addHist}
           C={C} Sg={Sg} allUsers={allUsers}/>
       </div>}
 
       <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura" currentUser={currentUser} C={C}/>
 
-      <div style={{...Sg.card(), padding:0, overflow:"hidden"}}>
-        <div
-          onClick={()=>setHistOpen(o=>!o)}
-          style={{display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", padding:"12px 16px", borderBottom: histOpen?"1px solid "+C.border:"none"}}>
-          <span style={{fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
-            Histórico {historico.length>0 && <span style={{color:C.dim, fontWeight:400}}>({historico.length})</span>}
-          </span>
-          <span style={{fontSize:11, color:C.muted}}>{histOpen?"− minimizar":"+ expandir"}</span>
-        </div>
-        {histOpen && <div>
-          {historico.length===0
-            ? <div style={{padding:"20px 16px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma alteração ainda. As ações realizadas aparecerão aqui.</div>
-            : <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
-                <thead>
-                  <tr style={{background:C.surface}}>
-                    <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:140}}>Data</th>
-                    <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:160}}>Usuário</th>
-                    <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>O que foi feito</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historico.slice().reverse().map((h,i)=>(
-                    <tr key={i} style={{borderTop:"1px solid "+C.border}}>
-                      <td style={{padding:"10px 14px", color:C.muted, fontSize:11, verticalAlign:"top", whiteSpace:"nowrap"}}>{fmt(h.at)}</td>
-                      <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top"}}>{h.by||"—"}</td>
-                      <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top", whiteSpace:"pre-wrap"}}>{h.detail||"—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-          }
-        </div>}
-      </div>
-
       <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
         <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
         <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
+          // Monta resumo dos itens registrados na abertura
+          const itensReais = (itens||[]).filter(it=>it.codigo);
+          const linhasItens = itensReais.map(it=>{
+            const partes = [];
+            partes.push(it.codigo);
+            if(it.descricao) partes.push("— " + it.descricao);
+            if(it.lote) partes.push("· lote " + it.lote);
+            if(it.qtdNC) partes.push("· qtd " + it.qtdNC);
+            if(it.disposicao){
+              const dispText = (RO_DISP_ABERTURA[it.disposicao]||{}).label || it.disposicao;
+              partes.push("· " + dispText);
+            }
+            if(it.acaoCorrecao) partes.push("\n   → " + it.acaoCorrecao);
+            return "  • " + partes.join(" ");
+          });
+          let resumo = "Ocorrência aberta";
+          if(itensReais.length>0){
+            resumo += "\n\nItens registrados (" + itensReais.length + "):\n" + linhasItens.join("\n");
+          }
           const aberturaEntry = {
             type: "abertura",
             at: new Date().toISOString(),
             by: currentUser?.name || currentUser?.email || "—",
             byId: currentUser?.id,
-            detail: "Ocorrência aberta"
+            detail: resumo
           };
-          const finalHistorico = [aberturaEntry, ...historico];
-          onSave({...f, historico: finalHistorico}, itens, attachments);
+          onSave({...f, historico: [aberturaEntry]}, itens, attachments);
         }}>Abrir Ocorrência</button>
       </div>
     </div>
@@ -4740,6 +4778,16 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const [itensEdit,setItensEdit]=useState([]);
   const [editingItens,setEditingItens]=useState(false);
   const [addingAtt,setAddingAtt]=useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [motiveModal, setMotiveModal] = useState(null);
+  const actionMenuRef = React.useRef(null);
+
+  React.useEffect(()=>{
+    if(!actionMenuOpen) return;
+    const close = (e) => { if(actionMenuRef.current && !actionMenuRef.current.contains(e.target)) setActionMenuOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [actionMenuOpen]);
 
   const r = roRecord;
   React.useEffect(()=>{
@@ -4823,6 +4871,56 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     setSigModal(null);
   };
 
+  const doCancelar = async (sig, motivo) => {
+    const now = new Date().toISOString();
+    const newHist = {
+      type: "cancelamento",
+      at: now,
+      by: currentUser.name,
+      byId: currentUser.id,
+      detail: "Ocorrência cancelada\nMotivo: " + (motivo||"—") + (sig?"\nAssinado por: "+sig.signedByName:"")
+    };
+    const updated = {
+      ...r,
+      status: "cancelada",
+      data: {
+        ...d,
+        historico: [...(d.historico||[]), newHist],
+        canceladaAt: now,
+        canceladaBy: currentUser.id,
+        canceladaByName: currentUser.name,
+        cancelamentoMotivo: motivo||""
+      }
+    };
+    await onUpdate(updated);
+    setSigModal(null);
+  };
+
+  const doReabrir = async (sig, motivo) => {
+    const now = new Date().toISOString();
+    const newHist = {
+      type: "reabertura",
+      at: now,
+      by: currentUser.name,
+      byId: currentUser.id,
+      detail: "Ocorrência reaberta\nMotivo: " + (motivo||"—") + (sig?"\nAssinado por: "+sig.signedByName:"")
+    };
+    const updated = {
+      ...r,
+      status: "aberta",
+      data: {
+        ...d,
+        historico: [...(d.historico||[]), newHist],
+        reabertaAt: now,
+        reabertaBy: currentUser.id,
+        reabertaByName: currentUser.name,
+        reaberturaMotivo: motivo||""
+      }
+    };
+    await onUpdate(updated);
+    setSigModal(null);
+  };
+
   const itensVisiveis = editingItens ? itensEdit : (d.itens||[]);
 
   return <div style={{padding:"18px 22px",maxWidth:1100}}>
@@ -4837,8 +4935,79 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         <div style={{fontSize:12,color:C.muted,marginTop:3}}>{d.tipo||""}{d.local?" · "+d.local:""}</div>
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
-        {status==="em_analise"&&canClose&&<button style={Sg.btn("success")} onClick={()=>setSigModal({action:"fechar",title:"Fechar Ocorrência"})}>Fechar RO</button>}
-        {status==="fechada"&&<button style={{...Sg.btn("primary"),fontSize:12}} onClick={()=>setNcModal(true)}>Gerar NC</button>}
+        {(canAnalyze || canClose || hasPerm(currentUser,'ro.cancelar') || hasPerm(currentUser,'ro.reabrir')) && <div style={{position:"relative"}} ref={actionMenuRef}>
+          <button
+            style={{...Sg.btn("primary"),fontSize:12,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}}
+            onClick={()=>setActionMenuOpen(o=>!o)}>
+            Ações <span style={{fontSize:10,opacity:.7}}>{actionMenuOpen?"▲":"▼"}</span>
+          </button>
+          {actionMenuOpen && <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:C.card,border:"1px solid "+C.border,borderRadius:10,boxShadow:"0 8px 32px #0006",zIndex:200,minWidth:240,padding:"6px 0"}}>
+
+            {/* Próximo passo */}
+            {status==="em_analise" && canClose && <>
+              <div style={{padding:"6px 14px 3px",fontSize:10,fontWeight:700,color:C.accent,textTransform:"uppercase",letterSpacing:.5}}>Próximo passo</div>
+              <button
+                style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"8px 14px",textAlign:"left",fontSize:13,color:C.accent,fontFamily:"inherit",display:"flex",alignItems:"center",gap:8}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                onClick={()=>{
+                  setActionMenuOpen(false);
+                  setSigModal({action:"fechar",title:"Fechar Ocorrência",confirmLabel:"Fechar",confirmStyle:"success"});
+                }}>
+                <span>✓</span> Fechar Ocorrência
+              </button>
+              <div style={{height:1,background:C.border,margin:"4px 0"}}/>
+            </>}
+
+            {status==="fechada" && <>
+              <button
+                style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"8px 14px",textAlign:"left",fontSize:13,color:C.text,fontFamily:"inherit",display:"flex",alignItems:"center",gap:8}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                onClick={()=>{setActionMenuOpen(false); setNcModal(true);}}>
+                <span>↗</span> Gerar NC
+              </button>
+              <div style={{height:1,background:C.border,margin:"4px 0"}}/>
+            </>}
+
+            {/* Cancelar */}
+            {!["cancelada","fechada"].includes(status) && hasPerm(currentUser,'ro.cancelar') && <button
+              style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"8px 14px",textAlign:"left",fontSize:13,color:C.danger,fontFamily:"inherit",display:"flex",alignItems:"center",gap:8}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              onClick={()=>{
+                setActionMenuOpen(false);
+                setMotiveModal({
+                  kind:"cancelar",
+                  title:"Cancelar Ocorrência",
+                  description:"Informe o motivo do cancelamento. A RO ficará marcada como cancelada e o motivo será registrado no histórico com sua assinatura.",
+                  confirmLabel:"Continuar para assinatura",
+                  confirmStyle:"danger"
+                });
+              }}>
+              <span>✕</span> Cancelar Ocorrência
+            </button>}
+
+            {/* Reabrir */}
+            {["cancelada","fechada"].includes(status) && hasPerm(currentUser,'ro.reabrir') && <button
+              style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"8px 14px",textAlign:"left",fontSize:13,color:C.warning,fontFamily:"inherit",display:"flex",alignItems:"center",gap:8}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              onClick={()=>{
+                setActionMenuOpen(false);
+                setMotiveModal({
+                  kind:"reabrir",
+                  title:"Reabrir Ocorrência",
+                  description:"Informe o motivo da reabertura. A RO voltará para status 'Em análise' e o motivo será registrado no histórico com sua assinatura.",
+                  confirmLabel:"Continuar para assinatura",
+                  confirmStyle:"warning"
+                });
+              }}>
+              <span>↻</span> Reabrir Ocorrência
+            </button>}
+
+          </div>}
+        </div>}
       </div>
     </div>
 
@@ -4850,6 +5019,12 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     {/* Banner fechada */}
     {status==="fechada"&&<div style={{padding:"10px 14px",background:C.success+"15",border:"1px solid "+C.success+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.success,fontWeight:600}}>
       Ocorrência fechada {d.conclusaoAt?("em "+fmt(d.conclusaoAt)+" por "+d.conclusaoByName):d.fechadoAt?("em "+fmt(d.fechadoAt)+" por "+d.fechadoByName):""}
+    </div>}
+
+    {/* Banner cancelada */}
+    {status==="cancelada"&&<div style={{padding:"10px 14px",background:C.danger+"15",border:"1px solid "+C.danger+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.danger,fontWeight:600}}>
+      Ocorrência cancelada {d.canceladaAt?("em "+fmt(d.canceladaAt)+" por "+d.canceladaByName):""}
+      {d.cancelamentoMotivo&&<div style={{fontWeight:400,fontSize:12,marginTop:4,color:C.text}}>Motivo: {d.cancelamentoMotivo}</div>}
     </div>}
 
     {/* Dados principais */}
@@ -4953,6 +5128,26 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     {/* Histórico unificado */}
     <ROHistorico r={r} C={C}/>
 
+    {/* Motive modal — pra cancelar / reabrir */}
+    {motiveModal && <MotiveModal
+      open={true}
+      onClose={()=>setMotiveModal(null)}
+      onConfirm={(motivo)=>{
+        const m = motiveModal;
+        setMotiveModal(null);
+        if(m.kind==="cancelar"){
+          setSigModal({action:"cancelar",title:"Assinar — Cancelamento",confirmLabel:"Assinar e cancelar",confirmStyle:"danger",cancelMotivo:motivo});
+        } else if(m.kind==="reabrir"){
+          setSigModal({action:"reabrir",title:"Assinar — Reabertura",confirmLabel:"Assinar e reabrir",confirmStyle:"warning",reaberturaMotivo:motivo});
+        }
+      }}
+      title={motiveModal.title}
+      description={motiveModal.description}
+      confirmLabel={motiveModal.confirmLabel}
+      confirmStyle={motiveModal.confirmStyle}
+      C={C} Sg={Sg}
+    />}
+
     {/* Signature modal */}
     {sigModal&&<SignatureModal
       open={true}
@@ -4966,6 +5161,8 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       onConfirm={async(sig)=>{
         if(sigModal.action==="fechar") await doClose(sig);
         else if(sigModal.action==="conclusao") await doConclusao(sig);
+        else if(sigModal.action==="cancelar") await doCancelar(sig, sigModal.cancelMotivo||"");
+        else if(sigModal.action==="reabrir") await doReabrir(sig, sigModal.reaberturaMotivo||"");
         else await doAnalyze(sig);
       }}
     />}
@@ -5241,6 +5438,8 @@ const ALL_PERMS_META = [
     {id:"ro.analisar", label:"Analisar RO"},
     {id:"ro.aprovar",  label:"Aprovar RO"},
     {id:"ro.fechar",   label:"Fechar RO"},
+    {id:"ro.cancelar", label:"Cancelar RO"},
+    {id:"ro.reabrir",  label:"Reabrir RO"},
     {id:"ro.excluir",  label:"Excluir RO"},
   ]},
   {section:"Não Conformidade (NC)", items:[
