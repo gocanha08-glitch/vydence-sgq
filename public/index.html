@@ -3175,9 +3175,31 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
 
   const canAnalyzeRO=hasPerm(currentUser,'ro.analisar');
   const canCloseRO=hasPerm(currentUser,'ro.fechar');
-  const roParaAnalisar=canAnalyzeRO?(roRecs||[]).filter(r=>r.status==='aberta'||r.status==='em_analise'):[];
-  const roParaConcluir=canCloseRO?(roRecs||[]).filter(r=>r.status==='aguardando_conclusao'):[];
-  const pendRO=roParaAnalisar.length+roParaConcluir.length;
+  const canTratarSeg=hasPerm(currentUser,'ro.tratar_segregado');
+  const canAprovarConc=hasPerm(currentUser,'ro.aprovar_concessao');
+
+  // ROs com pelo menos uma linha aguardando qualidade (Segregar ou rejeitada)
+  const roParaAnalisar = canTratarSeg ? (roRecs||[]).filter(r=>{
+    if(["cancelada","fechada"].includes(r.status)) return false;
+    const itens = r.data?.itens || [];
+    return itens.some(it =>
+      (it.disposicao==="segregar" && it.status!=="concluida") ||
+      it.disposicao==="concessao_rejeitada"
+    );
+  }) : [];
+
+  // ROs com pelo menos uma linha aguardando MINHA aprovação de concessão
+  const roParaAprovar = canAprovarConc ? (roRecs||[]).filter(r=>{
+    if(["cancelada","fechada"].includes(r.status)) return false;
+    const itens = r.data?.itens || [];
+    return itens.some(it =>
+      it.disposicao==="concessao_solicitada" &&
+      it.concessaoAprovadorId===currentUser.id
+    );
+  }) : [];
+
+  const roParaConcluir = canCloseRO ? (roRecs||[]).filter(r=>r.status==='aguardando_conclusao') : [];
+  const pendRO = roParaAnalisar.length + roParaAprovar.length + roParaConcluir.length;
   const pendCMTotal=aprovSGQ.length+analises.length+acoes.length;
   const daysSince=d=>d?Math.floor((Date.now()-new Date(d))/(1000*60*60*24)):null;
 
@@ -3187,7 +3209,8 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
       {[
         {key:'ro',label:'Ocorrências',pend:pendRO,tags:[
-          roParaAnalisar.length>0&&{label:roParaAnalisar.length+" analisar",color:C.warning},
+          roParaAnalisar.length>0&&{label:roParaAnalisar.length+" segregadas",color:C.warning},
+          roParaAprovar.length>0&&{label:roParaAprovar.length+" concessões",color:C.accent},
           roParaConcluir.length>0&&{label:roParaConcluir.length+" concluir",color:C.purple},
         ].filter(Boolean)},
         {key:'cm',label:'Controle de Mudanças',pend:pendCMTotal,tags:[
@@ -3255,7 +3278,7 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
 
     {activeModule==='ro'&&<div style={{marginBottom:16}}>
       {roParaAnalisar.length>0&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>PARA ANALISAR ({roParaAnalisar.length})</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>SEGREGADAS A TRATAR ({roParaAnalisar.length})</div>
         <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
           <div style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 90px 80px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
             {["Código","Descrição","Tipo","Local","Dias aberto","Pendência"].map(hh=>(
@@ -3299,6 +3322,29 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
               <div style={{fontSize:11,color:C.dim}}>{d.tipo||"—"}</div>
               <div style={{fontSize:11,color:C.purple,fontWeight:600}}>{d.disposicao||"—"}</div>
               <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.purple+"18",color:C.purple}}>Concluir</span>
+            </div>;
+          })}
+        </div>
+      </div>}
+      {roParaAprovar.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>CONCESSÕES A APROVAR ({roParaAprovar.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["Código","Descrição","Itens","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {roParaAprovar.map((r,i)=>{
+            const d=r.data||{};
+            const conc = (d.itens||[]).filter(it=>it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===currentUser.id);
+            return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+              <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+              <div style={{fontSize:11,color:C.dim}}>{conc.length} item{conc.length!==1?"s":""}</div>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.accent+"18",color:C.accent}}>Aprovar</span>
             </div>;
           })}
         </div>
@@ -4148,20 +4194,61 @@ function AutoTextarea({value, onChange, placeholder, style, ...rest}){
   />;
 }
 
-// ── Disposições da abertura (operador) ───────────────────────────
+// ── Disposições (todas as possíveis) ─────────────────────────────
+// Abertura (operador): correcao, segregar
+// Tratamento (qualidade): sucatamento, concessao_solicitada (depois aprovada/rejeitada), migrada_nc
 const RO_DISP_ABERTURA = {
   correcao:  {label:"Correção imediata", short:"Correção", color:"success"},
   segregar:  {label:"Segregar com Qualidade", short:"Segregar", color:"warning"}
 };
 
-function dispLabel(disp){ return (RO_DISP_ABERTURA[disp]||{}).short || "—"; }
+// Estados terminais e intermediários (podem ser definidos pela qualidade)
+const RO_DISP_QUALIDADE = {
+  sucatamento:           {label:"Sucatamento", short:"Sucatado", color:"danger"},
+  concessao_solicitada:  {label:"Concessão solicitada", short:"Concessão", color:"info"},
+  concessao_aprovada:    {label:"Concessão aprovada", short:"Concessão ✓", color:"success"},
+  concessao_rejeitada:   {label:"Concessão rejeitada", short:"Rejeitada", color:"danger"},
+  migrada_nc:            {label:"Migrada para NC", short:"→ NC", color:"info"}
+};
+
+const RO_DISP_TODAS = {...RO_DISP_ABERTURA, ...RO_DISP_QUALIDADE};
+
+function dispLabel(disp){ return (RO_DISP_TODAS[disp]||{}).short || "—"; }
+
+// Determina se a linha está num estado pendente (precisa de ação)
+function lineIsPending(item){
+  if(!item) return false;
+  const d = item.disposicao;
+  // Sem disposição = pendente
+  if(!d) return true;
+  // Segregar sem decisão da qualidade = pendente
+  if(d==="segregar" && item.status!=="concluida") return true;
+  // Concessão solicitada e ainda não decidida = pendente
+  if(d==="concessao_solicitada") return true;
+  // Concessão rejeitada precisa redecidir = pendente
+  if(d==="concessao_rejeitada") return true;
+  return false;
+}
+
+// Determina o tipo de pendência da linha (pra dashboard / fila do aprovador)
+function linePendencyType(item){
+  if(!item) return null;
+  const d = item.disposicao;
+  if(!d) return "definir";
+  if(d==="segregar" && item.status!=="concluida") return "qualidade";
+  if(d==="concessao_solicitada") return "aprovacao";
+  if(d==="concessao_rejeitada") return "redecidir";
+  return null;
+}
 
 function DispBadge({disp, status, C}){
   if(!disp) return <span style={{fontSize:11, color:C.muted, fontStyle:"italic"}}>definir...</span>;
-  const meta = RO_DISP_ABERTURA[disp]||{};
+  const meta = RO_DISP_TODAS[disp]||{};
   const colorMap = {success:C.success, warning:C.warning, danger:C.danger, info:C.accent};
   const col = colorMap[meta.color]||C.muted;
-  const isPending = status==="pendente" || (disp==="segregar" && !status);
+  const isPending = (disp==="segregar" && status!=="concluida")
+                 || disp==="concessao_solicitada"
+                 || disp==="concessao_rejeitada";
   return <span style={{
     display:"inline-flex", alignItems:"center", gap:5,
     fontSize:11, color:col, fontWeight:600,
@@ -4265,6 +4352,236 @@ function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
   </Modal>;
 }
 
+// ── Modal de tratamento (qualidade decide destino de linha Segregar) ────
+function TratamentoModal({open, item, allUsers, currentUser, onClose, onSave, C, Sg}){
+  const [decisao, setDecisao] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [aprovador, setAprovador] = useState("");
+  const [novaQtd, setNovaQtd] = useState("");
+  const [confirmaSenha, setConfirmaSenha] = useState("");
+  const [errSenha, setErrSenha] = useState("");
+
+  React.useEffect(()=>{
+    if(open){
+      setDecisao(""); setMotivo(""); setAprovador(""); setNovaQtd(item?.qtdNC||""); setConfirmaSenha(""); setErrSenha("");
+    }
+  }, [open, item]);
+
+  if(!open) return null;
+
+  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && (u.id===currentUser?.id || true));
+  const canSave = (
+    (decisao==="sucatamento"   && motivo.trim().length>0) ||
+    (decisao==="concessao"     && motivo.trim().length>0 && aprovador) ||
+    (decisao==="editar"        && novaQtd && Number(novaQtd)>0) ||
+    (decisao==="migrar_nc"     && motivo.trim().length>0)
+  );
+
+  const verificarAssinaturaESalvar = async () => {
+    if(!confirmaSenha){ setErrSenha("Digite sua senha pra confirmar."); return; }
+    setErrSenha("");
+    try {
+      const token = sessionStorage.getItem('sgq_token');
+      const r = await fetch('/api/auth?_route=verify',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({password:confirmaSenha})
+      });
+      const data = await r.json();
+      if(!r.ok || !data.ok){ setErrSenha("Senha incorreta."); return; }
+      // Senha ok, dispara o save
+      onSave({decisao, motivo:motivo.trim(), aprovador, novaQtd: Number(novaQtd)||null});
+    } catch(err){
+      setErrSenha("Erro de comunicação. Tente novamente.");
+    }
+  };
+
+  return <Modal open={open} onClose={onClose} title="Tratar item segregado" width={560}>
+    <div style={{display:"flex", flexDirection:"column", gap:14}}>
+
+      {item && <div style={{padding:"10px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted}}>
+        <strong style={{color:C.accent}}>{item.codigo||"—"}</strong>
+        {item.descricao && <span> · {item.descricao}</span>}
+        {item.lote && <span> · Lote {item.lote}</span>}
+        {item.qtdNC && <span> · Qtd {item.qtdNC}</span>}
+      </div>}
+
+      {!decisao && <div>
+        <label style={Sg.lbl}>Decisão</label>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:4}}>
+          <button onClick={()=>setDecisao("sucatamento")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
+            <div style={{fontWeight:600, marginBottom:2}}>Sucatear</div>
+            <div style={{fontSize:11, color:C.muted}}>Descartar todas as unidades</div>
+          </button>
+          <button onClick={()=>setDecisao("concessao")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
+            <div style={{fontWeight:600, marginBottom:2}}>Pedir concessão</div>
+            <div style={{fontSize:11, color:C.muted}}>Indicar aprovador e justificar</div>
+          </button>
+          <button onClick={()=>setDecisao("editar")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
+            <div style={{fontWeight:600, marginBottom:2}}>Editar / dividir</div>
+            <div style={{fontSize:11, color:C.muted}}>Mudar quantidade desta linha</div>
+          </button>
+          <button onClick={()=>setDecisao("migrar_nc")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
+            <div style={{fontWeight:600, marginBottom:2}}>Mover para NC</div>
+            <div style={{fontSize:11, color:C.muted}}>Tratativa estendida com fornecedor</div>
+          </button>
+        </div>
+      </div>}
+
+      {decisao==="sucatamento" && <div>
+        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
+          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
+          {" "}· <strong>Sucatear</strong> {item?.qtdNC} unid
+        </div>
+        <label style={Sg.lbl}>Motivo do descarte *</label>
+        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ex: peça danificada sem possibilidade de retrabalho"/>
+      </div>}
+
+      {decisao==="concessao" && <div>
+        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
+          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
+          {" "}· <strong>Pedir concessão</strong>
+        </div>
+        <label style={Sg.lbl}>Justificativa *</label>
+        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit", marginBottom:10}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Por que liberar esta peça com problema?"/>
+        <label style={Sg.lbl}>Aprovador *</label>
+        <select style={Sg.input()} value={aprovador} onChange={e=>setAprovador(e.target.value)}>
+          <option value="">Selecione...</option>
+          {aprovadores.filter(u=>u.id!==currentUser?.id).map(u=>(
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+        <div style={{fontSize:10, color:C.muted, marginTop:6}}>O aprovador receberá esta solicitação como pendência.</div>
+      </div>}
+
+      {decisao==="editar" && <div>
+        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
+          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
+          {" "}· <strong>Editar quantidade</strong> (atual: {item?.qtdNC})
+        </div>
+        <label style={Sg.lbl}>Nova quantidade *</label>
+        <input style={Sg.input()} type="number" min="1" value={novaQtd} onChange={e=>setNovaQtd(e.target.value)} placeholder="Quantidade desta linha"/>
+        <div style={{fontSize:10, color:C.muted, marginTop:6}}>Pra dividir em duas decisões diferentes, primeiro reduza esta linha aqui, depois adicione outra linha com a quantidade restante na tela principal.</div>
+      </div>}
+
+      {decisao==="migrar_nc" && <div>
+        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
+          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
+          {" "}· <strong>Mover para NC</strong>
+        </div>
+        <label style={Sg.lbl}>Razão *</label>
+        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ex: precisa retrabalhar com fornecedor"/>
+        <div style={{padding:"8px 10px", background:C.accent+"10", borderRadius:6, fontSize:11, color:C.accent, marginTop:8}}>
+          Esta linha sairá da RO e ficará vinculada à nova NC. Por enquanto a NC será criada como rascunho — o módulo NC será concluído na próxima sessão.
+        </div>
+      </div>}
+
+      {decisao && <div style={{borderTop:"1px solid "+C.border, paddingTop:14, marginTop:6}}>
+        <label style={Sg.lbl}>Confirme sua senha (assinatura digital) *</label>
+        <input type="password" style={Sg.input()} value={confirmaSenha} onChange={e=>{setConfirmaSenha(e.target.value);setErrSenha("");}} placeholder="Sua senha"/>
+        {errSenha && <div style={{fontSize:11, color:C.danger, marginTop:4}}>{errSenha}</div>}
+      </div>}
+
+      <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:6}}>
+        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+        {decisao && <button
+          style={{...Sg.btn("primary"), opacity:(canSave && confirmaSenha)?1:.4}}
+          disabled={!canSave || !confirmaSenha}
+          onClick={verificarAssinaturaESalvar}>
+          Confirmar e assinar
+        </button>}
+      </div>
+    </div>
+  </Modal>;
+}
+
+// ── Modal de aprovação de concessão (aprovador decide) ────────────
+function AprovacaoModal({open, item, onClose, onSave, C, Sg}){
+  const [decisao, setDecisao] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [confirmaSenha, setConfirmaSenha] = useState("");
+  const [errSenha, setErrSenha] = useState("");
+
+  React.useEffect(()=>{
+    if(open){ setDecisao(""); setMotivo(""); setConfirmaSenha(""); setErrSenha(""); }
+  }, [open, item]);
+
+  if(!open) return null;
+  const canSave = decisao && motivo.trim().length>0;
+
+  const verificarESalvar = async () => {
+    if(!confirmaSenha){ setErrSenha("Digite sua senha pra confirmar."); return; }
+    setErrSenha("");
+    try {
+      const token = sessionStorage.getItem('sgq_token');
+      const r = await fetch('/api/auth?_route=verify',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({password:confirmaSenha})
+      });
+      const data = await r.json();
+      if(!r.ok || !data.ok){ setErrSenha("Senha incorreta."); return; }
+      onSave({decisao, motivo: motivo.trim()});
+    } catch(err){
+      setErrSenha("Erro de comunicação.");
+    }
+  };
+
+  return <Modal open={open} onClose={onClose} title="Decidir concessão" width={520}>
+    <div style={{display:"flex", flexDirection:"column", gap:14}}>
+      {item && <div style={{padding:"10px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted}}>
+        <strong style={{color:C.accent}}>{item.codigo||"—"}</strong>
+        {item.descricao && <span> · {item.descricao}</span>}
+        {item.lote && <span> · Lote {item.lote}</span>}
+        {item.qtdNC && <span> · Qtd {item.qtdNC}</span>}
+      </div>}
+
+      {item?.concessaoJustificativa && <div>
+        <div style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginBottom:4}}>Justificativa da qualidade</div>
+        <div style={{fontSize:12, color:C.text, padding:"10px 12px", background:C.surface, borderRadius:6, whiteSpace:"pre-wrap"}}>
+          {item.concessaoJustificativa}
+        </div>
+        <div style={{fontSize:10, color:C.muted, marginTop:4}}>
+          Solicitada por {item.concessaoSolicitadaBy||"—"} em {fmt(item.concessaoSolicitadaAt)}
+        </div>
+      </div>}
+
+      <div>
+        <label style={Sg.lbl}>Sua decisão</label>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:4}}>
+          <button onClick={()=>setDecisao("aprovar")} style={{padding:"10px", textAlign:"center", cursor:"pointer", border:"1px solid "+(decisao==="aprovar"?C.success:C.border), background:decisao==="aprovar"?C.success+"15":C.card, borderRadius:8, fontSize:13, color:decisao==="aprovar"?C.success:C.text, fontWeight:600}}>
+            Aprovar
+          </button>
+          <button onClick={()=>setDecisao("rejeitar")} style={{padding:"10px", textAlign:"center", cursor:"pointer", border:"1px solid "+(decisao==="rejeitar"?C.danger:C.border), background:decisao==="rejeitar"?C.danger+"15":C.card, borderRadius:8, fontSize:13, color:decisao==="rejeitar"?C.danger:C.text, fontWeight:600}}>
+            Rejeitar
+          </button>
+        </div>
+      </div>
+
+      {decisao && <div>
+        <label style={Sg.lbl}>{decisao==="aprovar"?"Observação (opcional, mas recomendado)":"Motivo da rejeição *"}</label>
+        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder={decisao==="aprovar"?"Ex: liberado, condições aceitáveis":"Ex: não atende ao requisito mínimo"}/>
+      </div>}
+
+      {decisao && <div style={{borderTop:"1px solid "+C.border, paddingTop:14, marginTop:6}}>
+        <label style={Sg.lbl}>Confirme sua senha (assinatura digital) *</label>
+        <input type="password" style={Sg.input()} value={confirmaSenha} onChange={e=>{setConfirmaSenha(e.target.value);setErrSenha("");}} placeholder="Sua senha"/>
+        {errSenha && <div style={{fontSize:11, color:C.danger, marginTop:4}}>{errSenha}</div>}
+      </div>}
+
+      <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:6}}>
+        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+        {decisao && <button
+          style={{...Sg.btn(decisao==="aprovar"?"success":"danger"), opacity:(canSave && confirmaSenha)?1:.4}}
+          disabled={!canSave || !confirmaSenha}
+          onClick={verificarESalvar}>
+          {decisao==="aprovar"?"Aprovar e assinar":"Rejeitar e assinar"}
+        </button>}
+      </div>
+    </div>
+  </Modal>;
+}
+
 // ── Linha de item editável ───────────────────────────────────────
 function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
   const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
@@ -4317,7 +4634,7 @@ function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
         onBlur={e=>commitField("qtdNC", e.target.value)}
         placeholder="0"/>
     </td>
-    <td style={{...cellMid, width:160}}>
+    <td style={{...cellMid, width:240}}>
       <button
         onClick={()=>onOpenDisp(idx)}
         style={{
@@ -4338,20 +4655,36 @@ function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
 }
 
 // ── Linha read-only ──────────────────────────────────────────────
-function ItemRowReadOnly({item, idx, C}){
+function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar, C, Sg}){
   const cellRO = {padding:"8px 8px", fontSize:12, verticalAlign:"middle"};
+  const showTratar = canTratar && lineIsPending(item) && (item.disposicao==="segregar" || item.disposicao==="concessao_rejeitada");
+  const showAprovar = canAprovar && item.disposicao==="concessao_solicitada";
   return <tr style={{borderBottom:"1px solid "+C.border}}>
     <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
     <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
     <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
     <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
-    <td style={{...cellRO, width:160}}><DispBadge disp={item.disposicao} status={item.status} C={C}/></td>
+    <td style={{...cellRO, width:240}}>
+      <div style={{display:"flex", gap:6, alignItems:"center", flexWrap:"nowrap"}}>
+        <DispBadge disp={item.disposicao} status={item.status} C={C}/>
+        {showTratar && onTratar && <button
+          onClick={()=>onTratar(idx)}
+          style={{fontSize:11, padding:"3px 10px", background:C.accent, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
+          Tratar →
+        </button>}
+        {showAprovar && onAprovar && <button
+          onClick={()=>onAprovar(idx)}
+          style={{fontSize:11, padding:"3px 10px", background:C.warning, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
+          Decidir →
+        </button>}
+      </div>
+    </td>
     <td style={{...cellRO, width:32}}/>
   </tr>;
 }
 
 // ── Tabela de itens dinâmica ─────────────────────────────────────
-function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg, allUsers}){
+function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTratar, canTratar, onAprovar, canAprovar, C, Sg, allUsers}){
   const [dispModalIdx, setDispModalIdx] = useState(null);
   // Rastreia quais itens já foram "anunciados" (têm código real) pra não duplicar
   const announcedRef = React.useRef(new Set());
@@ -4454,7 +4787,7 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg
           <col/>
           <col style={{width:110}}/>
           <col style={{width:60}}/>
-          <col style={{width:160}}/>
+          <col style={{width:240}}/>
           <col style={{width:32}}/>
         </colgroup>
         <thead>
@@ -4468,7 +4801,7 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg
           {itens.length===0 && <tr><td colSpan={6} style={{padding:"12px 8px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhum item adicionado</td></tr>}
           {itens.map((item,i)=>(
             readOnly
-              ? <ItemRowReadOnly key={i} item={item} idx={i} C={C}/>
+              ? <ItemRowReadOnly key={i} item={item} idx={i} onTratar={onTratar} canTratar={canTratar} onAprovar={onAprovar} canAprovar={canAprovar && (currentUser && item.concessaoAprovadorId===currentUser.id)} C={C} Sg={Sg}/>
               : <ItemRow key={i} item={item} idx={i}
                   onChange={v=>updItem(i,v)}
                   onCommit={(field, oldVal, newVal)=>commitField(i, field, oldVal, newVal)}
@@ -4563,10 +4896,12 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
                       if(r.status==="cancelada") return <span style={{color:C.muted}}>—</span>;
                       if(r.status==="fechada"||r.status==="concluida") return <span style={{color:C.success}}>✓ concluída</span>;
                       const semDisp = itens.filter(x=>!x.disposicao).length;
-                      const segregadas = itens.filter(x=>x.disposicao==="segregar"&&x.status!=="concluida").length;
+                      const segregadas = itens.filter(x=>(x.disposicao==="segregar"&&x.status!=="concluida")||x.disposicao==="concessao_rejeitada").length;
+                      const concessoes = itens.filter(x=>x.disposicao==="concessao_solicitada").length;
                       const partes = [];
                       if(semDisp>0) partes.push(<span key="d" style={{color:C.muted}}>{semDisp} sem disposição</span>);
-                      if(segregadas>0) partes.push(<span key="s" style={{color:C.warning,fontWeight:500}}>⏳ {segregadas} aguardando qualidade</span>);
+                      if(segregadas>0) partes.push(<span key="s" style={{color:C.warning,fontWeight:500}}>⏳ {segregadas} c/ qualidade</span>);
+                      if(concessoes>0) partes.push(<span key="c" style={{color:C.accent,fontWeight:500}}>⏳ {concessoes} aprovação</span>);
                       return partes.length===0 ? <span style={{color:C.muted}}>—</span> : <span>{partes.reduce((acc,p,i)=>i===0?[p]:[...acc," · ",p],[])}</span>;
                     })()}
                   </td>
@@ -4780,6 +5115,8 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const [addingAtt,setAddingAtt]=useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [motiveModal, setMotiveModal] = useState(null);
+  const [tratamentoIdx, setTratamentoIdx] = useState(null);
+  const [aprovacaoIdx, setAprovacaoIdx] = useState(null);
   const actionMenuRef = React.useRef(null);
 
   React.useEffect(()=>{
@@ -5060,6 +5397,10 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         onChange={v=>{if(editingItens)setItensEdit(v);}}
         readOnly={!editingItens}
         currentUser={currentUser}
+        onTratar={(idx)=>setTratamentoIdx(idx)}
+        canTratar={hasPerm(currentUser,'ro.tratar_segregado') && !editingItens && !["cancelada","fechada"].includes(status)}
+        onAprovar={(idx)=>setAprovacaoIdx(idx)}
+        canAprovar={hasPerm(currentUser,'ro.aprovar_concessao') && !editingItens && !["cancelada","fechada"].includes(status)}
         C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
 
@@ -5117,6 +5458,122 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
 
     {/* Histórico unificado */}
     <ROHistorico r={r} C={C}/>
+
+    {/* Aprovação de concessão — quando aprovador clica em Decidir */}
+    {aprovacaoIdx!==null && d.itens && d.itens[aprovacaoIdx] && <AprovacaoModal
+      open={true}
+      item={d.itens[aprovacaoIdx]}
+      onClose={()=>setAprovacaoIdx(null)}
+      onSave={async (resultado)=>{
+        const idx = aprovacaoIdx;
+        const itens = [...(d.itens||[])];
+        const linha = {...itens[idx]};
+        const codigo = linha.codigo || ("item #"+(idx+1));
+        const aprovador = currentUser?.name || currentUser?.email || "—";
+        let detalhe = "";
+
+        if(resultado.decisao === "aprovar"){
+          linha.disposicao = "concessao_aprovada";
+          linha.status = "concluida";
+          linha.concessaoAprovadaAt = new Date().toISOString();
+          linha.concessaoAprovadaBy = aprovador;
+          linha.concessaoAprovadaObs = resultado.motivo;
+          detalhe = "Item " + codigo + ": concessão APROVADA por " + aprovador + ".";
+          if(resultado.motivo) detalhe += "\nObservação: " + resultado.motivo;
+        } else {
+          linha.disposicao = "concessao_rejeitada";
+          linha.status = "pendente";
+          linha.concessaoRejeitadaAt = new Date().toISOString();
+          linha.concessaoRejeitadaBy = aprovador;
+          linha.concessaoRejeitadaMotivo = resultado.motivo;
+          detalhe = "Item " + codigo + ": concessão REJEITADA por " + aprovador + ".\nMotivo: " + resultado.motivo + "\nVolta para a qualidade decidir outra disposição.";
+        }
+        itens[idx] = linha;
+
+        const novoHist = {
+          type: "decisao_aprovador",
+          at: new Date().toISOString(),
+          by: aprovador,
+          byId: currentUser?.id,
+          itemIdx: idx,
+          itemCodigo: linha.codigo || "",
+          detail: detalhe + "\n(assinado eletronicamente)"
+        };
+        const histTotal = [...(d.historico||[]), novoHist];
+
+        await onUpdate({...r, data: {...d, itens, historico: histTotal}});
+        setAprovacaoIdx(null);
+      }}
+      C={C} Sg={Sg}
+    />}
+
+    {/* Tratamento da qualidade — abre quando clica em Tratar numa linha Segregar */}
+    {tratamentoIdx!==null && d.itens && d.itens[tratamentoIdx] && <TratamentoModal
+      open={true}
+      item={d.itens[tratamentoIdx]}
+      allUsers={allUsers}
+      currentUser={currentUser}
+      onClose={()=>setTratamentoIdx(null)}
+      onSave={async (resultado)=>{
+        const idx = tratamentoIdx;
+        const itens = [...(d.itens||[])];
+        const linha = {...itens[idx]};
+        const codigo = linha.codigo || ("item #"+(idx+1));
+        let detalhe = "";
+
+        if(resultado.decisao === "sucatamento"){
+          linha.disposicao = "sucatamento";
+          linha.status = "concluida";
+          linha.tratamentoMotivo = resultado.motivo;
+          linha.tratamentoAt = new Date().toISOString();
+          linha.tratamentoBy = currentUser?.name || currentUser?.email;
+          detalhe = "Item " + codigo + " sucatado pela qualidade.\nMotivo: " + resultado.motivo;
+        }
+        else if(resultado.decisao === "concessao"){
+          linha.disposicao = "concessao_solicitada";
+          linha.status = "aguardando_aprovacao";
+          linha.concessaoJustificativa = resultado.motivo;
+          linha.concessaoAprovadorId = resultado.aprovador;
+          linha.concessaoSolicitadaAt = new Date().toISOString();
+          linha.concessaoSolicitadaBy = currentUser?.name || currentUser?.email;
+          const aprovadorNome = (allUsers||[]).find(u=>u.id===resultado.aprovador)?.name || "—";
+          detalhe = "Item " + codigo + ": concessão solicitada.\nAprovador: " + aprovadorNome + "\nJustificativa: " + resultado.motivo;
+        }
+        else if(resultado.decisao === "editar"){
+          const qtdAntiga = linha.qtdNC;
+          linha.qtdNC = String(resultado.novaQtd);
+          detalhe = "Item " + codigo + ": quantidade alterada de " + qtdAntiga + " para " + resultado.novaQtd + " pela qualidade.";
+        }
+        else if(resultado.decisao === "migrar_nc"){
+          linha.disposicao = "migrada_nc";
+          linha.status = "concluida";
+          linha.migracaoMotivo = resultado.motivo;
+          linha.migracaoAt = new Date().toISOString();
+          linha.migracaoBy = currentUser?.name || currentUser?.email;
+          // Marca pra criar NC depois (quando o módulo NC estiver pronto)
+          linha.migracaoPendenteNC = true;
+          detalhe = "Item " + codigo + " marcado para migrar para NC.\nMotivo: " + resultado.motivo + "\n(NC será criada quando o módulo for ativado)";
+        }
+
+        itens[idx] = linha;
+
+        const novoHist = {
+          type: "tratamento_qualidade",
+          at: new Date().toISOString(),
+          by: currentUser?.name || currentUser?.email || "—",
+          byId: currentUser?.id,
+          itemIdx: idx,
+          itemCodigo: linha.codigo || "",
+          detail: detalhe + "\n(assinado eletronicamente)"
+        };
+        const histTotal = [...(d.historico||[]), novoHist];
+
+        // Salva
+        await onUpdate({...r, data: {...d, itens, historico: histTotal}});
+        setTratamentoIdx(null);
+      }}
+      C={C} Sg={Sg}
+    />}
 
     {/* Motive modal — pra cancelar / reabrir */}
     {motiveModal && <MotiveModal
@@ -5424,13 +5881,15 @@ const ALL_PERMS_META = [
     {id:"sa.excluir",          label:"Excluir SA"},
   ]},
   {section:"Registros de Ocorrência (RO)", items:[
-    {id:"ro.abrir",    label:"Abrir RO"},
-    {id:"ro.analisar", label:"Analisar RO"},
-    {id:"ro.aprovar",  label:"Aprovar RO"},
-    {id:"ro.fechar",   label:"Fechar RO"},
-    {id:"ro.cancelar", label:"Cancelar RO"},
-    {id:"ro.reabrir",  label:"Reabrir RO"},
-    {id:"ro.excluir",  label:"Excluir RO"},
+    {id:"ro.abrir",              label:"Abrir RO"},
+    {id:"ro.analisar",           label:"Analisar RO"},
+    {id:"ro.tratar_segregado",   label:"Tratar item segregado (qualidade)"},
+    {id:"ro.aprovar_concessao",  label:"Aprovar concessão de RO"},
+    {id:"ro.aprovar",            label:"Aprovar RO"},
+    {id:"ro.fechar",             label:"Fechar RO"},
+    {id:"ro.cancelar",           label:"Cancelar RO"},
+    {id:"ro.reabrir",            label:"Reabrir RO"},
+    {id:"ro.excluir",            label:"Excluir RO"},
   ]},
   {section:"Não Conformidade (NC)", items:[
     {id:"nc.abrir",    label:"Abrir NC"},
