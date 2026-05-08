@@ -4261,7 +4261,7 @@ function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
 }
 
 // ── Linha de item editável ───────────────────────────────────────
-function ItemRow({item, idx, onChange, onRemove, onOpenDisp, onOpenHist, C, Sg}){
+function ItemRow({item, idx, onChange, onRemove, onOpenDisp, C, Sg}){
   const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
   const inputStyle = {...Sg.input(), fontSize:12, height:32, boxSizing:"border-box"};
   const taStyle = {border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text};
@@ -4288,7 +4288,7 @@ function ItemRow({item, idx, onChange, onRemove, onOpenDisp, onOpenHist, C, Sg})
     <td style={{...cellMid, width:60}}>
       <input style={inputStyle} type="number" min="0" value={item.qtdNC||""} onChange={e=>onChange({...item, qtdNC:e.target.value})} placeholder="0"/>
     </td>
-    <td style={{...cellMid, width:140}}>
+    <td style={{...cellMid, width:160}}>
       <button
         onClick={()=>onOpenDisp(idx)}
         style={{
@@ -4299,45 +4299,77 @@ function ItemRow({item, idx, onChange, onRemove, onOpenDisp, onOpenHist, C, Sg})
         <DispBadge disp={item.disposicao} status={item.status} C={C}/>
       </button>
     </td>
-    <td style={{...cellMid, width:54, textAlign:"center", whiteSpace:"nowrap"}}>
-      <button
-        onClick={()=>onOpenHist(idx)}
-        title="Ver histórico desta linha"
-        style={{background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, padding:"0 4px"}}>⏱</button>
+    <td style={{...cellMid, width:32, textAlign:"center"}}>
       <button
         onClick={onRemove}
         title="Remover item"
-        style={{background:"none", border:"none", cursor:"pointer", color:C.danger, fontSize:16, padding:"0 4px", lineHeight:1}}>×</button>
+        style={{background:"none", border:"none", cursor:"pointer", color:C.danger, fontSize:16, padding:0, lineHeight:1}}>×</button>
     </td>
   </tr>;
 }
 
 // ── Linha read-only ──────────────────────────────────────────────
-function ItemRowReadOnly({item, idx, onOpenHist, C}){
+function ItemRowReadOnly({item, idx, C}){
   const cellRO = {padding:"8px 8px", fontSize:12, verticalAlign:"middle"};
   return <tr style={{borderBottom:"1px solid "+C.border}}>
     <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
     <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
     <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
     <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
-    <td style={{...cellRO, width:140}}><DispBadge disp={item.disposicao} status={item.status} C={C}/></td>
-    <td style={{...cellRO, width:54, textAlign:"center"}}>
-      {onOpenHist && <button
-        onClick={()=>onOpenHist(idx)}
-        title="Ver histórico desta linha"
-        style={{background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14}}>⏱</button>}
-    </td>
+    <td style={{...cellRO, width:160}}><DispBadge disp={item.disposicao} status={item.status} C={C}/></td>
+    <td style={{...cellRO, width:32}}/>
   </tr>;
 }
 
 // ── Tabela de itens dinâmica ─────────────────────────────────────
-function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHistory, C, Sg, allUsers}){
+function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, C, Sg, allUsers}){
   const [dispModalIdx, setDispModalIdx] = useState(null);
-  const [histLineIdx, setHistLineIdx] = useState(null);
 
-  const addItem = () => onChange([...itens, {codigo:"", descricao:"", lote:"", qtdNC:"", disposicao:"", status:""}]);
-  const updItem = (i,v) => { const n=[...itens]; n[i]=v; onChange(n); };
-  const remItem = i => onChange(itens.filter((_,j)=>j!==i));
+  const itemDesc = (it) => {
+    const parts = [];
+    if(it?.codigo) parts.push(it.codigo);
+    if(it?.descricao) parts.push(it.descricao.length>40 ? it.descricao.substring(0,40)+"…" : it.descricao);
+    return parts.join(" — ") || "(sem código)";
+  };
+
+  const addItem = () => {
+    const newIdx = itens.length;
+    onChange([...itens, {codigo:"", descricao:"", lote:"", qtdNC:"", disposicao:"", status:""}]);
+    if(onAddHistory) onAddHistory({type:"item_add", itemIdx:newIdx, detail:"Item adicionado à RO"});
+  };
+
+  const updItem = (i, v) => {
+    const prev = itens[i] || {};
+    const n = [...itens];
+    n[i] = v;
+    onChange(n);
+    if(onAddHistory){
+      const changes = [];
+      if((prev.codigo||"") !== (v.codigo||"") && v.codigo) changes.push("código: " + (prev.codigo||"vazio") + " → " + v.codigo);
+      if((prev.lote||"") !== (v.lote||"") && (prev.lote||v.lote)) changes.push("lote: " + (prev.lote||"vazio") + " → " + (v.lote||"vazio"));
+      if((prev.qtdNC||"") !== (v.qtdNC||"") && (prev.qtdNC||v.qtdNC)) changes.push("quantidade: " + (prev.qtdNC||"0") + " → " + (v.qtdNC||"0"));
+      if(changes.length>0){
+        onAddHistory({
+          type: "item_edit",
+          itemIdx: i,
+          itemCodigo: v.codigo||prev.codigo||"",
+          detail: "Item " + (v.codigo||prev.codigo||"#"+(i+1)) + " atualizado: " + changes.join("; ")
+        });
+      }
+    }
+  };
+
+  const remItem = (i) => {
+    const removed = itens[i];
+    onChange(itens.filter((_,j)=>j!==i));
+    if(onAddHistory && (removed?.codigo || removed?.descricao)){
+      onAddHistory({
+        type: "item_remove",
+        itemCodigo: removed?.codigo||"",
+        detail: "Item removido: " + itemDesc(removed)
+      });
+    }
+  };
 
   const handleSaveDisp = (changes) => {
     if(dispModalIdx===null) return;
@@ -4346,7 +4378,7 @@ function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHisto
     updItem(dispModalIdx, next);
     if(onAddHistory){
       const dispText = (RO_DISP_ABERTURA[changes.disposicao]||{}).label || changes.disposicao;
-      let detail = "Disposição definida: " + dispText;
+      let detail = "Disposição definida em " + (cur.codigo||"item #"+(dispModalIdx+1)) + ": " + dispText;
       if(changes.disposicao==="correcao" && changes.acaoCorrecao){
         detail += "\nO que foi feito: " + changes.acaoCorrecao;
       }
@@ -4363,10 +4395,6 @@ function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHisto
     setDispModalIdx(null);
   };
 
-  const lineHist = histLineIdx!==null && history
-    ? (history||[]).filter(h=>h.itemIdx===histLineIdx || h.itemCodigo===itens[histLineIdx]?.codigo)
-    : [];
-
   return <div>
     <div>
       <table style={{width:"100%", borderCollapse:"collapse", fontSize:12, tableLayout:"fixed"}}>
@@ -4375,8 +4403,8 @@ function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHisto
           <col/>
           <col style={{width:110}}/>
           <col style={{width:60}}/>
-          <col style={{width:140}}/>
-          <col style={{width:54}}/>
+          <col style={{width:160}}/>
+          <col style={{width:32}}/>
         </colgroup>
         <thead>
           <tr style={{background:C.surface, borderBottom:"1px solid "+C.border}}>
@@ -4389,12 +4417,11 @@ function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHisto
           {itens.length===0 && <tr><td colSpan={6} style={{padding:"12px 8px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhum item adicionado</td></tr>}
           {itens.map((item,i)=>(
             readOnly
-              ? <ItemRowReadOnly key={i} item={item} idx={i} onOpenHist={onAddHistory?(idx=>setHistLineIdx(idx)):null} C={C}/>
+              ? <ItemRowReadOnly key={i} item={item} idx={i} C={C}/>
               : <ItemRow key={i} item={item} idx={i}
                   onChange={v=>updItem(i,v)}
                   onRemove={()=>remItem(i)}
                   onOpenDisp={(idx)=>setDispModalIdx(idx)}
-                  onOpenHist={(idx)=>setHistLineIdx(idx)}
                   C={C} Sg={Sg}/>
           ))}
         </tbody>
@@ -4409,29 +4436,6 @@ function ItensTable({itens, onChange, readOnly, currentUser, history, onAddHisto
       onSave={handleSaveDisp}
       C={C} Sg={Sg}
     />
-
-    <Modal open={histLineIdx!==null} onClose={()=>setHistLineIdx(null)} title="Histórico da linha" width={560}>
-      {histLineIdx!==null && itens[histLineIdx] && <div style={{padding:"6px 0"}}>
-        <div style={{padding:"8px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted, marginBottom:12}}>
-          <strong style={{color:C.accent}}>{itens[histLineIdx].codigo||"—"}</strong>
-          {itens[histLineIdx].descricao && <span> · {itens[histLineIdx].descricao}</span>}
-        </div>
-        {lineHist.length===0
-          ? <div style={{textAlign:"center", padding:24, color:C.muted, fontSize:12}}>Nenhuma ação registrada ainda.</div>
-          : <div style={{display:"flex", flexDirection:"column", gap:10}}>
-              {lineHist.map((h,i)=>(
-                <div key={i} style={{padding:"10px 12px", background:C.card, border:"1px solid "+C.border, borderRadius:6}}>
-                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
-                    <span style={{fontSize:11, fontWeight:600, color:C.text}}>{h.by||"—"}</span>
-                    <span style={{fontSize:10, color:C.muted}}>{fmt(h.at)}</span>
-                  </div>
-                  <div style={{fontSize:12, color:C.text, whiteSpace:"pre-wrap"}}>{h.detail||h.event||"—"}</div>
-                </div>
-              ))}
-            </div>
-        }
-      </div>}
-    </Modal>
   </div>;
 }
 
@@ -4517,7 +4521,7 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
   const [itens,setItens]=useState([]);
   const [attachments,setAttachments]=useState([]);
   const [historico,setHistorico]=useState([]);
-  const [histOpen,setHistOpen]=useState(false);
+  const [histOpen,setHistOpen]=useState(true);
   const set = (k,v)=>setF(p=>({...p,[k]:v}));
   const addHist = (entry)=>{
     setHistorico(p=>[...p, {
@@ -4529,7 +4533,7 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
   };
   const ok = f.tipo&&f.local&&f.descricao;
 
-  return <div style={{padding:"18px 22px",maxWidth:760}}>
+  return <div style={{padding:"18px 22px",maxWidth:1100}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
       <div>
         <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Nova Ocorrência</h1>
@@ -4578,41 +4582,59 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
           onChange={setItens}
           readOnly={false}
           currentUser={currentUser}
-          history={historico}
           onAddHistory={addHist}
           C={C} Sg={Sg} allUsers={allUsers}/>
       </div>}
 
       <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura" currentUser={currentUser} C={C}/>
 
-      {historico.length>0 && <div style={{borderTop:"1px solid "+C.border, paddingTop:12}}>
+      <div style={{...Sg.card(), padding:0, overflow:"hidden"}}>
         <div
           onClick={()=>setHistOpen(o=>!o)}
-          style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none"}}>
+          style={{display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", padding:"12px 16px", borderBottom: histOpen?"1px solid "+C.border:"none"}}>
           <span style={{fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
-            Histórico ({historico.length})
+            Histórico {historico.length>0 && <span style={{color:C.dim, fontWeight:400}}>({historico.length})</span>}
           </span>
-          <span style={{fontSize:10, color:C.muted}}>{histOpen?"▲":"▼"}</span>
+          <span style={{fontSize:11, color:C.muted}}>{histOpen?"− minimizar":"+ expandir"}</span>
         </div>
-        {histOpen && <div style={{marginTop:10, display:"flex", flexDirection:"column", gap:8}}>
-          {historico.slice().reverse().map((h,i)=>(
-            <div key={i} style={{padding:"10px 12px", background:C.surface, border:"1px solid "+C.border, borderRadius:6}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
-                <span style={{fontSize:11, fontWeight:600, color:C.text}}>
-                  {h.by||"—"}
-                  {h.itemCodigo && <span style={{fontWeight:400, color:C.muted}}> · item {h.itemCodigo}</span>}
-                </span>
-                <span style={{fontSize:10, color:C.muted}}>{fmt(h.at)}</span>
-              </div>
-              <div style={{fontSize:12, color:C.text, whiteSpace:"pre-wrap"}}>{h.detail||h.event||"—"}</div>
-            </div>
-          ))}
+        {histOpen && <div>
+          {historico.length===0
+            ? <div style={{padding:"20px 16px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma alteração ainda. As ações realizadas aparecerão aqui.</div>
+            : <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+                <thead>
+                  <tr style={{background:C.surface}}>
+                    <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:140}}>Data</th>
+                    <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:160}}>Usuário</th>
+                    <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>O que foi feito</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historico.slice().reverse().map((h,i)=>(
+                    <tr key={i} style={{borderTop:"1px solid "+C.border}}>
+                      <td style={{padding:"10px 14px", color:C.muted, fontSize:11, verticalAlign:"top", whiteSpace:"nowrap"}}>{fmt(h.at)}</td>
+                      <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top"}}>{h.by||"—"}</td>
+                      <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top", whiteSpace:"pre-wrap"}}>{h.detail||"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          }
         </div>}
-      </div>}
+      </div>
 
       <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
         <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
-        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>onSave({...f, historico},itens,attachments)}>Abrir Ocorrência</button>
+        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
+          const aberturaEntry = {
+            type: "abertura",
+            at: new Date().toISOString(),
+            by: currentUser?.name || currentUser?.email || "—",
+            byId: currentUser?.id,
+            detail: "Ocorrência aberta"
+          };
+          const finalHistorico = [aberturaEntry, ...historico];
+          onSave({...f, historico: finalHistorico}, itens, attachments);
+        }}>Abrir Ocorrência</button>
       </div>
     </div>
   </div>;
@@ -4660,6 +4682,54 @@ function GerarNCModal({ro, currentUser, C, Sg, onClose, onConfirm}){
 }
 
 // ── RODetail ─────────────────────────────────────────────────────
+// ── Histórico unificado da RO ────────────────────────────────────
+function ROHistorico({r, C}){
+  const [open, setOpen] = useState(true);
+  const Sg = mkSg(C);
+  const d = r?.data||{};
+  const novo = d.historico||[];
+  const velho = (r?.log||[]).map(e=>({
+    at: e.at,
+    by: e.by||"—",
+    detail: e.event + (e.detail?": "+e.detail:"")
+  }));
+  const todos = [...novo, ...velho]
+    .filter(e=>e.at)
+    .sort((a,b)=> (b.at||"").localeCompare(a.at||""));
+
+  return <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+    <div
+      onClick={()=>setOpen(o=>!o)}
+      style={{display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", padding:"12px 14px", borderBottom: open?"1px solid "+C.border:"none"}}>
+      <span style={{fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
+        Histórico {todos.length>0 && <span style={{color:C.dim, fontWeight:400}}>({todos.length})</span>}
+      </span>
+      <span style={{fontSize:11, color:C.muted}}>{open?"− minimizar":"+ expandir"}</span>
+    </div>
+    {open && (todos.length===0
+      ? <div style={{padding:"20px 14px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma alteração registrada.</div>
+      : <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+          <thead>
+            <tr style={{background:C.surface}}>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:140}}>Data</th>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:160}}>Usuário</th>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>O que foi feito</th>
+            </tr>
+          </thead>
+          <tbody>
+            {todos.map((h,i)=>(
+              <tr key={i} style={{borderTop:"1px solid "+C.border}}>
+                <td style={{padding:"10px 14px", color:C.muted, fontSize:11, verticalAlign:"top", whiteSpace:"nowrap"}}>{fmt(h.at)}</td>
+                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top"}}>{h.by||"—"}</td>
+                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top", whiteSpace:"pre-wrap"}}>{h.detail||"—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>)
+    }
+  </div>;
+}
+
 function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [sigModal,setSigModal]=useState(null);
@@ -4755,7 +4825,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
 
   const itensVisiveis = editingItens ? itensEdit : (d.itens||[]);
 
-  return <div style={{padding:"18px 22px",maxWidth:820}}>
+  return <div style={{padding:"18px 22px",maxWidth:1100}}>
     {/* Header */}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
       <div>
@@ -4815,7 +4885,6 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         onChange={v=>{if(editingItens)setItensEdit(v);}}
         readOnly={!editingItens}
         currentUser={currentUser}
-        history={d.historico||[]}
         C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
 
@@ -4881,34 +4950,8 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         C={C}/>
     </div>
 
-    {/* Histórico */}
-    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-      <div style={{padding:"12px 14px 8px",fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Histórico</div>
-      {(r.log||[]).length===0
-        ? <div style={{padding:"14px",color:C.muted,fontSize:13}}>Sem eventos registrados.</div>
-        : <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead>
-              <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
-                {["Data","Usuário","O que foi feito"].map(h=>(
-                  <th key={h} style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[...(r.log||[])].reverse().map((e,i)=>(
-                <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
-                  <td style={{padding:"7px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(e.at)}</td>
-                  <td style={{padding:"7px 12px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{e.by||"—"}</td>
-                  <td style={{padding:"7px 12px",fontSize:12,color:C.text}}>
-                    <div style={{fontWeight:500}}>{e.event}</div>
-                    {e.detail&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{e.detail}</div>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-      }
-    </div>
+    {/* Histórico unificado */}
+    <ROHistorico r={r} C={C}/>
 
     {/* Signature modal */}
     {sigModal&&<SignatureModal
@@ -6878,7 +6921,7 @@ const saveReq = async (r) => {
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
-        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[],attachments:atts||[]},log:[{at:now,by:loggedIn.name,type:"criacao",event:"RO aberta",detail:"Tipo: "+f.tipo+(itens&&itens.length?" | "+itens.length+" item(ns)":"")}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
+        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[],attachments:atts||[]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveRO(r);
         addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
         setView('ro_list');
