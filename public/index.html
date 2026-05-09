@@ -4467,7 +4467,12 @@ function PedirConcessaoModal({open, item, allUsers, currentUser, onClose, onConf
   const [aprovador, setAprovador] = useState("");
   React.useEffect(()=>{if(open){ setAnalise(""); setAprovador(""); }}, [open]);
   if(!open) return null;
-  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && u.id!==currentUser?.id);
+  // Só lista usuários com permissão de aprovador (ro.aprovar_concessao)
+  const aprovadores = (allUsers||[]).filter(u=>{
+    if(u.active===false) return false;
+    if(u.id===currentUser?.id) return false;
+    return hasPerm(u, 'ro.aprovar_concessao');
+  });
   const can = analise.trim().length>0 && aprovador;
   return <Modal open={open} onClose={onClose} title="" width={580}>
     <div style={{margin:-16}}>
@@ -4945,6 +4950,156 @@ function PecasSolicitadasTable({pecas, onChange, readOnly, currentUser, onAddHis
       </tbody>
     </table>
     {!readOnly && <button style={{...Sg.btn(), fontSize:11, padding:"4px 12px", marginTop:8}} onClick={addPeca}>+ Solicitar peça</button>}
+  </div>;
+}
+
+// ── Inbox do Aprovador ────────────────────────────────────────────
+// Tela dedicada onde quem tem ro.aprovar_concessao vê só os pedidos
+// que foram enviados pra ele. Aprovar/rejeitar abre os modais
+// AprovarConcessaoModal/MotiveModal já existentes.
+function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
+  const {C}=useTheme();const Sg=mkSg(C);
+  const [acaoAlvo, setAcaoAlvo] = useState(null); // {ro, idx, step}
+  const [pendingApply, setPendingApply] = useState(null);
+  const [sigModal, setSigModal] = useState(null);
+
+  // Coleta itens em "concessao_solicitada" cujo aprovador é o usuário atual
+  const pendentes = [];
+  (roRecords||[]).forEach(r=>{
+    const itens = r.data?.itens||[];
+    itens.forEach((it, idx)=>{
+      if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===currentUser?.id){
+        pendentes.push({ro:r, idx, item:it});
+      }
+    });
+  });
+
+  const applyDecisao = async (sig) => {
+    if(!pendingApply){ setSigModal(null); return; }
+    const {ro, idx, decisao, motivo} = pendingApply;
+    const itens = [...(ro.data?.itens||[])];
+    const linha = {...itens[idx]};
+    const userName = currentUser?.name || currentUser?.email || "—";
+    const now = new Date().toISOString();
+    let detalhe = "";
+    if(decisao==="aprovar"){
+      linha.disposicao = "concessao_aprovada";
+      linha.status = "concluida";
+      linha.concessaoAprovadaAt = now;
+      linha.concessaoAprovadaBy = userName;
+      detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão APROVADA por " + userName + ".";
+    } else {
+      linha.disposicao = "concessao_rejeitada";
+      linha.status = "pendente";
+      linha.concessaoRejeitadaAt = now;
+      linha.concessaoRejeitadaBy = userName;
+      linha.concessaoRejeitadaMotivo = motivo;
+      detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão REJEITADA por " + userName + ".\nMotivo: " + motivo + "\nVolta para a qualidade decidir outra disposição.";
+    }
+    itens[idx] = linha;
+    const novoHist = {
+      type:"decisao_aprovador", at:now, by:userName, byId:currentUser?.id,
+      itemIdx:idx, itemCodigo:linha.codigo||"",
+      detail: detalhe + "\n(assinado eletronicamente)"
+    };
+    const histTotal = [...((ro.data?.historico)||[]), novoHist];
+    await onUpdate({...ro, data:{...(ro.data||{}), itens, historico:histTotal}});
+    setPendingApply(null);
+    setSigModal(null);
+    setAcaoAlvo(null);
+  };
+
+  return <div style={{padding:"18px 22px", maxWidth:1100}}>
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:18, fontWeight:600, color:C.text}}>Aprovações pendentes</div>
+      <div style={{fontSize:12, color:C.muted, marginTop:3}}>
+        {pendentes.length===0 ? "Nenhum pedido aguardando você." :
+         pendentes.length===1 ? "1 pedido aguardando você." :
+         pendentes.length+" pedidos aguardando você."}
+      </div>
+    </div>
+
+    {pendentes.length===0 ? (
+      <div style={{...Sg.card(), padding:"40px 20px", textAlign:"center", color:C.muted, fontSize:13}}>
+        Quando alguém pedir aprovação de concessão pra você, aparece aqui.
+      </div>
+    ) : (
+      <div style={{display:"flex", flexDirection:"column", gap:10}}>
+        {pendentes.map(({ro, idx, item})=>(
+          <div key={ro.id+"-"+idx} style={{...Sg.card(), padding:"14px 18px"}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10, gap:12}}>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:11, color:C.muted}}>
+                  {ro.code||("RO #"+ro.id)} · Concessão
+                </div>
+                <div style={{fontSize:14, fontWeight:600, color:C.text, marginTop:2}}>
+                  {item.codigo||"—"}{item.descricao?" · "+item.descricao:""} · {item.qtdNC||"—"} {item.qtdNC?"peças":""}
+                </div>
+                <div style={{fontSize:11, color:C.muted, marginTop:2}}>
+                  solicitado por {item.concessaoSolicitadaBy||"—"} {item.concessaoSolicitadaAt?"em "+fmt(item.concessaoSolicitadaAt):""}
+                </div>
+              </div>
+              <div style={{fontSize:10, padding:"2px 8px", borderRadius:10, background:C.accent+"22", color:C.accent, whiteSpace:"nowrap"}}>Aguarda você</div>
+            </div>
+
+            <div style={{
+              background:C.surface, padding:"10px 12px", fontSize:12, color:C.text,
+              lineHeight:1.5, borderLeft:"3px solid "+C.accent, borderRadius:"0 6px 6px 0",
+              whiteSpace:"pre-wrap", marginBottom:10
+            }}>
+              <div style={{fontSize:10, color:C.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.4}}>Análise da qualidade</div>
+              {item.concessaoJustificativa||"—"}
+            </div>
+
+            <div style={{display:"flex", justifyContent:"flex-end", gap:8}}>
+              <button
+                style={{padding:"6px 14px", fontSize:11, fontWeight:500, borderRadius:7, cursor:"pointer", fontFamily:"inherit", border:"1px solid "+C.danger, background:"transparent", color:C.danger}}
+                onClick={()=>setAcaoAlvo({ro, idx, item, step:"rejeitar"})}>
+                Rejeitar
+              </button>
+              <button
+                style={{...Sg.btn("primary"), fontSize:11, padding:"6px 16px"}}
+                onClick={()=>{
+                  setPendingApply({ro, idx, decisao:"aprovar"});
+                  setSigModal({title:"Assinar — Aprovação de concessão", confirmLabel:"Assinar e aprovar", confirmStyle:"success"});
+                }}>
+                Aprovar
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* Motivo da rejeição */}
+    {acaoAlvo!==null && acaoAlvo.step==="rejeitar" && <MotiveModal
+      open={true}
+      onClose={()=>setAcaoAlvo(null)}
+      onConfirm={(motivo)=>{
+        setPendingApply({ro:acaoAlvo.ro, idx:acaoAlvo.idx, decisao:"rejeitar", motivo: motivo||""});
+        setAcaoAlvo(null);
+        setSigModal({title:"Assinar — Rejeição de concessão", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
+      }}
+      title="Motivo da rejeição"
+      description="Por que está rejeitando a concessão? A qualidade vai precisar dessa informação pra decidir outra coisa pro item."
+      confirmLabel="Continuar para assinatura"
+      confirmStyle="danger"
+      C={C} Sg={Sg}
+    />}
+
+    {/* Assinatura digital */}
+    {sigModal && <SignatureModal
+      open={true}
+      onClose={()=>{setSigModal(null); setPendingApply(null);}}
+      onConfirm={async (sig)=>{ await applyDecisao(sig); }}
+      title={sigModal.title}
+      description="Confirme sua senha para registrar a decisão."
+      confirmLabel={sigModal.confirmLabel}
+      confirmStyle={sigModal.confirmStyle}
+      saId={pendingApply?.ro?.id||pendingApply?.ro?.code||""}
+      action="aprovacao_concessao"
+      C={C} Sg={Sg}
+    />}
   </div>;
 }
 
@@ -5566,7 +5721,6 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         <div><span style={Sg.lbl}>Nº OP / Chamado</span><div style={{fontSize:13,color:C.text}}>{d.opChamado||"—"}</div></div>
         <div><span style={Sg.lbl}>Classificação</span><div style={{fontSize:13,color:C.text}}>{d.classificacao||"—"}</div></div>
         <div><span style={Sg.lbl}>Aberto por</span><div style={{fontSize:13,color:C.text}}>{r.owner_name||r.createdByName||"—"}</div></div>
-        {d.disposicao&&<div><span style={Sg.lbl}>Disposição</span><div style={{fontSize:13,color:C.text}}>{d.disposicao}</div></div>}
       </div>
       <div><span style={Sg.lbl}>Descrição</span><div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px",marginTop:2}}>{d.descricao||"—"}</div></div>
     </div>
@@ -5613,32 +5767,19 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         C={C} Sg={Sg}/>
     </div>}
 
-    {/* Análise — visível pra qualidade (analisar) ou pra qualquer um quando já houver análise registrada */}
-    {(canAnalyze || d.analise) && <div style={{...Sg.card(),marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Análise / Conclusão da Qualidade</div>
-      {status==="fechada"||status==="aguardando_conclusao"
-        ? <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.analise||"—"}</div>
-        : <>
-          <textarea style={{...Sg.input(),minHeight:80,resize:"vertical",marginBottom:10}} value={analise} onChange={e=>setAnalise(e.target.value)} placeholder="Registre a análise e conclusão..." disabled={!canAnalyze}/>
-          {canAnalyze&&<button style={{...Sg.btn("primary"),opacity:analise.trim()?1:.4}} disabled={!analise.trim()} onClick={()=>setSigModal({action:"analise",title:"Registrar Análise",confirmLabel:"Salvar Análise",confirmStyle:"primary"})}>Salvar Análise</button>}
-        </>
-      }
-      {d.analiseAt&&<div style={{fontSize:11,color:C.muted,marginTop:8}}>Análise por {d.analiseByName||"—"} em {fmt(d.analiseAt)}</div>}
-    </div>}
-
-    {/* Conclusão final — Segregado/Sucatado */}
-    {status==="aguardando_conclusao"&&canClose&&<div style={{...Sg.card(),marginBottom:14,border:"1px solid "+C.purple+"40"}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.purple,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Conclusão Final da Qualidade</div>
-      <div style={{fontSize:13,color:C.muted,marginBottom:10}}>Item está <strong>{d.disposicao}</strong>. Registre o que foi feito com ele.</div>
-      <textarea style={{...Sg.input(),minHeight:80,resize:"vertical",marginBottom:10}} value={conclusao} onChange={e=>setConclusao(e.target.value)} placeholder="Ex: Material descartado conforme procedimento PR-001, lote separado e destruído..."/>
-      <button style={{...Sg.btn("success"),opacity:conclusao.trim()?1:.4}} disabled={!conclusao.trim()} onClick={()=>setSigModal({action:"conclusao",title:"Registrar Conclusão Final",confirmLabel:"Confirmar e Fechar RO",confirmStyle:"success"})}>Confirmar Conclusão e Fechar</button>
-    </div>}
-
-    {/* Conclusão final — exibição */}
-    {d.conclusaoFinal&&<div style={{...Sg.card(),marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:8}}>Conclusão Final</div>
-      <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.conclusaoFinal}</div>
-      <div style={{fontSize:11,color:C.muted,marginTop:6}}>Por {d.conclusaoByName||"—"} em {fmt(d.conclusaoAt)}</div>
+    {/* Histórico legado da Análise / Conclusão (só leitura — modelo antigo) */}
+    {(d.analise||d.conclusaoFinal) && <div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:8}}>Análise registrada (histórico)</div>
+      {d.analise && <div style={{marginBottom: d.conclusaoFinal?12:0}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Análise da qualidade</div>
+        <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.analise}</div>
+        {d.analiseAt&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Por {d.analiseByName||"—"} em {fmt(d.analiseAt)}</div>}
+      </div>}
+      {d.conclusaoFinal && <div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Conclusão final</div>
+        <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px"}}>{d.conclusaoFinal}</div>
+        <div style={{fontSize:11,color:C.muted,marginTop:6}}>Por {d.conclusaoByName||"—"} em {fmt(d.conclusaoAt)}</div>
+      </div>}
     </div>}
 
     {/* NCs vinculadas */}
@@ -7640,6 +7781,16 @@ const saveReq = async (r) => {
   };
 
   const pendCM = (pendEv+pendAcs)||0;
+  // Contador de pedidos de aprovação aguardando o usuário atual
+  const pendAprov = (()=>{
+    let n=0;
+    (roRecs||[]).forEach(r=>{
+      (r.data?.itens||[]).forEach(it=>{
+        if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===loggedIn?.id) n++;
+      });
+    });
+    return n;
+  })();
   const pendAdm = (hasPerm(loggedIn,'auditoria.ver') ? 0 : 0);
   const canSeeAdm = hasPerm(loggedIn,'users')||hasPerm(loggedIn,'usuarios.gerenciar')||hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar')||hasPerm(loggedIn,'auditoria.ver')||isAdmin;
 
@@ -7671,8 +7822,9 @@ const saveReq = async (r) => {
         </SidebarSection>
 
         {/* Módulo: Ocorrências */}
-        <SidebarSection sectionKey="ro" label="Ocorrências" icon="">
+        <SidebarSection sectionKey="ro" label="Ocorrências" icon="" badge={pendAprov}>
           <SidebarNavItem id="ro_list" label="Registros" indent/>
+          {hasPerm(loggedIn,'ro.aprovar_concessao') && <SidebarNavItem id="ro_aprovacoes" label="Aprovações" badge={pendAprov} indent/>}
         </SidebarSection>
 
         {/* Módulos futuros */}
@@ -7742,6 +7894,7 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
+      {view==='ro_aprovacoes' && hasPerm(loggedIn,'ro.aprovar_concessao') && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
         const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[],attachments:atts||[]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
