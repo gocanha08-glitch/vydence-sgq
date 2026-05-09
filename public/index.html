@@ -4352,231 +4352,234 @@ function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
   </Modal>;
 }
 
-// ── Modal de tratamento (qualidade decide destino de linha Segregar) ────
-function TratamentoModal({open, item, allUsers, currentUser, onClose, onSave, C, Sg}){
-  const [decisao, setDecisao] = useState("");
-  const [motivo, setMotivo] = useState("");
-  const [aprovador, setAprovador] = useState("");
-  const [novaQtd, setNovaQtd] = useState("");
-  const [confirmaSenha, setConfirmaSenha] = useState("");
-  const [errSenha, setErrSenha] = useState("");
+// ── Helper: bloco de info do item (3 colunas) ─────────────────────
+function ItemInfoStrip({item, C}){
+  if(!item) return null;
+  return <div style={{padding:"14px 18px", background:C.surface, borderTop:"1px solid "+C.border, borderBottom:"1px solid "+C.border, marginLeft:-16, marginRight:-16}}>
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16}}>
+      <div>
+        <div style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginBottom:4}}>Peça</div>
+        <div style={{fontSize:13, color:C.text, fontWeight:600}}>{item.codigo||"—"}</div>
+        {item.descricao && <div style={{fontSize:12, color:C.muted, marginTop:2}}>{item.descricao}</div>}
+      </div>
+      <div>
+        <div style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginBottom:4}}>Lote</div>
+        <div style={{fontSize:13, color:C.text, fontWeight:600}}>{item.lote||"—"}</div>
+      </div>
+      <div>
+        <div style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginBottom:4}}>Quantidade</div>
+        <div style={{fontSize:13, color:C.text, fontWeight:600}}>{item.qtdNC||"—"} {item.qtdNC?"peças":""}</div>
+      </div>
+    </div>
+  </div>;
+}
 
-  React.useEffect(()=>{
-    if(open){
-      setDecisao(""); setMotivo(""); setAprovador(""); setNovaQtd(item?.qtdNC||""); setConfirmaSenha(""); setErrSenha("");
-    }
-  }, [open, item]);
-
+// ── 1. Menu Tratar ────────────────────────────────────────────────
+// Quando qualidade clica em "Tratar" numa linha segregada, abre este menu.
+// Cada opção é um card clicável que dispara onPick(decisao).
+function TratamentoMenuModal({open, item, onClose, onPick, C, Sg}){
   if(!open) return null;
-
-  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && (u.id===currentUser?.id || true));
-  const canSave = (
-    (decisao==="sucatamento"   && motivo.trim().length>0) ||
-    (decisao==="concessao"     && motivo.trim().length>0 && aprovador) ||
-    (decisao==="editar"        && novaQtd && Number(novaQtd)>0) ||
-    (decisao==="migrar_nc"     && motivo.trim().length>0)
-  );
-
-  const verificarAssinaturaESalvar = async () => {
-    if(!confirmaSenha){ setErrSenha("Digite sua senha pra confirmar."); return; }
-    setErrSenha("");
-    try {
-      const token = sessionStorage.getItem('sgq_token');
-      const r = await fetch('/api/auth?_route=verify',{
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({password:confirmaSenha})
-      });
-      const data = await r.json();
-      if(!r.ok || !data.ok){ setErrSenha("Senha incorreta."); return; }
-      // Senha ok, dispara o save
-      onSave({decisao, motivo:motivo.trim(), aprovador, novaQtd: Number(novaQtd)||null});
-    } catch(err){
-      setErrSenha("Erro de comunicação. Tente novamente.");
-    }
+  const cardOpt = {
+    border:"1px solid "+C.border, borderRadius:8, padding:"14px 18px",
+    cursor:"pointer", background:C.card, transition:"all .15s",
+    display:"flex", alignItems:"center", justifyContent:"space-between", gap:14
   };
-
-  return <Modal open={open} onClose={onClose} title="Tratar item segregado" width={560}>
-    <div style={{display:"flex", flexDirection:"column", gap:14}}>
-
-      {item && <div style={{padding:"10px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted}}>
-        <strong style={{color:C.accent}}>{item.codigo||"—"}</strong>
-        {item.descricao && <span> · {item.descricao}</span>}
-        {item.lote && <span> · Lote {item.lote}</span>}
-        {item.qtdNC && <span> · Qtd {item.qtdNC}</span>}
-      </div>}
-
-      {!decisao && <div>
-        <label style={Sg.lbl}>Decisão</label>
-        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:4}}>
-          <button onClick={()=>setDecisao("sucatamento")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
-            <div style={{fontWeight:600, marginBottom:2}}>Sucatear</div>
-            <div style={{fontSize:11, color:C.muted}}>Descartar todas as unidades</div>
-          </button>
-          <button onClick={()=>setDecisao("concessao")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
-            <div style={{fontWeight:600, marginBottom:2}}>Pedir concessão</div>
-            <div style={{fontSize:11, color:C.muted}}>Indicar aprovador e justificar</div>
-          </button>
-          <button onClick={()=>setDecisao("editar")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
-            <div style={{fontWeight:600, marginBottom:2}}>Editar / dividir</div>
-            <div style={{fontSize:11, color:C.muted}}>Mudar quantidade desta linha</div>
-          </button>
-          <button onClick={()=>setDecisao("migrar_nc")} style={{padding:"12px 10px", textAlign:"left", cursor:"pointer", border:"1px solid "+C.border, background:C.card, borderRadius:8, fontSize:12, color:C.text}}>
-            <div style={{fontWeight:600, marginBottom:2}}>Mover para NC</div>
-            <div style={{fontSize:11, color:C.muted}}>Tratativa estendida com fornecedor</div>
-          </button>
-        </div>
-      </div>}
-
-      {decisao==="sucatamento" && <div>
-        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
-          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
-          {" "}· <strong>Sucatear</strong> {item?.qtdNC} unid
-        </div>
-        <label style={Sg.lbl}>Motivo do descarte *</label>
-        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ex: peça danificada sem possibilidade de retrabalho"/>
-      </div>}
-
-      {decisao==="concessao" && <div>
-        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
-          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
-          {" "}· <strong>Pedir concessão</strong>
-        </div>
-        <label style={Sg.lbl}>Justificativa *</label>
-        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit", marginBottom:10}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Por que liberar esta peça com problema?"/>
-        <label style={Sg.lbl}>Aprovador *</label>
-        <select style={Sg.input()} value={aprovador} onChange={e=>setAprovador(e.target.value)}>
-          <option value="">Selecione...</option>
-          {aprovadores.filter(u=>u.id!==currentUser?.id).map(u=>(
-            <option key={u.id} value={u.id}>{u.name}</option>
+  const opts = [
+    {key:"concessao",   title:"Pedir concessão", desc:"Aprovar uso fora do padrão. Vai pra alguém aprovar."},
+    {key:"sucatamento", title:"Sucatar",         desc:"Descartar com motivo. Decisão direta da qualidade."},
+    {key:"migrar_nc",   title:"Mover para NC",   desc:"Abrir tratativa formal. Cria NC com plano de ações."}
+  ];
+  return <Modal open={open} onClose={onClose} title="" width={580}>
+    <div style={{margin:-16}}>
+      <div style={{padding:"18px 22px 14px"}}>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Tratar item segregado</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Decisão sobre o item não conforme</div>
+      </div>
+      <ItemInfoStrip item={item} C={C}/>
+      <div style={{padding:"18px 22px"}}>
+        <div style={{fontSize:12, color:C.muted, marginBottom:12}}>Como tratar este item?</div>
+        <div style={{display:"flex", flexDirection:"column", gap:8}}>
+          {opts.map(o=>(
+            <div key={o.key} style={cardOpt}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+              onClick={()=>onPick(o.key)}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13, fontWeight:600, color:C.text, marginBottom:2}}>{o.title}</div>
+                <div style={{fontSize:12, color:C.muted, lineHeight:1.4}}>{o.desc}</div>
+              </div>
+              <span style={{fontSize:16, color:C.muted}}>›</span>
+            </div>
           ))}
-        </select>
-        <div style={{fontSize:10, color:C.muted, marginTop:6}}>O aprovador receberá esta solicitação como pendência.</div>
-      </div>}
-
-      {decisao==="editar" && <div>
-        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
-          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
-          {" "}· <strong>Editar quantidade</strong> (atual: {item?.qtdNC})
         </div>
-        <label style={Sg.lbl}>Nova quantidade *</label>
-        <input style={Sg.input()} type="number" min="1" value={novaQtd} onChange={e=>setNovaQtd(e.target.value)} placeholder="Quantidade desta linha"/>
-        <div style={{fontSize:10, color:C.muted, marginTop:6}}>Pra dividir em duas decisões diferentes, primeiro reduza esta linha aqui, depois adicione outra linha com a quantidade restante na tela principal.</div>
-      </div>}
-
-      {decisao==="migrar_nc" && <div>
-        <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
-          <span style={{cursor:"pointer", color:C.accent}} onClick={()=>setDecisao("")}>← voltar</span>
-          {" "}· <strong>Mover para NC</strong>
-        </div>
-        <label style={Sg.lbl}>Razão *</label>
-        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ex: precisa retrabalhar com fornecedor"/>
-        <div style={{padding:"8px 10px", background:C.accent+"10", borderRadius:6, fontSize:11, color:C.accent, marginTop:8}}>
-          Esta linha sairá da RO e ficará vinculada à nova NC. Por enquanto a NC será criada como rascunho — o módulo NC será concluído na próxima sessão.
-        </div>
-      </div>}
-
-      {decisao && <div style={{borderTop:"1px solid "+C.border, paddingTop:14, marginTop:6}}>
-        <label style={Sg.lbl}>Confirme sua senha (assinatura digital) *</label>
-        <input type="password" style={Sg.input()} value={confirmaSenha} onChange={e=>{setConfirmaSenha(e.target.value);setErrSenha("");}} placeholder="Sua senha"/>
-        {errSenha && <div style={{fontSize:11, color:C.danger, marginTop:4}}>{errSenha}</div>}
-      </div>}
-
-      <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:6}}>
-        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
-        {decisao && <button
-          style={{...Sg.btn("primary"), opacity:(canSave && confirmaSenha)?1:.4}}
-          disabled={!canSave || !confirmaSenha}
-          onClick={verificarAssinaturaESalvar}>
-          Confirmar e assinar
-        </button>}
+      </div>
+      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end"}}>
+        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Cancelar</button>
       </div>
     </div>
   </Modal>;
 }
 
-// ── Modal de aprovação de concessão (aprovador decide) ────────────
-function AprovacaoModal({open, item, onClose, onSave, C, Sg}){
-  const [decisao, setDecisao] = useState("");
+// ── 2. Sucatar ────────────────────────────────────────────────────
+// Decisão direta da qualidade: registra motivo e segue pra assinatura.
+function SucatarModal({open, item, onClose, onConfirm, C, Sg}){
   const [motivo, setMotivo] = useState("");
-  const [confirmaSenha, setConfirmaSenha] = useState("");
-  const [errSenha, setErrSenha] = useState("");
-
-  React.useEffect(()=>{
-    if(open){ setDecisao(""); setMotivo(""); setConfirmaSenha(""); setErrSenha(""); }
-  }, [open, item]);
-
+  React.useEffect(()=>{if(open) setMotivo("");}, [open]);
   if(!open) return null;
-  const canSave = decisao && motivo.trim().length>0;
-
-  const verificarESalvar = async () => {
-    if(!confirmaSenha){ setErrSenha("Digite sua senha pra confirmar."); return; }
-    setErrSenha("");
-    try {
-      const token = sessionStorage.getItem('sgq_token');
-      const r = await fetch('/api/auth?_route=verify',{
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({password:confirmaSenha})
-      });
-      const data = await r.json();
-      if(!r.ok || !data.ok){ setErrSenha("Senha incorreta."); return; }
-      onSave({decisao, motivo: motivo.trim()});
-    } catch(err){
-      setErrSenha("Erro de comunicação.");
-    }
-  };
-
-  return <Modal open={open} onClose={onClose} title="Decidir concessão" width={520}>
-    <div style={{display:"flex", flexDirection:"column", gap:14}}>
-      {item && <div style={{padding:"10px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.muted}}>
-        <strong style={{color:C.accent}}>{item.codigo||"—"}</strong>
-        {item.descricao && <span> · {item.descricao}</span>}
-        {item.lote && <span> · Lote {item.lote}</span>}
-        {item.qtdNC && <span> · Qtd {item.qtdNC}</span>}
-      </div>}
-
-      {item?.concessaoJustificativa && <div>
-        <div style={{fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.4, marginBottom:4}}>Justificativa da qualidade</div>
-        <div style={{fontSize:12, color:C.text, padding:"10px 12px", background:C.surface, borderRadius:6, whiteSpace:"pre-wrap"}}>
-          {item.concessaoJustificativa}
+  const can = motivo.trim().length>0;
+  return <Modal open={open} onClose={onClose} title="" width={580}>
+    <div style={{margin:-16}}>
+      <div style={{padding:"18px 22px 14px"}}>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Sucatar item</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Decisão direta da qualidade</div>
+      </div>
+      <ItemInfoStrip item={item} C={C}/>
+      <div style={{padding:"20px 22px"}}>
+        <label style={{display:"block", fontSize:13, fontWeight:600, color:C.text, marginBottom:6}}>
+          Motivo do sucatamento <span style={{color:C.danger}}>*</span>
+        </label>
+        <div style={{fontSize:12, color:C.muted, marginBottom:10}}>
+          Por que essas peças precisam ser descartadas? O motivo fica registrado pra controle do que foi sucatado na empresa.
         </div>
-        <div style={{fontSize:10, color:C.muted, marginTop:4}}>
-          Solicitada por {item.concessaoSolicitadaBy||"—"} em {fmt(item.concessaoSolicitadaAt)}
-        </div>
-      </div>}
+        <textarea
+          style={{...Sg.input(), minHeight:90, resize:"vertical", fontFamily:"inherit"}}
+          value={motivo} onChange={e=>setMotivo(e.target.value)}
+          placeholder="Ex: Cabo apresentou rompimento interno após o teste, sem possibilidade de retrabalho."
+        />
+      </div>
+      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end", gap:8}}>
+        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Cancelar</button>
+        <button
+          style={{...Sg.btn("danger"), fontSize:12, padding:"7px 16px", opacity:can?1:.4}}
+          disabled={!can}
+          onClick={()=>onConfirm({motivo: motivo.trim()})}>
+          Sucatar este item
+        </button>
+      </div>
+    </div>
+  </Modal>;
+}
 
-      <div>
-        <label style={Sg.lbl}>Sua decisão</label>
-        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:4}}>
-          <button onClick={()=>setDecisao("aprovar")} style={{padding:"10px", textAlign:"center", cursor:"pointer", border:"1px solid "+(decisao==="aprovar"?C.success:C.border), background:decisao==="aprovar"?C.success+"15":C.card, borderRadius:8, fontSize:13, color:decisao==="aprovar"?C.success:C.text, fontWeight:600}}>
-            Aprovar
-          </button>
-          <button onClick={()=>setDecisao("rejeitar")} style={{padding:"10px", textAlign:"center", cursor:"pointer", border:"1px solid "+(decisao==="rejeitar"?C.danger:C.border), background:decisao==="rejeitar"?C.danger+"15":C.card, borderRadius:8, fontSize:13, color:decisao==="rejeitar"?C.danger:C.text, fontWeight:600}}>
-            Rejeitar
-          </button>
+// ── 3. Pedir Concessão ────────────────────────────────────────────
+// Qualidade analisa e escolhe aprovador. Próximo passo é assinatura.
+function PedirConcessaoModal({open, item, allUsers, currentUser, onClose, onConfirm, C, Sg}){
+  const [analise, setAnalise] = useState("");
+  const [aprovador, setAprovador] = useState("");
+  React.useEffect(()=>{if(open){ setAnalise(""); setAprovador(""); }}, [open]);
+  if(!open) return null;
+  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && u.id!==currentUser?.id);
+  const can = analise.trim().length>0 && aprovador;
+  return <Modal open={open} onClose={onClose} title="" width={580}>
+    <div style={{margin:-16}}>
+      <div style={{padding:"18px 22px 14px"}}>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Pedir concessão</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Vai para aprovação de outra pessoa</div>
+      </div>
+      <ItemInfoStrip item={item} C={C}/>
+      <div style={{padding:"20px 22px"}}>
+        <div style={{marginBottom:18}}>
+          <label style={{display:"block", fontSize:13, fontWeight:600, color:C.text, marginBottom:6}}>
+            Análise da qualidade <span style={{color:C.danger}}>*</span>
+          </label>
+          <div style={{fontSize:12, color:C.muted, marginBottom:10}}>
+            Justifique tecnicamente por que essas peças podem ser usadas mesmo fora do padrão. Esta análise vai junto pro aprovador decidir.
+          </div>
+          <textarea
+            style={{...Sg.input(), minHeight:100, resize:"vertical", fontFamily:"inherit"}}
+            value={analise} onChange={e=>setAnalise(e.target.value)}
+            placeholder="Ex: A não conformidade é dimensional (0,2mm acima da tolerância) e não compromete o encaixe nem a funcionalidade do produto final..."
+          />
+        </div>
+        <div>
+          <label style={{display:"block", fontSize:13, fontWeight:600, color:C.text, marginBottom:6}}>
+            Enviar para aprovação de <span style={{color:C.danger}}>*</span>
+          </label>
+          <select
+            style={Sg.input()}
+            value={aprovador} onChange={e=>setAprovador(e.target.value)}>
+            <option value="">Selecione o aprovador...</option>
+            {aprovadores.map(u=>(
+              <option key={u.id} value={u.id}>{u.name}{u.area?" — "+u.area:""}</option>
+            ))}
+          </select>
+          <div style={{fontSize:11, color:C.muted, marginTop:6}}>O aprovador receberá a solicitação como pendência.</div>
         </div>
       </div>
+      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end", gap:8}}>
+        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Cancelar</button>
+        <button
+          style={{...Sg.btn("primary"), fontSize:12, padding:"7px 16px", opacity:can?1:.4}}
+          disabled={!can}
+          onClick={()=>onConfirm({analise: analise.trim(), aprovador})}>
+          Enviar para aprovação
+        </button>
+      </div>
+    </div>
+  </Modal>;
+}
 
-      {decisao && <div>
-        <label style={Sg.lbl}>{decisao==="aprovar"?"Observação (opcional, mas recomendado)":"Motivo da rejeição *"}</label>
-        <textarea style={{...Sg.input(), minHeight:70, resize:"vertical", fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder={decisao==="aprovar"?"Ex: liberado, condições aceitáveis":"Ex: não atende ao requisito mínimo"}/>
-      </div>}
+// ── 4. Mover para NC — placeholder enquanto NC não está pronta ────
+function MoverNCAvisoModal({open, item, onClose, C, Sg}){
+  if(!open) return null;
+  return <Modal open={open} onClose={onClose} title="" width={520}>
+    <div style={{margin:-16}}>
+      <div style={{padding:"18px 22px 14px"}}>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Mover para NC</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Tratativa formal com plano de ações</div>
+      </div>
+      <ItemInfoStrip item={item} C={C}/>
+      <div style={{padding:"24px 22px"}}>
+        <div style={{padding:"14px 16px", background:C.warning+"15", border:"1px solid "+C.warning+"40", borderRadius:8, fontSize:13, color:C.text, lineHeight:1.5}}>
+          <div style={{fontWeight:600, color:C.warning, marginBottom:6}}>Módulo NC ainda não disponível</div>
+          O módulo de Não Conformidade está em desenvolvimento. Por enquanto, escolha outra ação no menu de tratamento (Sucatar ou Pedir concessão) ou aguarde a próxima atualização.
+        </div>
+      </div>
+      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end"}}>
+        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Entendi, voltar</button>
+      </div>
+    </div>
+  </Modal>;
+}
 
-      {decisao && <div style={{borderTop:"1px solid "+C.border, paddingTop:14, marginTop:6}}>
-        <label style={Sg.lbl}>Confirme sua senha (assinatura digital) *</label>
-        <input type="password" style={Sg.input()} value={confirmaSenha} onChange={e=>{setConfirmaSenha(e.target.value);setErrSenha("");}} placeholder="Sua senha"/>
-        {errSenha && <div style={{fontSize:11, color:C.danger, marginTop:4}}>{errSenha}</div>}
-      </div>}
-
-      <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:6}}>
-        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
-        {decisao && <button
-          style={{...Sg.btn(decisao==="aprovar"?"success":"danger"), opacity:(canSave && confirmaSenha)?1:.4}}
-          disabled={!canSave || !confirmaSenha}
-          onClick={verificarESalvar}>
-          {decisao==="aprovar"?"Aprovar e assinar":"Rejeitar e assinar"}
-        </button>}
+// ── 5. Aprovar Concessão ──────────────────────────────────────────
+// Aprovador lê a análise da qualidade e decide. Aprovar vai direto pra
+// assinatura. Rejeitar abre modal de motivo antes da assinatura.
+function AprovarConcessaoModal({open, item, onClose, onAprovar, onRejeitar, C, Sg}){
+  if(!open) return null;
+  return <Modal open={open} onClose={onClose} title="" width={580}>
+    <div style={{margin:-16}}>
+      <div style={{padding:"18px 22px 14px"}}>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Aprovar concessão</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>
+          Solicitada por {item?.concessaoSolicitadaBy||"—"}
+          {item?.concessaoSolicitadaAt?" em "+fmt(item.concessaoSolicitadaAt):""}
+        </div>
+      </div>
+      <ItemInfoStrip item={item} C={C}/>
+      <div style={{padding:"20px 22px"}}>
+        <div style={{fontSize:13, fontWeight:600, color:C.text, marginBottom:8}}>Análise técnica da qualidade</div>
+        <div style={{
+          background:C.surface, padding:"14px 16px", fontSize:13, color:C.text,
+          lineHeight:1.6, borderLeft:"3px solid "+C.accent, borderRadius:"0 8px 8px 0",
+          whiteSpace:"pre-wrap"
+        }}>
+          {item?.concessaoJustificativa||"—"}
+        </div>
+        <div style={{fontSize:11, color:C.muted, marginTop:14, paddingTop:14, borderTop:"1px solid "+C.border}}>
+          Ao rejeitar, será aberto outro popup pedindo o motivo. Aprovar vai direto pra assinatura.
+        </div>
+      </div>
+      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"space-between", gap:8}}>
+        <button
+          style={{padding:"7px 16px", fontSize:12, fontWeight:500, borderRadius:7, cursor:"pointer", fontFamily:"inherit", border:"1px solid "+C.danger, background:"transparent", color:C.danger}}
+          onClick={onRejeitar}>
+          Rejeitar concessão
+        </button>
+        <button
+          style={{...Sg.btn("primary"), fontSize:12, padding:"7px 18px"}}
+          onClick={onAprovar}>
+          Aprovar concessão
+        </button>
       </div>
     </div>
   </Modal>;
@@ -4821,6 +4824,127 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTra
       onSave={handleSaveDisp}
       C={C} Sg={Sg}
     />
+  </div>;
+}
+
+// ── Tabela de peças solicitadas (lista simples sem status) ────────
+// Apenas registro pra rastreabilidade — quem mexe no estoque usa o ERP.
+function PecasSolicitadasTable({pecas, onChange, readOnly, currentUser, onAddHistory, C, Sg}){
+  const cellMid = {padding:"8px 6px", verticalAlign:"middle", fontSize:12};
+  const inputStyle = {...Sg.input(), fontSize:12, height:32, boxSizing:"border-box"};
+
+  const addPeca = () => {
+    onChange([...(pecas||[]), {
+      codigo:"", descricao:"", qtd:"", motivo:"",
+      addedAt: new Date().toISOString(),
+      addedBy: currentUser?.name || currentUser?.email || ""
+    }]);
+  };
+
+  const updPeca = (i, v) => {
+    const n = [...(pecas||[])];
+    n[i] = v;
+    onChange(n);
+  };
+
+  const remPeca = (i) => {
+    const removed = (pecas||[])[i];
+    onChange((pecas||[]).filter((_,j)=>j!==i));
+    if(onAddHistory && removed?.codigo){
+      onAddHistory({
+        type: "peca_solicitada_remove",
+        detail: "Peça solicitada removida: " + (removed.codigo||"") + (removed.descricao?" — "+removed.descricao:"") + (removed.qtd?" (qtd "+removed.qtd+")":"")
+      });
+    }
+  };
+
+  const commitAdd = (i) => {
+    if(!onAddHistory) return;
+    const p = (pecas||[])[i];
+    if(!p?.codigo) return;
+    onAddHistory({
+      type: "peca_solicitada_add",
+      detail: "Peça solicitada: " + p.codigo + (p.descricao?" — "+p.descricao:"") + (p.qtd?" · qtd "+p.qtd:"") + (p.motivo?"\nMotivo: "+p.motivo:"")
+    });
+  };
+
+  const list = pecas||[];
+
+  return <div>
+    <table style={{width:"100%", borderCollapse:"collapse", fontSize:12, tableLayout:"fixed"}}>
+      <colgroup>
+        <col style={{width:140}}/>
+        <col/>
+        <col style={{width:60}}/>
+        <col style={{width:240}}/>
+        <col style={{width:32}}/>
+      </colgroup>
+      <thead>
+        <tr style={{background:C.surface, borderBottom:"1px solid "+C.border}}>
+          {["Código","Descrição","Qtd","Motivo da solicitação",""].map((h,i)=>(
+            <th key={i} style={{padding:"7px 10px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {list.length===0 && <tr><td colSpan={5} style={{padding:"12px 8px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma peça solicitada</td></tr>}
+        {list.map((p,i)=>(
+          readOnly
+            ? <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                <td style={{...cellMid, fontWeight:700, color:C.accent}}>{p.codigo||"—"}</td>
+                <td style={{...cellMid, color:C.text, whiteSpace:"pre-wrap"}}>{p.descricao||"—"}</td>
+                <td style={{...cellMid, color:C.text}}>{p.qtd||"—"}</td>
+                <td style={{...cellMid, color:C.muted, fontSize:11, whiteSpace:"pre-wrap"}}>{p.motivo||"—"}</td>
+                <td style={cellMid}/>
+              </tr>
+            : <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                <td style={cellMid}>
+                  <ProdutoAutocomplete
+                    value={p.codigo||""}
+                    onChange={v=>updPeca(i,{...p, codigo:v})}
+                    onSelect={prod=>{
+                      const nxt = {...p, codigo:prod.codigo, descricao:prod.descricao};
+                      updPeca(i, nxt);
+                      // Anuncia no histórico ao primeiro código
+                      if(!p.codigo) commitAdd(i);
+                    }}
+                    C={C} Sg={Sg} placeholder="Código..."/>
+                </td>
+                <td style={cellMid}>
+                  <AutoTextarea
+                    value={p.descricao||""}
+                    onChange={e=>updPeca(i,{...p, descricao:e.target.value})}
+                    placeholder="Descrição"
+                    style={{border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text}}
+                  />
+                </td>
+                <td style={cellMid}>
+                  <input
+                    style={inputStyle}
+                    type="number" min="0"
+                    value={p.qtd||""}
+                    onChange={e=>updPeca(i,{...p, qtd:e.target.value})}
+                    placeholder="0"/>
+                </td>
+                <td style={cellMid}>
+                  <AutoTextarea
+                    value={p.motivo||""}
+                    onChange={e=>updPeca(i,{...p, motivo:e.target.value})}
+                    placeholder="Ex: quebra no retrabalho"
+                    style={{border:"0.5px solid "+C.border, borderRadius:8, background:C.card, color:C.text}}
+                  />
+                </td>
+                <td style={{...cellMid, textAlign:"center"}}>
+                  <button
+                    onClick={()=>remPeca(i)}
+                    title="Remover peça"
+                    style={{background:"none", border:"none", cursor:"pointer", color:C.danger, fontSize:16, padding:0, lineHeight:1}}>×</button>
+                </td>
+              </tr>
+        ))}
+      </tbody>
+    </table>
+    {!readOnly && <button style={{...Sg.btn(), fontSize:11, padding:"4px 12px", marginTop:8}} onClick={addPeca}>+ Solicitar peça</button>}
   </div>;
 }
 
@@ -5111,12 +5235,18 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const [disposicaoEdit,setDisposicaoEdit]=useState("");
   const [conclusao,setConclusao]=useState("");
   const [itensEdit,setItensEdit]=useState([]);
+  const [pecasEdit,setPecasEdit]=useState([]);
   const [editingItens,setEditingItens]=useState(false);
   const [addingAtt,setAddingAtt]=useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [motiveModal, setMotiveModal] = useState(null);
-  const [tratamentoIdx, setTratamentoIdx] = useState(null);
-  const [aprovacaoIdx, setAprovacaoIdx] = useState(null);
+  // tratamentoState: { idx, step: 'menu' | 'sucatar' | 'concessao' | 'migrar_nc' }
+  const [tratamentoState, setTratamentoState] = useState(null);
+  // aprovacaoState: { idx, step: 'decidir' | 'rejeitar' }
+  const [aprovacaoState, setAprovacaoState] = useState(null);
+  // pendingApply: dados aguardando confirmação por assinatura
+  // ex: { type: 'tratamento_sucatar', idx, motivo }
+  const [pendingApply, setPendingApply] = useState(null);
   const actionMenuRef = React.useRef(null);
 
   React.useEffect(()=>{
@@ -5132,6 +5262,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       setAnalise(r.data?.analise||"");
       setDisposicaoEdit(r.data?.disposicao||"");
       setItensEdit(r.data?.itens||[]);
+      setPecasEdit(r.data?.pecasSolicitadas||[]);
       setConclusao("");
     }
   },[r?.id||r?.code]);
@@ -5258,6 +5389,68 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     setSigModal(null);
   };
 
+  // Aplica a ação pendente após o usuário confirmar via SignatureModal.
+  // Cobre tratamentos da qualidade (sucatar/concessão) e decisões do aprovador (aprovar/rejeitar).
+  const applyPending = async (sig) => {
+    if(!pendingApply){ setSigModal(null); return; }
+    const idx = pendingApply.idx;
+    const itens = [...(d.itens||[])];
+    const linha = {...itens[idx]};
+    const codigo = linha.codigo || ("item #"+(idx+1));
+    const userName = currentUser?.name || currentUser?.email || "—";
+    const now = new Date().toISOString();
+    let detalhe = "";
+
+    if(pendingApply.type==="tratamento_sucatar"){
+      linha.disposicao = "sucatamento";
+      linha.status = "concluida";
+      linha.tratamentoMotivo = pendingApply.motivo;
+      linha.tratamentoAt = now;
+      linha.tratamentoBy = userName;
+      detalhe = "Item " + codigo + " sucatado pela qualidade.\nMotivo: " + pendingApply.motivo;
+    }
+    else if(pendingApply.type==="tratamento_concessao"){
+      linha.disposicao = "concessao_solicitada";
+      linha.status = "aguardando_aprovacao";
+      linha.concessaoJustificativa = pendingApply.analise;
+      linha.concessaoAprovadorId = pendingApply.aprovador;
+      linha.concessaoSolicitadaAt = now;
+      linha.concessaoSolicitadaBy = userName;
+      const aprovadorNome = (allUsers||[]).find(u=>u.id===pendingApply.aprovador)?.name || "—";
+      detalhe = "Item " + codigo + ": concessão solicitada.\nAprovador: " + aprovadorNome + "\nAnálise da qualidade: " + pendingApply.analise;
+    }
+    else if(pendingApply.type==="aprovacao_aprovar"){
+      linha.disposicao = "concessao_aprovada";
+      linha.status = "concluida";
+      linha.concessaoAprovadaAt = now;
+      linha.concessaoAprovadaBy = userName;
+      detalhe = "Item " + codigo + ": concessão APROVADA por " + userName + ".";
+    }
+    else if(pendingApply.type==="aprovacao_rejeitar"){
+      linha.disposicao = "concessao_rejeitada";
+      linha.status = "pendente";
+      linha.concessaoRejeitadaAt = now;
+      linha.concessaoRejeitadaBy = userName;
+      linha.concessaoRejeitadaMotivo = pendingApply.motivo;
+      detalhe = "Item " + codigo + ": concessão REJEITADA por " + userName + ".\nMotivo: " + pendingApply.motivo + "\nVolta para a qualidade decidir outra disposição.";
+    }
+
+    itens[idx] = linha;
+    const novoHist = {
+      type: pendingApply.type.startsWith("aprovacao_") ? "decisao_aprovador" : "tratamento_qualidade",
+      at: now,
+      by: userName,
+      byId: currentUser?.id,
+      itemIdx: idx,
+      itemCodigo: linha.codigo || "",
+      detail: detalhe + "\n(assinado eletronicamente)"
+    };
+    const histTotal = [...(d.historico||[]), novoHist];
+    await onUpdate({...r, data: {...d, itens, historico: histTotal}});
+    setPendingApply(null);
+    setSigModal(null);
+  };
+
   const itensVisiveis = editingItens ? itensEdit : (d.itens||[]);
 
   return <div style={{padding:"18px 22px",maxWidth:1100}}>
@@ -5378,18 +5571,18 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       <div><span style={Sg.lbl}>Descrição</span><div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",background:C.surface,borderRadius:6,padding:"8px 10px",marginTop:2}}>{d.descricao||"—"}</div></div>
     </div>
 
-    {/* Itens afetados (Produto) */}
+    {/* Produto não conforme + Peças solicitadas (Produto) */}
     {d.tipo==="Produto"&&<div style={{...Sg.card(),marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Itens Afetados</div>
-        {status!=="fechada"&&canAnalyze&&!editingItens&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setEditingItens(true)}>Editar itens</button>}
+        <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Produto não conforme</div>
+        {status!=="fechada"&&canAnalyze&&!editingItens&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setEditingItens(true)}>Editar</button>}
         {editingItens&&<div style={{display:"flex",gap:6}}>
-          <button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>{setItensEdit(d.itens||[]);setEditingItens(false);}}>Cancelar</button>
+          <button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>{setItensEdit(d.itens||[]);setPecasEdit(d.pecasSolicitadas||[]);setEditingItens(false);}}>Cancelar</button>
           <button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={async()=>{
             const now=new Date().toISOString();
-            await onUpdate({...r,data:{...d,itens:itensEdit},log:[...(r.log||[]),{at:now,by:currentUser.name,type:"itens",event:"Itens atualizados",detail:itensEdit.length+" item(ns)"}]});
+            await onUpdate({...r,data:{...d,itens:itensEdit,pecasSolicitadas:pecasEdit},log:[...(r.log||[]),{at:now,by:currentUser.name,type:"itens",event:"Itens / peças atualizados",detail:itensEdit.length+" item(ns) · "+pecasEdit.length+" peça(s) solicitada(s)"}]});
             setEditingItens(false);
-          }}>Salvar itens</button>
+          }}>Salvar</button>
         </div>}
       </div>
       <ItensTable
@@ -5397,11 +5590,27 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         onChange={v=>{if(editingItens)setItensEdit(v);}}
         readOnly={!editingItens}
         currentUser={currentUser}
-        onTratar={(idx)=>setTratamentoIdx(idx)}
+        onTratar={(idx)=>setTratamentoState({idx, step:"menu"})}
         canTratar={hasPerm(currentUser,'ro.tratar_segregado') && !editingItens && !["cancelada","fechada"].includes(status)}
-        onAprovar={(idx)=>setAprovacaoIdx(idx)}
+        onAprovar={(idx)=>setAprovacaoState({idx, step:"decidir"})}
         canAprovar={hasPerm(currentUser,'ro.aprovar_concessao') && !editingItens && !["cancelada","fechada"].includes(status)}
         C={C} Sg={Sg} allUsers={allUsers}/>
+    </div>}
+
+    {/* Peças solicitadas — lista simples sem status, só pra rastreabilidade */}
+    {d.tipo==="Produto"&&<div style={{...Sg.card(),marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:12}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Peças solicitadas</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:3}}>Peças necessárias para o retrabalho — só registro, controle de estoque é feito no ERP</div>
+        </div>
+      </div>
+      <PecasSolicitadasTable
+        pecas={editingItens?pecasEdit:(d.pecasSolicitadas||[])}
+        onChange={v=>{if(editingItens)setPecasEdit(v);}}
+        readOnly={!editingItens}
+        currentUser={currentUser}
+        C={C} Sg={Sg}/>
     </div>}
 
     {/* Análise — visível pra qualidade (analisar) ou pra qualquer um quando já houver análise registrada */}
@@ -5459,119 +5668,84 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     {/* Histórico unificado */}
     <ROHistorico r={r} C={C}/>
 
-    {/* Aprovação de concessão — quando aprovador clica em Decidir */}
-    {aprovacaoIdx!==null && d.itens && d.itens[aprovacaoIdx] && <AprovacaoModal
+    {/* Aprovar concessão — etapa 1: ler análise e decidir */}
+    {aprovacaoState!==null && aprovacaoState.step==="decidir" && d.itens && d.itens[aprovacaoState.idx] && <AprovarConcessaoModal
       open={true}
-      item={d.itens[aprovacaoIdx]}
-      onClose={()=>setAprovacaoIdx(null)}
-      onSave={async (resultado)=>{
-        const idx = aprovacaoIdx;
-        const itens = [...(d.itens||[])];
-        const linha = {...itens[idx]};
-        const codigo = linha.codigo || ("item #"+(idx+1));
-        const aprovador = currentUser?.name || currentUser?.email || "—";
-        let detalhe = "";
-
-        if(resultado.decisao === "aprovar"){
-          linha.disposicao = "concessao_aprovada";
-          linha.status = "concluida";
-          linha.concessaoAprovadaAt = new Date().toISOString();
-          linha.concessaoAprovadaBy = aprovador;
-          linha.concessaoAprovadaObs = resultado.motivo;
-          detalhe = "Item " + codigo + ": concessão APROVADA por " + aprovador + ".";
-          if(resultado.motivo) detalhe += "\nObservação: " + resultado.motivo;
-        } else {
-          linha.disposicao = "concessao_rejeitada";
-          linha.status = "pendente";
-          linha.concessaoRejeitadaAt = new Date().toISOString();
-          linha.concessaoRejeitadaBy = aprovador;
-          linha.concessaoRejeitadaMotivo = resultado.motivo;
-          detalhe = "Item " + codigo + ": concessão REJEITADA por " + aprovador + ".\nMotivo: " + resultado.motivo + "\nVolta para a qualidade decidir outra disposição.";
-        }
-        itens[idx] = linha;
-
-        const novoHist = {
-          type: "decisao_aprovador",
-          at: new Date().toISOString(),
-          by: aprovador,
-          byId: currentUser?.id,
-          itemIdx: idx,
-          itemCodigo: linha.codigo || "",
-          detail: detalhe + "\n(assinado eletronicamente)"
-        };
-        const histTotal = [...(d.historico||[]), novoHist];
-
-        await onUpdate({...r, data: {...d, itens, historico: histTotal}});
-        setAprovacaoIdx(null);
+      item={d.itens[aprovacaoState.idx]}
+      onClose={()=>setAprovacaoState(null)}
+      onAprovar={()=>{
+        const idx = aprovacaoState.idx;
+        setPendingApply({type:"aprovacao_aprovar", idx});
+        setAprovacaoState(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Aprovação de concessão", confirmLabel:"Assinar e aprovar", confirmStyle:"success"});
+      }}
+      onRejeitar={()=>{
+        setAprovacaoState({...aprovacaoState, step:"rejeitar"});
       }}
       C={C} Sg={Sg}
     />}
 
-    {/* Tratamento da qualidade — abre quando clica em Tratar numa linha Segregar */}
-    {tratamentoIdx!==null && d.itens && d.itens[tratamentoIdx] && <TratamentoModal
+    {/* Aprovar concessão — etapa 2: motivo de rejeição */}
+    {aprovacaoState!==null && aprovacaoState.step==="rejeitar" && <MotiveModal
       open={true}
-      item={d.itens[tratamentoIdx]}
+      onClose={()=>setAprovacaoState({...aprovacaoState, step:"decidir"})}
+      onConfirm={(motivo)=>{
+        const idx = aprovacaoState.idx;
+        setPendingApply({type:"aprovacao_rejeitar", idx, motivo: motivo||""});
+        setAprovacaoState(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Rejeição de concessão", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
+      }}
+      title="Motivo da rejeição"
+      description="Por que está rejeitando a concessão? A qualidade vai precisar dessa informação pra decidir outra coisa pro item."
+      confirmLabel="Continuar para assinatura"
+      confirmStyle="danger"
+      C={C} Sg={Sg}
+    />}
+
+    {/* Tratar segregado — Menu de 3 opções */}
+    {tratamentoState!==null && tratamentoState.step==="menu" && d.itens && d.itens[tratamentoState.idx] && <TratamentoMenuModal
+      open={true}
+      item={d.itens[tratamentoState.idx]}
+      onClose={()=>setTratamentoState(null)}
+      onPick={(decisao)=>setTratamentoState({...tratamentoState, step: decisao})}
+      C={C} Sg={Sg}
+    />}
+
+    {/* Tratar segregado — Sucatar */}
+    {tratamentoState!==null && tratamentoState.step==="sucatamento" && d.itens && d.itens[tratamentoState.idx] && <SucatarModal
+      open={true}
+      item={d.itens[tratamentoState.idx]}
+      onClose={()=>setTratamentoState({...tratamentoState, step:"menu"})}
+      onConfirm={({motivo})=>{
+        const idx = tratamentoState.idx;
+        setPendingApply({type:"tratamento_sucatar", idx, motivo});
+        setTratamentoState(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Sucatamento", confirmLabel:"Assinar e sucatar", confirmStyle:"danger"});
+      }}
+      C={C} Sg={Sg}
+    />}
+
+    {/* Tratar segregado — Pedir Concessão */}
+    {tratamentoState!==null && tratamentoState.step==="concessao" && d.itens && d.itens[tratamentoState.idx] && <PedirConcessaoModal
+      open={true}
+      item={d.itens[tratamentoState.idx]}
       allUsers={allUsers}
       currentUser={currentUser}
-      onClose={()=>setTratamentoIdx(null)}
-      onSave={async (resultado)=>{
-        const idx = tratamentoIdx;
-        const itens = [...(d.itens||[])];
-        const linha = {...itens[idx]};
-        const codigo = linha.codigo || ("item #"+(idx+1));
-        let detalhe = "";
-
-        if(resultado.decisao === "sucatamento"){
-          linha.disposicao = "sucatamento";
-          linha.status = "concluida";
-          linha.tratamentoMotivo = resultado.motivo;
-          linha.tratamentoAt = new Date().toISOString();
-          linha.tratamentoBy = currentUser?.name || currentUser?.email;
-          detalhe = "Item " + codigo + " sucatado pela qualidade.\nMotivo: " + resultado.motivo;
-        }
-        else if(resultado.decisao === "concessao"){
-          linha.disposicao = "concessao_solicitada";
-          linha.status = "aguardando_aprovacao";
-          linha.concessaoJustificativa = resultado.motivo;
-          linha.concessaoAprovadorId = resultado.aprovador;
-          linha.concessaoSolicitadaAt = new Date().toISOString();
-          linha.concessaoSolicitadaBy = currentUser?.name || currentUser?.email;
-          const aprovadorNome = (allUsers||[]).find(u=>u.id===resultado.aprovador)?.name || "—";
-          detalhe = "Item " + codigo + ": concessão solicitada.\nAprovador: " + aprovadorNome + "\nJustificativa: " + resultado.motivo;
-        }
-        else if(resultado.decisao === "editar"){
-          const qtdAntiga = linha.qtdNC;
-          linha.qtdNC = String(resultado.novaQtd);
-          detalhe = "Item " + codigo + ": quantidade alterada de " + qtdAntiga + " para " + resultado.novaQtd + " pela qualidade.";
-        }
-        else if(resultado.decisao === "migrar_nc"){
-          linha.disposicao = "migrada_nc";
-          linha.status = "concluida";
-          linha.migracaoMotivo = resultado.motivo;
-          linha.migracaoAt = new Date().toISOString();
-          linha.migracaoBy = currentUser?.name || currentUser?.email;
-          // Marca pra criar NC depois (quando o módulo NC estiver pronto)
-          linha.migracaoPendenteNC = true;
-          detalhe = "Item " + codigo + " marcado para migrar para NC.\nMotivo: " + resultado.motivo + "\n(NC será criada quando o módulo for ativado)";
-        }
-
-        itens[idx] = linha;
-
-        const novoHist = {
-          type: "tratamento_qualidade",
-          at: new Date().toISOString(),
-          by: currentUser?.name || currentUser?.email || "—",
-          byId: currentUser?.id,
-          itemIdx: idx,
-          itemCodigo: linha.codigo || "",
-          detail: detalhe + "\n(assinado eletronicamente)"
-        };
-        const histTotal = [...(d.historico||[]), novoHist];
-
-        // Salva
-        await onUpdate({...r, data: {...d, itens, historico: histTotal}});
-        setTratamentoIdx(null);
+      onClose={()=>setTratamentoState({...tratamentoState, step:"menu"})}
+      onConfirm={({analise, aprovador})=>{
+        const idx = tratamentoState.idx;
+        setPendingApply({type:"tratamento_concessao", idx, analise, aprovador});
+        setTratamentoState(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Pedido de concessão", confirmLabel:"Assinar e enviar", confirmStyle:"primary"});
       }}
+      C={C} Sg={Sg}
+    />}
+
+    {/* Tratar segregado — Mover para NC (placeholder) */}
+    {tratamentoState!==null && tratamentoState.step==="migrar_nc" && d.itens && d.itens[tratamentoState.idx] && <MoverNCAvisoModal
+      open={true}
+      item={d.itens[tratamentoState.idx]}
+      onClose={()=>setTratamentoState({...tratamentoState, step:"menu"})}
       C={C} Sg={Sg}
     />}
 
@@ -5610,6 +5784,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         else if(sigModal.action==="conclusao") await doConclusao(sig);
         else if(sigModal.action==="cancelar") await doCancelar(sig, sigModal.cancelMotivo||"");
         else if(sigModal.action==="reabrir") await doReabrir(sig, sigModal.reaberturaMotivo||"");
+        else if(sigModal.action==="apply_pending") await applyPending(sig);
         else await doAnalyze(sig);
       }}
     />}
