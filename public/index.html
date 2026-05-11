@@ -20,7 +20,9 @@ body{background:var(--app-bg,#F5F7FA);font-family:'DM Sans',sans-serif;color:#1A
 select option{background:#1E2333;color:#E8EAF0}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 textarea,input,select,button{font-family:inherit}
-
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
 </style>
 </head>
 <body><div id="root"></div>
@@ -3189,14 +3191,22 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     );
   }) : [];
 
-  // ROs com pelo menos uma linha aguardando MINHA aprovação de concessão
+  // ROs com pelo menos uma linha/sublote aguardando MINHA aprovação de concessão
   const roParaAprovar = canAprovarConc ? (roRecs||[]).filter(r=>{
     if(["cancelada","fechada"].includes(r.status)) return false;
     const itens = r.data?.itens || [];
-    return itens.some(it =>
-      it.disposicao==="concessao_solicitada" &&
-      it.concessaoAprovadorId===currentUser.id
-    );
+    return itens.some(it => {
+      // Modelo novo: sublotes
+      if(it.sublotes && it.sublotes.length > 0){
+        return it.sublotes.some(s =>
+          s.tipo==="concessao_solicitada" &&
+          String(s.concessaoAprovadorId)===String(currentUser.id)
+        );
+      }
+      // Modelo legado
+      return it.disposicao==="concessao_solicitada" &&
+        String(it.concessaoAprovadorId)===String(currentUser.id);
+    });
   }) : [];
 
   const roParaConcluir = canCloseRO ? (roRecs||[]).filter(r=>r.status==='aguardando_conclusao') : [];
@@ -3337,7 +3347,16 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
           </div>
           {roParaAprovar.map((r,i)=>{
             const d=r.data||{};
-            const conc = (d.itens||[]).filter(it=>it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===currentUser.id);
+            // Conta sublotes de concessão pendentes pra este usuário
+            let concCount = 0;
+            (d.itens||[]).forEach(it=>{
+              if(it.sublotes && it.sublotes.length>0){
+                concCount += it.sublotes.filter(s=>s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(currentUser.id)).length;
+              } else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(currentUser.id)){
+                concCount++;
+              }
+            });
+            const conc = {length: concCount};
             return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
               style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
               onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
@@ -4301,13 +4320,11 @@ function DispBadge({disp, status, sublotes, C}){
 function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
   const [disp, setDisp] = useState(item?.disposicao||"");
   const [acao, setAcao] = useState(item?.acaoCorrecao||"");
-  const [repor, setRepor] = useState(item?.solicitarReposicao!==false);
 
   React.useEffect(()=>{
     if(open){
       setDisp(item?.disposicao||"");
       setAcao(item?.acaoCorrecao||"");
-      setRepor(item?.disposicao==="correcao" ? !!item?.solicitarReposicao : (item?.solicitarReposicao!==false));
     }
   }, [open, item]);
 
@@ -4361,11 +4378,7 @@ function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
         />
       </div>}
 
-      {disp && <label style={{display:"inline-flex", alignItems:"center", gap:8, fontSize:12, color:C.muted, cursor:"pointer"}}>
-        <input type="checkbox" checked={repor} onChange={e=>setRepor(e.target.checked)}/>
-        Solicitar peça de reposição
-        {disp==="correcao" && <span style={{fontSize:10, color:C.dim}}>(não usual)</span>}
-      </label>}
+
 
       <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:6}}>
         <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
@@ -4376,7 +4389,6 @@ function DisposicaoModal({open, item, onClose, onSave, C, Sg}){
             onSave({
               disposicao: disp,
               acaoCorrecao: disp==="correcao" ? acao.trim() : "",
-              solicitarReposicao: repor,
               status: disp==="segregar" ? "pendente" : "concluida",
               dispDefinedAt: new Date().toISOString()
             });
@@ -4859,7 +4871,7 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTra
           {itens.length===0 && <tr><td colSpan={6} style={{padding:"12px 8px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhum item adicionado</td></tr>}
           {itens.map((item,i)=>(
             readOnly
-              ? <ItemRowReadOnly key={i} item={item} idx={i} onTratar={onTratar} canTratar={canTratar} onAprovar={onAprovar} canAprovar={canAprovar && (currentUser && item.concessaoAprovadorId===currentUser.id)} C={C} Sg={Sg}/>
+              ? <ItemRowReadOnly key={i} item={item} idx={i} onTratar={onTratar} canTratar={canTratar} onAprovar={onAprovar} canAprovar={canAprovar && (currentUser && String(item.concessaoAprovadorId)===String(currentUser.id))} C={C} Sg={Sg}/>
               : <ItemRow key={i} item={item} idx={i}
                   onChange={v=>updItem(i,v)}
                   onCommit={(field, oldVal, newVal)=>commitField(i, field, oldVal, newVal)}
@@ -5021,13 +5033,13 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
       // Modelo novo: sublotes
       if(it.sublotes && it.sublotes.length > 0){
         it.sublotes.forEach((s, si)=>{
-          if(s.tipo==="concessao_solicitada" && s.concessaoAprovadorId===currentUser?.id){
+          if(s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(currentUser?.id)){
             pendentes.push({ro:r, idx, subloteIdx:si, item:it, sublote:s});
           }
         });
       }
       // Modelo legado
-      else if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===currentUser?.id){
+      else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(currentUser?.id)){
         pendentes.push({ro:r, idx, subloteIdx:null, item:it, sublote:null});
       }
     });
@@ -5694,7 +5706,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     if(pendingApply.type==="tratamento_sublotes"){
       // Novo modelo: sublotes com disposições múltiplas
       const { linhas, aprovador } = pendingApply;
-      const aprovadorNome = (allUsers||[]).find(u=>u.id===aprovador)?.name || "—";
+      const aprovadorNome = (allUsers||[]).find(u=>String(u.id)===String(aprovador))?.name || "—";
       linha.sublotes = linhas.map(l=>({
         tipo: l.tipo,
         qtd: parseInt(l.qtd)||0,
@@ -7957,11 +7969,11 @@ const saveReq = async (r) => {
         // Modelo novo: sublotes
         if(it.sublotes && it.sublotes.length > 0){
           it.sublotes.forEach(s=>{
-            if(s.tipo==="concessao_solicitada" && s.concessaoAprovadorId===loggedIn?.id) n++;
+            if(s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(loggedIn?.id)) n++;
           });
         }
         // Modelo legado
-        else if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===loggedIn?.id) n++;
+        else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(loggedIn?.id)) n++;
       });
     });
     return n;
