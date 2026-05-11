@@ -5199,9 +5199,28 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [f,setF]=useState({tipo:"",local:"",opChamado:"",descricao:"",classificacao:"",disposicao:""});
   const [itens,setItens]=useState([]);
+  const [pecasSolicitadas,setPecasSolicitadas]=useState([]);
   const [attachments,setAttachments]=useState([]);
   const set = (k,v)=>setF(p=>({...p,[k]:v}));
   const ok = f.tipo&&f.local&&f.descricao;
+
+  // Estilos dos blocos numerados
+  const stepHeader = (n, title, desc, ativo=true) => (
+    <div style={{display:"flex", alignItems:"flex-start", gap:10, marginBottom:14}}>
+      <div style={{
+        width:24, height:24, borderRadius:"50%",
+        background: ativo ? C.accent : C.surface,
+        color: ativo ? "#fff" : C.muted,
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize:12, fontWeight:600, flexShrink:0,
+        border: ativo ? "none" : "1px solid "+C.border
+      }}>{n}</div>
+      <div>
+        <div style={{fontSize:14, fontWeight:600, color: ativo?C.text:C.muted}}>{title}</div>
+        {desc && <div style={{fontSize:11, color:C.muted, marginTop:2}}>{desc}</div>}
+      </div>
+    </div>
+  );
 
   return <div style={{padding:"18px 22px",maxWidth:1100}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
@@ -5211,9 +5230,12 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
       </div>
       <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
     </div>
-    <div style={{...Sg.card(),display:"flex",flexDirection:"column",gap:14}}>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+    {/* Bloco 1 — Dados básicos */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(1, "Dados básicos", "Onde, o que aconteceu, qual a OP")}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <div>
           <label style={Sg.lbl}>Tipo *</label>
           <select style={Sg.input()} value={f.tipo} onChange={e=>{set("tipo",e.target.value);set("disposicao","");set("classificacao","");}}>
@@ -5230,8 +5252,9 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
         </div>
       </div>
 
-      <div><label style={Sg.lbl}>Nº OP / Chamado</label><input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345"/></div>
-      <div><label style={Sg.lbl}>Descrição da Ocorrência *</label><textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva o que foi identificado..."/></div>
+      <div style={{marginBottom:12}}><label style={Sg.lbl}>Nº OP / Chamado</label><input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345"/></div>
+
+      <div style={{marginBottom: f.tipo?12:0}}><label style={Sg.lbl}>Descrição da Ocorrência *</label><textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva o que foi identificado..."/></div>
 
       {f.tipo&&<div>
         <label style={Sg.lbl}>Classificação da Ocorrência</label>
@@ -5243,52 +5266,70 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
           }
         </select>
       </div>}
+    </div>
 
-      {/* Itens afetados — só mostra se tipo Produto */}
-      {f.tipo==="Produto"&&<div style={{padding:12,background:C.surface,borderRadius:8,border:"1px solid "+C.border}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Itens Afetados</div>
-        <ItensTable
-          itens={itens}
-          onChange={setItens}
-          readOnly={false}
-          currentUser={currentUser}
-          C={C} Sg={Sg} allUsers={allUsers}/>
-      </div>}
+    {/* Bloco 2 — Produto não conforme (só pra tipo Produto) */}
+    {f.tipo==="Produto"&&<div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(2, "Produto não conforme", "O que tem problema e o que você fez na hora")}
+      <ItensTable
+        itens={itens}
+        onChange={setItens}
+        readOnly={false}
+        currentUser={currentUser}
+        C={C} Sg={Sg} allUsers={allUsers}/>
+    </div>}
 
+    {/* Bloco 3 — Peças solicitadas (opcional, só pra tipo Produto) */}
+    {f.tipo==="Produto"&&<div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(3, "Precisa de peças?", "Peças necessárias para resolver — só registro pra rastrear (opcional)", pecasSolicitadas.length>0)}
+      <PecasSolicitadasTable
+        pecas={pecasSolicitadas}
+        onChange={setPecasSolicitadas}
+        readOnly={false}
+        currentUser={currentUser}
+        C={C} Sg={Sg}/>
+    </div>}
+
+    {/* Anexos */}
+    <div style={{...Sg.card(),marginBottom:14}}>
       <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura" currentUser={currentUser} C={C}/>
+    </div>
 
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
-        <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
-        <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
-          // Monta resumo dos itens registrados na abertura
-          const itensReais = (itens||[]).filter(it=>it.codigo);
-          const linhasItens = itensReais.map(it=>{
-            const partes = [];
-            partes.push(it.codigo);
-            if(it.descricao) partes.push("— " + it.descricao);
-            if(it.lote) partes.push("· lote " + it.lote);
-            if(it.qtdNC) partes.push("· qtd " + it.qtdNC);
-            if(it.disposicao){
-              const dispText = (RO_DISP_ABERTURA[it.disposicao]||{}).label || it.disposicao;
-              partes.push("· " + dispText);
-            }
-            if(it.acaoCorrecao) partes.push("\n   → " + it.acaoCorrecao);
-            return "  • " + partes.join(" ");
-          });
-          let resumo = "Ocorrência aberta";
-          if(itensReais.length>0){
-            resumo += "\n\nItens registrados (" + itensReais.length + "):\n" + linhasItens.join("\n");
+    {/* Footer com botões */}
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
+        // Monta resumo dos itens registrados na abertura
+        const itensReais = (itens||[]).filter(it=>it.codigo);
+        const linhasItens = itensReais.map(it=>{
+          const partes = [];
+          partes.push(it.codigo);
+          if(it.descricao) partes.push("— " + it.descricao);
+          if(it.lote) partes.push("· lote " + it.lote);
+          if(it.qtdNC) partes.push("· qtd " + it.qtdNC);
+          if(it.disposicao){
+            const dispText = (RO_DISP_ABERTURA[it.disposicao]||{}).label || it.disposicao;
+            partes.push("· " + dispText);
           }
-          const aberturaEntry = {
-            type: "abertura",
-            at: new Date().toISOString(),
-            by: currentUser?.name || currentUser?.email || "—",
-            byId: currentUser?.id,
-            detail: resumo
-          };
-          onSave({...f, historico: [aberturaEntry]}, itens, attachments);
-        }}>Abrir Ocorrência</button>
-      </div>
+          if(it.acaoCorrecao) partes.push("\n   → " + it.acaoCorrecao);
+          return "  • " + partes.join(" ");
+        });
+        let resumo = "Ocorrência aberta";
+        if(itensReais.length>0){
+          resumo += "\n\nItens registrados (" + itensReais.length + "):\n" + linhasItens.join("\n");
+        }
+        if(pecasSolicitadas.filter(p=>p.codigo).length>0){
+          resumo += "\n\nPeças solicitadas (" + pecasSolicitadas.filter(p=>p.codigo).length + ")";
+        }
+        const aberturaEntry = {
+          type: "abertura",
+          at: new Date().toISOString(),
+          by: currentUser?.name || currentUser?.email || "—",
+          byId: currentUser?.id,
+          detail: resumo
+        };
+        onSave({...f, historico: [aberturaEntry], pecasSolicitadas}, itens, attachments);
+      }}>Abrir Ocorrência</button>
     </div>
   </div>;
 }
