@@ -3,9 +3,14 @@ const sql=neon(process.env.DATABASE_URL);const SECRET=process.env.JWT_SECRET||'d
 const CORS=res=>{res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization');};
 const vt=req=>{const a=req.headers.authorization||'';const t=a.startsWith('Bearer ')?a.slice(7):null;if(!t)return null;try{return jwt.verify(t,SECRET);}catch{return null;}};
 const ra=(req,res)=>{const u=vt(req);if(!u){res.status(401).json({error:'Nao autenticado'});return null;}return u;};
+// Busca permissões do usuário no banco (admin sempre passa; outros precisam ter a permissão no grupo)
+const userHasPerm=async(uid,perm)=>{const rows=await sql`SELECT r.permissions FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=${uid}`;for(const x of rows){const p=Array.isArray(x.permissions)?x.permissions:[];if(p.includes(perm))return true;}return false;};
+// rad = "require admin/sgq" (versão antiga, mantida pra trás-compatibilidade)
+// requirePerm = nova versão baseada em permissão de grupo
+const requirePerm=async(req,res,perm)=>{const u=vt(req);if(!u){res.status(401).json({error:'Nao autenticado'});return null;}if(u.role==='admin')return u;const ok=await userHasPerm(u.id,perm);if(!ok){res.status(403).json({error:'Sem permissao'});return null;}return u;};
 const rad=(req,res)=>{const u=vt(req);if(!u){res.status(401).json({error:'Nao autenticado'});return null;}if(!['admin','sgq'].includes(u.role)){res.status(403).json({error:'Sem permissao'});return null;}return u;};
 const valPwd=(p,u={})=>{if(!p)return'Senha obrigatoria';if(p.length<8)return'Minimo 8 caracteres';if(p.length>20)return'Maximo 20 caracteres';if(!/[A-Z]/.test(p))return'Deve ter maiuscula';if(!/[a-z]/.test(p))return'Deve ter minuscula';if(!/[0-9]/.test(p))return'Deve ter numero';if(!/[^A-Za-z0-9]/.test(p))return'Deve ter caractere especial';const pl=p.toLowerCase();if(u.name){for(const x of u.name.toLowerCase().split(/\s+/).filter(s=>s.length>=3)){if(pl.includes(x))return'Senha nao pode conter seu nome';}}if(u.email){const el=u.email.toLowerCase().split('@')[0];if(el.length>=3&&pl.includes(el))return'Senha nao pode conter seu email';}return null;};
-const ALLP=['dashboard','indicators','users','usuarios.gerenciar','usuarios.importar','grupos.ver','grupos.gerenciar','auditoria.ver','config.criticidades','config.matriz','config.perguntas','config.prazos','sa.avaliacao_inicial','sa.criar','sa.ver_todas','sa.aprovacao_plano','sa.concluir','sa.cancelar','sa.abrir','sa.analisar','sa.aprovar','sa.fechar','sa.excluir','ro.abrir','ro.analisar','ro.tratar_segregado','ro.aprovar_concessao','ro.aprovar','ro.cancelar','ro.reabrir','ro.fechar','ro.excluir','nc.abrir','nc.analisar','nc.aprovar','nc.fechar','nc.excluir','riacp.abrir','riacp.analisar','riacp.aprovar','riacp.fechar','riacp.excluir'];
+const ALLP=['dashboard','indicators','users','usuarios.gerenciar','usuarios.importar','grupos.ver','grupos.gerenciar','auditoria.ver','config.criticidades','config.matriz','config.perguntas','config.prazos','produtos.ver','produtos.gerenciar','sa.avaliacao_inicial','sa.criar','sa.ver_todas','sa.aprovacao_plano','sa.concluir','sa.cancelar','sa.abrir','sa.analisar','sa.aprovar','sa.fechar','sa.excluir','ro.abrir','ro.analisar','ro.tratar_segregado','ro.aprovar_concessao','ro.aprovar','ro.cancelar','ro.reabrir','ro.fechar','ro.excluir','ro.ver_todas','nc.abrir','nc.analisar','nc.aprovar','nc.fechar','nc.excluir','nc.ver_todas','riacp.abrir','riacp.analisar','riacp.aprovar','riacp.fechar','riacp.excluir','riacp.ver_todas'];
 
 module.exports=async(req,res)=>{
   CORS(res);if(req.method==='OPTIONS')return res.status(200).end();
@@ -15,17 +20,17 @@ module.exports=async(req,res)=>{
   if(_route==='roles'){
     // GET com ?id=USER_ID -> devolve grupos daquele usuário
     if(req.method==='GET' && id){
-      const d=rad(req,res);if(!d)return;
+      const d=await requirePerm(req,res,'usuarios.gerenciar');if(!d)return;
       try{return res.json(await sql`SELECT r.id,r.name,r.description,r.permissions,r.is_system FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=${id} ORDER BY r.name`);}
       catch{return res.status(500).json({error:'Erro interno'});}
     }
     if(req.method==='GET'){
-      const d=rad(req,res);if(!d)return;
+      const d=await requirePerm(req,res,'grupos.ver');if(!d)return;
       try{return res.json(await sql`SELECT r.id,r.name,r.description,r.permissions,r.is_system,r.created_at,COUNT(ur.user_id)::int as user_count FROM roles r LEFT JOIN user_roles ur ON ur.role_id=r.id GROUP BY r.id ORDER BY r.is_system DESC,r.name`);}
       catch{return res.status(500).json({error:'Erro interno'});}
     }
     if(req.method==='POST'){
-      const d=rad(req,res);if(!d)return;
+      const d=await requirePerm(req,res,'grupos.gerenciar');if(!d)return;
       try{
         const{name,description,permissions}=req.body||{};
         if(!name?.trim())return res.status(400).json({error:'Nome obrigatorio'});
@@ -36,7 +41,7 @@ module.exports=async(req,res)=>{
       }catch(e){if(e.message?.includes('unique'))return res.status(409).json({error:'Nome ja existe'});return res.status(500).json({error:'Erro interno'});}
     }
     if(req.method==='PUT'){
-      const d=rad(req,res);if(!d)return;
+      const d=await requirePerm(req,res,'grupos.gerenciar');if(!d)return;
       try{
         const{id:rid,name,description,permissions}=req.body||{};
         const[ex]=await sql`SELECT is_system FROM roles WHERE id=${rid}`;
@@ -49,7 +54,7 @@ module.exports=async(req,res)=>{
       }catch{return res.status(500).json({error:'Erro interno'});}
     }
     if(req.method==='DELETE'){
-      const d=rad(req,res);if(!d)return;
+      const d=await requirePerm(req,res,'grupos.gerenciar');if(!d)return;
       try{
         const{id:rid}=req.body||{};
         const[ex]=await sql`SELECT is_system,name FROM roles WHERE id=${rid}`;
@@ -95,7 +100,7 @@ module.exports=async(req,res)=>{
 
   // POST — criar usuário
   if(req.method==='POST'){
-    const d=rad(req,res);if(!d)return;
+    const d=await requirePerm(req,res,'usuarios.gerenciar');if(!d)return;
     try{
       const{name,email,pwd,area,role,groupIds,evalDepts}=req.body||{};
       if(!name||!email||!pwd)return res.status(400).json({error:'Nome, email e senha obrigatorios'});
@@ -110,7 +115,7 @@ module.exports=async(req,res)=>{
 
   // PUT — editar usuário
   if(req.method==='PUT'){
-    const d=rad(req,res);if(!d)return;
+    const d=await requirePerm(req,res,'usuarios.gerenciar');if(!d)return;
     try{
       const{id:uid,name,email,pwd,area,role,groupIds,evalDepts,active}=req.body||{};
       if(!uid)return res.status(400).json({error:'ID obrigatorio'});
