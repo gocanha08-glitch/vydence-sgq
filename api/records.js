@@ -46,7 +46,18 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: 'Modulo invalido. Use: ro, nc, riacp ou sa' });
   }
 
-  const isAdm = ['admin','sgq'].includes(user.role);
+  // Helper: verifica se o usuário tem uma permissão específica via grupos (ou é admin)
+  const userHasPerm = async (perm) => {
+    if (user.role === 'admin') return true;
+    try {
+      const rows = await sql`SELECT r.permissions FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=${user.id}`;
+      for (const x of rows) {
+        const p = Array.isArray(x.permissions) ? x.permissions : [];
+        if (p.includes(perm)) return true;
+      }
+    } catch (e) {}
+    return false;
+  };
 
   // ── GET lista ────────────────────────────────────────────────
   if (req.method === 'GET' && !id) {
@@ -240,7 +251,8 @@ module.exports = async (req, res) => {
 
   // ── DELETE ───────────────────────────────────────────────────
   if (req.method === 'DELETE' && id) {
-    if (!isAdm) return res.status(403).json({ error: 'Sem permissao' });
+    const canDel = await userHasPerm(mod + '.excluir');
+    if (!canDel) return res.status(403).json({ error: 'Sem permissao' });
     try {
       await sql`DELETE FROM records WHERE code = ${id} AND module = ${mod}`;
       return res.json({ ok: true });
