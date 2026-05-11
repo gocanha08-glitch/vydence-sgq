@@ -40,7 +40,17 @@ module.exports = async (req, res) => {
   const user = vt(req);
   if (!user) return res.status(401).json({ error: 'Nao autenticado' });
 
-  const isAdm = ['admin','sgq'].includes(user.role);
+  // Verifica se o usuário tem a permissão produtos.gerenciar (via grupos) ou é admin
+  let isAdm = user.role === 'admin';
+  if (!isAdm) {
+    try {
+      const rows = await sql`SELECT r.permissions FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=${user.id}`;
+      for (const x of rows) {
+        const p = Array.isArray(x.permissions) ? x.permissions : [];
+        if (p.includes('produtos.gerenciar')) { isAdm = true; break; }
+      }
+    } catch (e) {}
+  }
 
   await ensureTable();
 
