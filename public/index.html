@@ -3210,7 +3210,25 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
   }) : [];
 
   const roParaConcluir = canCloseRO ? (roRecs||[]).filter(r=>r.status==='aguardando_conclusao') : [];
-  const pendRO = roParaAnalisar.length + roParaAprovar.length + roParaConcluir.length;
+
+  // ROs prontas para validação final (todos itens terminais, aguardando qualidade fechar)
+  const roParaValidar = canCloseRO ? (roRecs||[]).filter(r=>{
+    if(["cancelada","fechada","aguardando_conclusao"].includes(r.status)) return false;
+    if(r.status!=="em_analise") return false;
+    const itens = r.data?.itens||[];
+    if(!itens.length) return false;
+    return itens.every(it=>{
+      if(it.disposicao==="correcao") return true;
+      if(it.disposicao==="segregar"){
+        if(it.sublotes && it.sublotes.length>0)
+          return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+        return false;
+      }
+      return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
+    });
+  }) : [];
+
+  const pendRO = roParaAnalisar.length + roParaAprovar.length + roParaConcluir.length + roParaValidar.length;
   const pendCMTotal=aprovSGQ.length+analises.length+acoes.length;
   const daysSince=d=>d?Math.floor((Date.now()-new Date(d))/(1000*60*60*24)):null;
 
@@ -3220,8 +3238,9 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
       {[
         {key:'ro',label:'Ocorrências',pend:pendRO,tags:[
-          roParaAnalisar.length>0&&{label:roParaAnalisar.length+" segregadas",color:C.warning},
+          roParaAnalisar.length>0&&{label:roParaAnalisar.length+" a tratar",color:C.warning},
           roParaAprovar.length>0&&{label:roParaAprovar.length+" concessões",color:C.accent},
+          roParaValidar.length>0&&{label:roParaValidar.length+" validar",color:C.success},
           roParaConcluir.length>0&&{label:roParaConcluir.length+" concluir",color:C.purple},
         ].filter(Boolean)},
         {key:'cm',label:'Controle de Mudanças',pend:pendCMTotal,tags:[
@@ -3365,6 +3384,31 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
               <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
               <div style={{fontSize:11,color:C.dim}}>{conc.length} item{conc.length!==1?"s":""}</div>
               <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.accent+"18",color:C.accent}}>Aprovar</span>
+            </div>;
+          })}
+        </div>
+      </div>}
+      {roParaValidar.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.success,letterSpacing:.7,marginBottom:6}}>PRONTAS PARA VALIDAR ({roParaValidar.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 90px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["Código","Descrição","Tipo","Dias aberto","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {roParaValidar.map((r,i)=>{
+            const d=r.data||{};
+            const dias=daysSince(r.createdAt);
+            const diasColor=dias>5?C.danger:dias>2?C.warning:C.muted;
+            return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 110px 90px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+              <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+              <div style={{fontSize:11,color:C.dim}}>{d.tipo||"—"}</div>
+              <div style={{fontSize:12,fontWeight:600,color:diasColor}}>{dias!=null?dias+"d":"—"}</div>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.success+"18",color:C.success}}>Validar e fechar</span>
             </div>;
           })}
         </div>
@@ -4036,7 +4080,6 @@ const RO_CLASS_PROCESSO = ["Falha Operacional","Falha de Processo","N/A"];
 const RO_CLASS_OCORRENCIA = ["Visual","Montagem","Funcional","Falha Operacional","Falha de Processo","N/A"];
 
 const RO_STATUS_LABELS = {
-  aberta:              {label:"Aberta",              color:"#2563EB"},
   em_analise:          {label:"Em Análise",          color:"#D97706"},
   aguardando_conclusao:{label:"Aguard. Conclusão",   color:"#7C3AED"},
   fechada:             {label:"Fechada",             color:"#16A34A"},
@@ -5585,15 +5628,23 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const canAnalyze = hasPerm(currentUser,'ro.analisar');
   const canClose   = hasPerm(currentUser,'ro.fechar');
 
-  // Calcula se todos os itens segregados já têm tratamento terminal (prontos para conclusão)
-  const itensSegregados = (d.itens||[]).filter(it=>it.disposicao==="segregar");
-  const todosItensTratados = itensSegregados.length > 0 && itensSegregados.every(it=>{
-    if(it.sublotes && it.sublotes.length > 0){
-      return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+  // Calcula se a RO está pronta para a qualidade dar validação final e fechar
+  const todosItens = d.itens||[];
+  const temItens = todosItens.length > 0;
+  const prontaParaConcluir = temItens && ["em_analise","aguardando_conclusao"].includes(status) && todosItens.every(it=>{
+    // Correção imediata: operador já descreveu o que fez → terminal
+    if(it.disposicao==="correcao") return true;
+    // Segregado com sublotes: todos precisam estar em estado terminal
+    if(it.disposicao==="segregar"){
+      if(it.sublotes && it.sublotes.length > 0){
+        return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+      }
+      // Segregado sem sublotes = ainda pendente
+      return false;
     }
+    // Modelo legado (disposição direta no item)
     return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
   });
-  const prontaParaConcluir = todosItensTratados && ["em_analise","aguardando_conclusao"].includes(status);
 
   // Disposição atual requer conclusão da qualidade? (legado)
   const dispAtual = disposicaoEdit||d.disposicao||"";
@@ -5677,7 +5728,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     };
     const updated = {
       ...r,
-      status: "aberta",
+      status: "em_analise",
       data: {
         ...d,
         historico: [...(d.historico||[]), newHist],
@@ -8084,7 +8135,7 @@ const saveReq = async (r) => {
       {view==='ro_aprovacoes' && hasPerm(loggedIn,'ro.aprovar_concessao') && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
-        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"aberta",data:{...f,itens:itens||[],attachments:atts||[]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
+        const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"em_analise",data:{...f,itens:itens||[],attachments:atts||[],historico:[{type:"abertura",at:now,by:loggedIn.name,byId:loggedIn.id,detail:"Ocorrência aberta pelo operador."}]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveRO(r);
         addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
         setView('ro_list');
