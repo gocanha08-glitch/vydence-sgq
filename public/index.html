@@ -5188,35 +5188,78 @@ function PecasSolicitadasTable({pecas, onChange, readOnly, currentUser, onAddHis
 // AprovarConcessaoModal/MotiveModal já existentes.
 function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
   const {C}=useTheme();const Sg=mkSg(C);
-  const [acaoAlvo, setAcaoAlvo] = useState(null); // {ro, idx, step}
+  const [acaoAlvo, setAcaoAlvo] = useState(null);
   const [pendingApply, setPendingApply] = useState(null);
   const [sigModal, setSigModal] = useState(null);
+  const [verTudo, setVerTudo] = useState(false);
 
-  // Coleta pendentes: concessões E correções imediatas aguardando aprovação deste usuário
-  const pendentes = [];
+  const isGestor = hasPerm(currentUser,'ro.ver_todas');
+  const canAprovarConc = hasPerm(currentUser,'ro.aprovar_concessao');
+  const canAprovarCorr = hasPerm(currentUser,'ro.aprovar_correcao');
+  const canFechar = hasPerm(currentUser,'ro.fechar');
+
+  // Coleta TODAS as pendências da fila (para gestor) ou só as minhas
+  const todasPendencias = [];
   (roRecords||[]).forEach(r=>{
+    if(["cancelada","fechada"].includes(r.status)) return;
     const itens = r.data?.itens||[];
+
+    // RO pronta para fechar
+    if(r.status==="em_analise" && itens.length>0 && itens.every(it=>{
+      if(it.disposicao==="correcao") return it.status==="concluida";
+      if(it.disposicao==="segregar"){
+        if(it.sublotes && it.sublotes.length>0)
+          return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+        return false;
+      }
+      return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
+    })){
+      // Quem pode fechar
+      const responsavel = (allUsers||[]).find(u=>hasPerm(u,'ro.fechar'));
+      todasPendencias.push({
+        ro:r, tipo:"fechar", aguardando: responsavel?.name||"Qualidade",
+        aguardandoId: responsavel?.id, desc:"RO pronta para validação final e fechamento",
+        isMinha: canFechar
+      });
+    }
+
     itens.forEach((it, idx)=>{
       // Correção imediata aguardando aprovação
-      if(it.disposicao==="correcao" && it.status==="pendente_aprovacao" &&
-         String(it.aprovadorCorrecaoId)===String(currentUser?.id)){
-        pendentes.push({ro:r, idx, subloteIdx:null, item:it, sublote:null, tipo:"correcao"});
-        return;
+      if(it.disposicao==="correcao" && it.status==="pendente_aprovacao"){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorCorrecaoId));
+        todasPendencias.push({
+          ro:r, idx, subloteIdx:null, item:it, sublote:null, tipo:"correcao",
+          aguardando: aprov?.name||"—", aguardandoId: it.aprovadorCorrecaoId,
+          isMinha: String(it.aprovadorCorrecaoId)===String(currentUser?.id)
+        });
       }
-      // Modelo novo: sublotes de concessão
-      if(it.sublotes && it.sublotes.length > 0){
-        it.sublotes.forEach((s, si)=>{
-          if(s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(currentUser?.id)){
-            pendentes.push({ro:r, idx, subloteIdx:si, item:it, sublote:s, tipo:"concessao"});
+      // Sublotes de concessão
+      if(it.sublotes && it.sublotes.length>0){
+        it.sublotes.forEach((s,si)=>{
+          if(s.tipo==="concessao_solicitada"){
+            const aprov = (allUsers||[]).find(u=>String(u.id)===String(s.concessaoAprovadorId));
+            todasPendencias.push({
+              ro:r, idx, subloteIdx:si, item:it, sublote:s, tipo:"concessao",
+              aguardando: aprov?.name||"—", aguardandoId: s.concessaoAprovadorId,
+              isMinha: String(s.concessaoAprovadorId)===String(currentUser?.id)
+            });
           }
         });
       }
-      // Modelo legado concessão
-      else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(currentUser?.id)){
-        pendentes.push({ro:r, idx, subloteIdx:null, item:it, sublote:null, tipo:"concessao"});
+      // Legado concessão
+      else if(it.disposicao==="concessao_solicitada"){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.concessaoAprovadorId));
+        todasPendencias.push({
+          ro:r, idx, subloteIdx:null, item:it, sublote:null, tipo:"concessao",
+          aguardando: aprov?.name||"—", aguardandoId: it.concessaoAprovadorId,
+          isMinha: String(it.concessaoAprovadorId)===String(currentUser?.id)
+        });
       }
     });
   });
+
+  const minhasPendencias = todasPendencias.filter(p=>p.isMinha);
+  const listaVisivel = (isGestor && verTudo) ? todasPendencias : minhasPendencias;
 
   const applyDecisao = async (sig) => {
     if(!pendingApply){ setSigModal(null); return; }
@@ -5228,162 +5271,163 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
     let detalhe = "";
 
     if(tipo==="correcao"){
-      // Aprovar/rejeitar correção imediata
       if(decisao==="aprovar"){
         linha.status = "concluida";
         linha.correcaoAprovadaAt = now;
         linha.correcaoAprovadaBy = userName;
-        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": correção imediata APROVADA por "+userName+".";
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": correção APROVADA por "+userName+".";
       } else {
         linha.status = "correcao_rejeitada";
         linha.correcaoRejeitadaAt = now;
         linha.correcaoRejeitadaBy = userName;
         linha.correcaoRejeitadaMotivo = motivo;
-        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": correção REJEITADA por "+userName+".\nMotivo: "+motivo+"\nOperador precisa refazer.";
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": correção REJEITADA.\nMotivo: "+motivo;
       }
     } else if(subloteIdx!=null && linha.sublotes){
-      // Modelo novo: atualizar sublote específico
       const sublotes = [...(linha.sublotes||[])];
       if(decisao==="aprovar"){
-        sublotes[subloteIdx] = {...sublotes[subloteIdx],
-          tipo:"concessao_aprovada",
-          concessaoAprovadaAt:now, concessaoAprovadaBy:userName
-        };
-        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão de "+sublotes[subloteIdx].qtd+"x APROVADA por "+userName+".";
+        sublotes[subloteIdx] = {...sublotes[subloteIdx], tipo:"concessao_aprovada", concessaoAprovadaAt:now, concessaoAprovadaBy:userName};
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão de "+sublotes[subloteIdx].qtd+"x APROVADA.";
       } else {
-        sublotes[subloteIdx] = {...sublotes[subloteIdx],
-          tipo:"concessao_rejeitada",
-          concessaoRejeitadaAt:now, concessaoRejeitadaBy:userName,
-          concessaoRejeitadaMotivo:motivo
-        };
-        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão de "+sublotes[subloteIdx].qtd+"x REJEITADA.\nMotivo: "+motivo;
+        sublotes[subloteIdx] = {...sublotes[subloteIdx], tipo:"concessao_rejeitada", concessaoRejeitadaAt:now, concessaoRejeitadaBy:userName, concessaoRejeitadaMotivo:motivo};
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão REJEITADA.\nMotivo: "+motivo;
       }
       linha.sublotes = sublotes;
     } else {
-      // Modelo legado
       if(decisao==="aprovar"){
-        linha.disposicao = "concessao_aprovada";
-        linha.status = "concluida";
-        linha.concessaoAprovadaAt = now;
-        linha.concessaoAprovadaBy = userName;
-        detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão APROVADA por " + userName + ".";
+        linha.disposicao = "concessao_aprovada"; linha.status = "concluida";
+        linha.concessaoAprovadaAt = now; linha.concessaoAprovadaBy = userName;
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão APROVADA por "+userName+".";
       } else {
-        linha.disposicao = "concessao_rejeitada";
-        linha.status = "pendente";
-        linha.concessaoRejeitadaAt = now;
-        linha.concessaoRejeitadaBy = userName;
+        linha.disposicao = "concessao_rejeitada"; linha.status = "pendente";
+        linha.concessaoRejeitadaAt = now; linha.concessaoRejeitadaBy = userName;
         linha.concessaoRejeitadaMotivo = motivo;
-        detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão REJEITADA por " + userName + ".\nMotivo: " + motivo;
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão REJEITADA.\nMotivo: "+motivo;
       }
     }
     itens[idx] = linha;
-    const novoHist = {
-      type:"decisao_aprovador", at:now, by:userName, byId:currentUser?.id,
-      itemIdx:idx, itemCodigo:linha.codigo||"",
-      detail: detalhe + "\n(assinado eletronicamente)"
-    };
+    const novoHist = {type:"decisao_aprovador", at:now, by:userName, byId:currentUser?.id, itemIdx:idx, itemCodigo:linha.codigo||"", detail:detalhe+"\\n(assinado eletronicamente)"};
     const histTotal = [...((ro.data?.historico)||[]), novoHist];
     await onUpdate({...ro, data:{...(ro.data||{}), itens, historico:histTotal}});
-    setPendingApply(null);
-    setSigModal(null);
-    setAcaoAlvo(null);
+    setPendingApply(null); setSigModal(null); setAcaoAlvo(null);
+  };
+
+  const TIPO_META = {
+    correcao:  {label:"Correção imediata", bg:"#EAF3DE", col:"#27500A"},
+    concessao: {label:"Concessão",          bg:"#E6F1FB", col:"#0C447C"},
+    fechar:    {label:"Pronta para fechar", bg:"#EAF3DE", col:"#27500A"},
   };
 
   return <div style={{padding:"18px 22px", maxWidth:1100}}>
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:18, fontWeight:600, color:C.text}}>Aprovações pendentes</div>
-      <div style={{fontSize:12, color:C.muted, marginTop:3}}>
-        {pendentes.length===0 ? "Nenhum pedido aguardando você." :
-         pendentes.length===1 ? "1 pedido aguardando você." :
-         pendentes.length+" pedidos aguardando você."}
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16}}>
+      <div>
+        <div style={{fontSize:18, fontWeight:600, color:C.text}}>Ações pendentes</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>
+          {listaVisivel.length===0 ? (verTudo&&isGestor?"Nenhuma pendência em aberto.":"Nenhuma pendência aguardando você.") :
+           listaVisivel.length===1 ? "1 pendência" : listaVisivel.length+" pendências"}
+          {!verTudo && isGestor && todasPendencias.length > minhasPendencias.length &&
+            <span style={{color:C.accent}}> · {todasPendencias.length - minhasPendencias.length} de outras pessoas</span>}
+        </div>
       </div>
+      {isGestor && <div style={{display:"flex", gap:6}}>
+        <button
+          style={{...Sg.btn(verTudo?"primary":""), fontSize:12, padding:"6px 14px"}}
+          onClick={()=>setVerTudo(false)}>
+          Minhas ({minhasPendencias.length})
+        </button>
+        <button
+          style={{...Sg.btn(!verTudo?"":"primary"), fontSize:12, padding:"6px 14px"}}
+          onClick={()=>setVerTudo(true)}>
+          Todas ({todasPendencias.length})
+        </button>
+      </div>}
     </div>
 
-    {pendentes.length===0 ? (
+    {listaVisivel.length===0 ? (
       <div style={{...Sg.card(), padding:"40px 20px", textAlign:"center", color:C.muted, fontSize:13}}>
-        Quando alguém pedir aprovação de correção ou concessão pra você, aparece aqui.
+        {verTudo && isGestor ? "Nenhuma pendência em aberto nas ROs." : "Quando alguém pedir aprovação para você, aparece aqui."}
       </div>
     ) : (
-      <div style={{display:"flex", flexDirection:"column", gap:10}}>
-        {pendentes.map(({ro, idx, subloteIdx, item, sublote, tipo})=>{
-          const isCorrecao = tipo==="correcao";
-          const analise = isCorrecao ? item?.acaoCorrecao : (sublote?.extra || item?.concessaoJustificativa || "—");
-          const solicitadoPor = isCorrecao ? (item?.dispDefinedBy||ro.owner_name||"—") : (sublote?.concessaoSolicitadaBy || item?.concessaoSolicitadaBy || "—");
-          const solicitadoEm = isCorrecao ? item?.dispDefinedAt : (sublote?.concessaoSolicitadaAt || item?.concessaoSolicitadaAt);
-          const qtdConc = sublote?.qtd || item?.qtdNC;
-          const tipoLabel = isCorrecao ? "Correção imediata" : ("Concessão"+(qtdConc?" · "+qtdConc+" unidades":""));
-          const accentColor = isCorrecao ? C.success : C.accent;
-          return <div key={ro.id+"-"+idx+(subloteIdx!=null?"-s"+subloteIdx:"")} style={{...Sg.card(), padding:"14px 18px"}}>
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10, gap:12}}>
-              <div style={{flex:1, minWidth:0}}>
-                <div style={{fontSize:11, color:C.muted}}>
-                  {ro.code||("RO #"+ro.id)} · {tipoLabel}
-                </div>
-                <div style={{fontSize:14, fontWeight:600, color:C.text, marginTop:2}}>
-                  {item.codigo||"—"}{item.descricao?" · "+item.descricao:""}
-                </div>
-                <div style={{fontSize:11, color:C.muted, marginTop:2}}>
-                  registrado por {solicitadoPor} {solicitadoEm?"em "+fmt(solicitadoEm):""}
-                </div>
-              </div>
-              <div style={{fontSize:10, padding:"2px 8px", borderRadius:10, background:accentColor+"22", color:accentColor, whiteSpace:"nowrap"}}>Aguarda você</div>
-            </div>
-
-            <div style={{
-              background:C.surface, padding:"10px 12px", fontSize:12, color:C.text,
-              lineHeight:1.5, borderLeft:"3px solid "+accentColor, borderRadius:"0 6px 6px 0",
-              whiteSpace:"pre-wrap", marginBottom:10
-            }}>
-              <div style={{fontSize:10, color:C.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.4}}>
-                {isCorrecao ? "O que foi feito" : "Análise da qualidade"}
-              </div>
-              {analise||"—"}
-            </div>
-
-            <div style={{display:"flex", justifyContent:"flex-end", gap:8}}>
-              <button
-                style={{padding:"6px 14px", fontSize:11, fontWeight:500, borderRadius:7, cursor:"pointer", fontFamily:"inherit", border:"1px solid "+C.danger, background:"transparent", color:C.danger}}
-                onClick={()=>setAcaoAlvo({ro, idx, subloteIdx, item, sublote, tipo, step:"rejeitar"})}>
-                Rejeitar
-              </button>
-              <button
-                style={{...Sg.btn("primary"), fontSize:11, padding:"6px 16px"}}
-                onClick={()=>{
-                  setPendingApply({ro, idx, subloteIdx, tipo, decisao:"aprovar"});
-                  setSigModal({
-                    title: isCorrecao ? "Assinar — Aprovação de correção" : "Assinar — Aprovação de concessão",
-                    confirmLabel:"Assinar e aprovar", confirmStyle:"success"
-                  });
-                }}>
-                Aprovar
-              </button>
-            </div>
-          </div>;
-        })}
-      </div>
+      <table style={{width:"100%", borderCollapse:"collapse", fontSize:13}}>
+        <thead>
+          <tr style={{borderBottom:"1px solid "+C.border}}>
+            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>RO</th>
+            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Item</th>
+            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Tipo</th>
+            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Detalhe</th>
+            {verTudo && isGestor && <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Aguardando</th>}
+            <th style={{padding:"7px 10px"}}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {listaVisivel.map((p,i)=>{
+            const meta = TIPO_META[p.tipo]||{label:p.tipo, bg:"#eee", col:"#555"};
+            const podeAgir = p.isMinha && p.tipo!=="fechar";
+            const detalhe = p.tipo==="correcao" ? (p.item?.acaoCorrecao||"—") :
+                            p.tipo==="concessao" ? (p.sublote?.extra||p.item?.concessaoJustificativa||"—") :
+                            p.desc||"";
+            return <tr key={i} style={{borderBottom:"1px solid "+C.border+"44", background: p.isMinha?"":"transparent"}}>
+              <td style={{padding:"10px 10px", fontWeight:600, color:C.accent, whiteSpace:"nowrap"}}>
+                {p.ro.code||p.ro.id}
+              </td>
+              <td style={{padding:"10px 10px", color:C.text}}>
+                {p.item ? <><strong>{p.item.codigo||"—"}</strong><div style={{fontSize:11,color:C.muted}}>{(p.item.descricao||"").substring(0,40)}</div></> : <span style={{fontSize:12,color:C.muted}}>—</span>}
+              </td>
+              <td style={{padding:"10px 10px"}}>
+                <span style={{fontSize:11, padding:"2px 8px", borderRadius:6, background:meta.bg, color:meta.col, fontWeight:500, whiteSpace:"nowrap"}}>{meta.label}</span>
+              </td>
+              <td style={{padding:"10px 10px", color:C.muted, fontSize:12, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                {detalhe}
+              </td>
+              {verTudo && isGestor && <td style={{padding:"10px 10px", fontSize:12, color: p.isMinha?C.accent:C.text, fontWeight: p.isMinha?600:400}}>
+                {p.isMinha?"Você":p.aguardando}
+              </td>}
+              <td style={{padding:"10px 10px", textAlign:"right", whiteSpace:"nowrap"}}>
+                {podeAgir ? <div style={{display:"flex", gap:6, justifyContent:"flex-end"}}>
+                  <button
+                    style={{fontSize:11, padding:"4px 12px", border:"1px solid "+C.danger, borderRadius:6, background:"transparent", color:C.danger, cursor:"pointer", fontFamily:"inherit"}}
+                    onClick={()=>setAcaoAlvo({...p, step:"rejeitar"})}>
+                    Rejeitar
+                  </button>
+                  <button
+                    style={{...Sg.btn("primary"), fontSize:11, padding:"4px 12px"}}
+                    onClick={()=>{
+                      setPendingApply({ro:p.ro, idx:p.idx, subloteIdx:p.subloteIdx, tipo:p.tipo, decisao:"aprovar"});
+                      setSigModal({
+                        title: p.tipo==="correcao"?"Assinar — Aprovação de correção":"Assinar — Aprovação de concessão",
+                        confirmLabel:"Assinar e aprovar", confirmStyle:"success"
+                      });
+                    }}>
+                    Aprovar
+                  </button>
+                </div> : p.tipo==="fechar" && p.isMinha ? <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>Ver RO para fechar</span>
+                : <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>aguardando</span>}
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
     )}
 
-    {/* Motivo da rejeição */}
     {acaoAlvo!==null && acaoAlvo.step==="rejeitar" && <MotiveModal
       open={true}
       onClose={()=>setAcaoAlvo(null)}
       onConfirm={(motivo)=>{
-        setPendingApply({ro:acaoAlvo.ro, idx:acaoAlvo.idx, subloteIdx:acaoAlvo.subloteIdx, decisao:"rejeitar", motivo: motivo||""});
+        setPendingApply({ro:acaoAlvo.ro, idx:acaoAlvo.idx, subloteIdx:acaoAlvo.subloteIdx, tipo:acaoAlvo.tipo, decisao:"rejeitar", motivo:motivo||""});
         setAcaoAlvo(null);
-        setSigModal({title:"Assinar — Rejeição de concessão", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
+        setSigModal({title:"Assinar — Rejeição", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
       }}
       title="Motivo da rejeição"
-      description="Por que está rejeitando a concessão? A qualidade vai precisar dessa informação pra decidir outra coisa pro item."
+      description="Registre o motivo. O responsável receberá essa informação para corrigir."
       confirmLabel="Continuar para assinatura"
       confirmStyle="danger"
       C={C} Sg={Sg}
     />}
 
-    {/* Assinatura digital */}
     {sigModal && <SignatureModal
       open={true}
       onClose={()=>{setSigModal(null); setPendingApply(null);}}
-      onConfirm={async (sig)=>{ await applyDecisao(sig); }}
+      onConfirm={async(sig)=>{ await applyDecisao(sig); }}
       title={sigModal.title}
       description="Confirme sua senha para registrar a decisão."
       confirmLabel={sigModal.confirmLabel}
@@ -8249,7 +8293,7 @@ const saveReq = async (r) => {
         {/* Módulo: Ocorrências */}
         <SidebarSection sectionKey="ro" label="Ocorrências" icon="" badge={pendAprov}>
           <SidebarNavItem id="ro_list" label="Registros" indent/>
-          {(hasPerm(loggedIn,'ro.aprovar_concessao')||hasPerm(loggedIn,'ro.aprovar_correcao')) && <SidebarNavItem id="ro_aprovacoes" label="Aprovações" badge={pendAprov} indent/>}
+          {(hasPerm(loggedIn,'ro.aprovar_concessao')||hasPerm(loggedIn,'ro.aprovar_correcao')||hasPerm(loggedIn,'ro.ver_todas')) && <SidebarNavItem id="ro_aprovacoes" label="Ações pendentes" badge={pendAprov} indent/>}
         </SidebarSection>
 
         {/* Módulos futuros */}
@@ -8319,7 +8363,7 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
-      {view==='ro_aprovacoes' && (hasPerm(loggedIn,'ro.aprovar_concessao')||hasPerm(loggedIn,'ro.aprovar_correcao')) && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
+      {view==='ro_aprovacoes' && (hasPerm(loggedIn,'ro.aprovar_concessao')||hasPerm(loggedIn,'ro.aprovar_correcao')||hasPerm(loggedIn,'ro.ver_todas')) && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
         const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"em_analise",data:{...f,itens:itens||[],attachments:atts||[],historico:[{type:"abertura",at:now,by:loggedIn.name,byId:loggedIn.id,detail:"Ocorrência aberta pelo operador."}]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
