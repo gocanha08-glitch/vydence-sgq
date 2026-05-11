@@ -13,6 +13,12 @@ module.exports=async(req,res)=>{
 
   // ROLES
   if(_route==='roles'){
+    // GET com ?id=USER_ID -> devolve grupos daquele usuário
+    if(req.method==='GET' && id){
+      const d=rad(req,res);if(!d)return;
+      try{return res.json(await sql`SELECT r.id,r.name,r.description,r.permissions,r.is_system FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=${id} ORDER BY r.name`);}
+      catch{return res.status(500).json({error:'Erro interno'});}
+    }
     if(req.method==='GET'){
       const d=rad(req,res);if(!d)return;
       try{return res.json(await sql`SELECT r.id,r.name,r.description,r.permissions,r.is_system,r.created_at,COUNT(ur.user_id)::int as user_count FROM roles r LEFT JOIN user_roles ur ON ur.role_id=r.id GROUP BY r.id ORDER BY r.is_system DESC,r.name`);}
@@ -116,7 +122,12 @@ module.exports=async(req,res)=>{
       }else{
         await sql`UPDATE users SET name=${name},email=${email.toLowerCase()},area=${area||''},role=${role||'geral'},eval_depts=${JSON.stringify(evalDepts||[])}::jsonb,active=${active!==false} WHERE id=${uid}`;
       }
-      if(Array.isArray(groupIds)){await sql`DELETE FROM user_roles WHERE user_id=${uid}`;for(const g of groupIds)await sql`INSERT INTO user_roles(user_id,role_id)VALUES(${uid},${g})ON CONFLICT DO NOTHING`;}
+      // Atualiza grupos: se groupIds veio (mesmo lista vazia), limpa e reinsere
+      if(groupIds!==undefined && groupIds!==null){
+        const ids=Array.isArray(groupIds)?groupIds:[];
+        await sql`DELETE FROM user_roles WHERE user_id=${uid}`;
+        for(const g of ids) await sql`INSERT INTO user_roles(user_id,role_id)VALUES(${uid},${g})ON CONFLICT DO NOTHING`;
+      }
       await sql`INSERT INTO syslog(by,type,event,detail)VALUES(${d.name},'usuarios','Usuario editado',${name+' (id='+uid+')'})`;
       return res.json({ok:true});
     }catch(e){if(e.message?.includes('unique'))return res.status(409).json({error:'Email ja cadastrado'});return res.status(500).json({error:'Erro interno'});}
