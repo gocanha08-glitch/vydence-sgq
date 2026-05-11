@@ -35,8 +35,9 @@ const APP_DATE = "2026-05-07";
 // ── Permissões ─────────────────────────────────────────────
 const hasPermission = (user, perm) => {
   if (!user) return false;
-  // admin e sgq têm acesso a tudo
-  if (['admin','sgq'].includes(user.role)) return true;
+  // Só admin tem acesso total a tudo. Outros perfis (sgq, geral)
+  // são controlados exclusivamente pelos grupos.
+  if (user.role === 'admin') return true;
   const perms = user.permissions || [];
   return perms.includes(perm);
 };
@@ -6229,6 +6230,7 @@ const ALL_PERMS_META = [
     {id:"usuarios.gerenciar",  label:"Gerenciar usuários"},
     {id:"usuarios.importar",   label:"Importar usuários via Excel"},
     {id:"grupos.gerenciar",    label:"Gerenciar grupos"},
+    {id:"produtos.gerenciar",  label:"Gerenciar catálogo de produtos"},
   ]},
 ];
 
