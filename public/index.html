@@ -4219,21 +4219,26 @@ function dispLabel(disp){ return (RO_DISP_TODAS[disp]||{}).short || "—"; }
 // Determina se a linha está num estado pendente (precisa de ação)
 function lineIsPending(item){
   if(!item) return false;
+  if(item.sublotes && item.sublotes.length > 0){
+    return item.sublotes.some(s =>
+      s.tipo==="concessao_solicitada" || s.tipo==="concessao_rejeitada"
+    );
+  }
   const d = item.disposicao;
-  // Sem disposição = pendente
   if(!d) return true;
-  // Segregar sem decisão da qualidade = pendente
   if(d==="segregar" && item.status!=="concluida") return true;
-  // Concessão solicitada e ainda não decidida = pendente
   if(d==="concessao_solicitada") return true;
-  // Concessão rejeitada precisa redecidir = pendente
   if(d==="concessao_rejeitada") return true;
   return false;
 }
 
-// Determina o tipo de pendência da linha (pra dashboard / fila do aprovador)
 function linePendencyType(item){
   if(!item) return null;
+  if(item.sublotes && item.sublotes.length > 0){
+    if(item.sublotes.some(s => s.tipo==="concessao_rejeitada")) return "redecidir";
+    if(item.sublotes.some(s => s.tipo==="concessao_solicitada")) return "aprovacao";
+    return null;
+  }
   const d = item.disposicao;
   if(!d) return "definir";
   if(d==="segregar" && item.status!=="concluida") return "qualidade";
@@ -4242,7 +4247,37 @@ function linePendencyType(item){
   return null;
 }
 
-function DispBadge({disp, status, C}){
+function lineIsTratada(item){
+  if(!item) return false;
+  if(item.sublotes && item.sublotes.length > 0){
+    return item.sublotes.every(s =>
+      ["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo)
+    );
+  }
+  return ["sucatamento","concessao_aprovada","migrada_nc"].includes(item.disposicao);
+}
+
+function DispBadge({disp, status, sublotes, C}){
+  // Modelo novo: sublotes
+  if(sublotes && sublotes.length > 0){
+    const colorMap2 = {
+      sucatamento:         {bg:"#FCEBEB", col:"#501313", label:"Sucatado"},
+      concessao_solicitada:{bg:"#E6F1FB", col:"#0C447C", label:"Concessão"},
+      concessao_aprovada:  {bg:"#EAF3DE", col:"#27500A", label:"Concessão ✓"},
+      concessao_rejeitada: {bg:"#FCEBEB", col:"#501313", label:"Rejeitada"},
+      migrada_nc:          {bg:"#EEE8FB", col:"#3D1F8C", label:"→ NC"},
+    };
+    return <span style={{display:"flex", flexWrap:"wrap", gap:4}}>
+      {sublotes.map((s,i)=>{
+        const m = colorMap2[s.tipo]||{bg:"#eee", col:"#555", label:s.tipo};
+        return <span key={i} style={{
+          fontSize:11, padding:"2px 7px", borderRadius:8,
+          background:m.bg, color:m.col, fontWeight:500, whiteSpace:"nowrap"
+        }}>{s.qtd}x {m.label}</span>;
+      })}
+    </span>;
+  }
+  // Modelo legado
   if(!disp) return <span style={{fontSize:11, color:C.muted, fontStyle:"italic"}}>definir...</span>;
   const meta = RO_DISP_TODAS[disp]||{};
   const colorMap = {success:C.success, warning:C.warning, danger:C.danger, info:C.accent};
@@ -4378,170 +4413,163 @@ function ItemInfoStrip({item, C}){
 // ── 1. Menu Tratar ────────────────────────────────────────────────
 // Quando qualidade clica em "Tratar" numa linha segregada, abre este menu.
 // Cada opção é um card clicável que dispara onPick(decisao).
-function TratamentoMenuModal({open, item, onClose, onPick, C, Sg}){
-  if(!open) return null;
-  const cardOpt = {
-    border:"1px solid "+C.border, borderRadius:8, padding:"14px 18px",
-    cursor:"pointer", background:C.card, transition:"all .15s",
-    display:"flex", alignItems:"center", justifyContent:"space-between", gap:14
-  };
-  const opts = [
-    {key:"concessao",   title:"Pedir concessão", desc:"Aprovar uso fora do padrão. Vai pra alguém aprovar."},
-    {key:"sucatamento", title:"Sucatar",         desc:"Descartar com motivo. Decisão direta da qualidade."},
-    {key:"migrar_nc",   title:"Mover para NC",   desc:"Abrir tratativa formal. Cria NC com plano de ações."}
+// ── TratarItemModal — modelo de sublotes ─────────────────────────
+// Qualidade distribui as unidades segregadas entre disposições.
+// Cada linha: disposição + qtd + campo extra (justificativa/motivo/obs).
+// Concessão mostra seletor de aprovador + campo de aprovador único por RO.
+function TratarItemModal({open, item, allUsers, currentUser, aprovadorGlobal, onClose, onConfirm, C, Sg}){
+  const OPTS = [
+    {val:"concessao_solicitada", label:"Concessão",    bg:"#E6F1FB", col:"#0C447C"},
+    {val:"sucatamento",          label:"Sucatamento",  bg:"#FCEBEB", col:"#501313"},
+    {val:"migrada_nc",           label:"Mover para NC",bg:"#EEE8FB", col:"#3D1F8C"},
   ];
-  return <Modal open={open} onClose={onClose} title="" width={580}>
-    <div style={{margin:-16}}>
-      <div style={{padding:"18px 22px 14px"}}>
-        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Tratar item segregado</div>
-        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Decisão sobre o item não conforme</div>
-      </div>
-      <ItemInfoStrip item={item} C={C}/>
-      <div style={{padding:"18px 22px"}}>
-        <div style={{fontSize:12, color:C.muted, marginBottom:12}}>Como tratar este item?</div>
-        <div style={{display:"flex", flexDirection:"column", gap:8}}>
-          {opts.map(o=>(
-            <div key={o.key} style={cardOpt}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-              onClick={()=>onPick(o.key)}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13, fontWeight:600, color:C.text, marginBottom:2}}>{o.title}</div>
-                <div style={{fontSize:12, color:C.muted, lineHeight:1.4}}>{o.desc}</div>
-              </div>
-              <span style={{fontSize:16, color:C.muted}}>›</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end"}}>
-        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
-  </Modal>;
-}
+  const [linhas, setLinhas] = useState([{tipo:"concessao_solicitada", qtd:"", extra:""}]);
+  const [aprovador, setAprovador] = useState(aprovadorGlobal||"");
 
-// ── 2. Sucatar ────────────────────────────────────────────────────
-// Decisão direta da qualidade: registra motivo e segue pra assinatura.
-function SucatarModal({open, item, onClose, onConfirm, C, Sg}){
-  const [motivo, setMotivo] = useState("");
-  React.useEffect(()=>{if(open) setMotivo("");}, [open]);
-  if(!open) return null;
-  const can = motivo.trim().length>0;
-  return <Modal open={open} onClose={onClose} title="" width={580}>
-    <div style={{margin:-16}}>
-      <div style={{padding:"18px 22px 14px"}}>
-        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Sucatar item</div>
-        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Decisão direta da qualidade</div>
-      </div>
-      <ItemInfoStrip item={item} C={C}/>
-      <div style={{padding:"20px 22px"}}>
-        <label style={{display:"block", fontSize:13, fontWeight:600, color:C.text, marginBottom:6}}>
-          Motivo do sucatamento <span style={{color:C.danger}}>*</span>
-        </label>
-        <div style={{fontSize:12, color:C.muted, marginBottom:10}}>
-          Por que essas peças precisam ser descartadas? O motivo fica registrado pra controle do que foi sucatado na empresa.
-        </div>
-        <textarea
-          style={{...Sg.input(), minHeight:90, resize:"vertical", fontFamily:"inherit"}}
-          value={motivo} onChange={e=>setMotivo(e.target.value)}
-          placeholder="Ex: Cabo apresentou rompimento interno após o teste, sem possibilidade de retrabalho."
-        />
-      </div>
-      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end", gap:8}}>
-        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Cancelar</button>
-        <button
-          style={{...Sg.btn("danger"), fontSize:12, padding:"7px 16px", opacity:can?1:.4}}
-          disabled={!can}
-          onClick={()=>onConfirm({motivo: motivo.trim()})}>
-          Sucatar este item
-        </button>
-      </div>
-    </div>
-  </Modal>;
-}
+  React.useEffect(()=>{
+    if(open){
+      const prev = item?.sublotes;
+      if(prev && prev.length > 0){
+        setLinhas(prev.map(s=>({tipo:s.tipo, qtd:String(s.qtd||""), extra:s.extra||""})));
+      } else {
+        setLinhas([{tipo:"concessao_solicitada", qtd:"", extra:""}]);
+      }
+      setAprovador(aprovadorGlobal||"");
+    }
+  }, [open, item, aprovadorGlobal]);
 
-// ── 3. Pedir Concessão ────────────────────────────────────────────
-// Qualidade analisa e escolhe aprovador. Próximo passo é assinatura.
-function PedirConcessaoModal({open, item, allUsers, currentUser, onClose, onConfirm, C, Sg}){
-  const [analise, setAnalise] = useState("");
-  const [aprovador, setAprovador] = useState("");
-  React.useEffect(()=>{if(open){ setAnalise(""); setAprovador(""); }}, [open]);
   if(!open) return null;
-  // Só lista usuários com permissão de aprovador (ro.aprovar_concessao)
+
+  const qtdTotal = parseInt(item?.qtdNC)||0;
+  const soma = linhas.reduce((acc,l)=>acc+(parseInt(l.qtd)||0),0);
+  const totalOk = soma === qtdTotal && qtdTotal > 0;
+
+  const temConcessao = linhas.some(l=>l.tipo==="concessao_solicitada");
   const aprovadores = (allUsers||[]).filter(u=>{
     if(u.active===false) return false;
     if(u.id===currentUser?.id) return false;
-    return hasPerm(u, 'ro.aprovar_concessao');
+    return hasPerm(u,"ro.aprovar_concessao");
   });
-  const can = analise.trim().length>0 && aprovador;
-  return <Modal open={open} onClose={onClose} title="" width={580}>
+
+  const usadas = linhas.map(l=>l.tipo);
+  const disponiveis = OPTS.filter(o=>!usadas.includes(o.val));
+
+  const addLinha = () => {
+    if(disponiveis.length===0) return;
+    setLinhas(prev=>[...prev, {tipo:disponiveis[0].val, qtd:"", extra:""}]);
+  };
+
+  const remLinha = (i) => {
+    setLinhas(prev=>prev.filter((_,j)=>j!==i));
+  };
+
+  const updLinha = (i, field, val) => {
+    setLinhas(prev=>{
+      const n=[...prev];
+      n[i]={...n[i],[field]:val};
+      return n;
+    });
+  };
+
+  const extraLabel = (tipo) => {
+    if(tipo==="concessao_solicitada") return "Justificativa técnica";
+    if(tipo==="sucatamento") return "Motivo do sucatamento";
+    return "Observação (opcional)";
+  };
+
+  const canConfirm = totalOk && (!temConcessao || aprovador);
+  const linhasValidas = linhas.filter(l=>parseInt(l.qtd)>0);
+
+  return <Modal open={open} onClose={onClose} title="" width={600}>
     <div style={{margin:-16}}>
       <div style={{padding:"18px 22px 14px"}}>
-        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Pedir concessão</div>
-        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Vai para aprovação de outra pessoa</div>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Tratar item segregado</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Distribua as {qtdTotal} unidades entre as disposições abaixo</div>
       </div>
       <ItemInfoStrip item={item} C={C}/>
-      <div style={{padding:"20px 22px"}}>
-        <div style={{marginBottom:18}}>
-          <label style={{display:"block", fontSize:13, fontWeight:600, color:C.text, marginBottom:6}}>
-            Análise da qualidade <span style={{color:C.danger}}>*</span>
-          </label>
-          <div style={{fontSize:12, color:C.muted, marginBottom:10}}>
-            Justifique tecnicamente por que essas peças podem ser usadas mesmo fora do padrão. Esta análise vai junto pro aprovador decidir.
-          </div>
-          <textarea
-            style={{...Sg.input(), minHeight:100, resize:"vertical", fontFamily:"inherit"}}
-            value={analise} onChange={e=>setAnalise(e.target.value)}
-            placeholder="Ex: A não conformidade é dimensional (0,2mm acima da tolerância) e não compromete o encaixe nem a funcionalidade do produto final..."
-          />
+      <div style={{padding:"18px 22px"}}>
+
+        {/* Linhas de disposição */}
+        {linhas.map((l,i)=>{
+          const optsDisponiveis = OPTS.filter(o=>o.val===l.tipo || !usadas.filter((_,j)=>j!==i).includes(o.val));
+          return <div key={i} style={{
+            display:"grid", gridTemplateColumns:"160px 68px 1fr auto",
+            gap:8, alignItems:"start", marginBottom:10
+          }}>
+            <select
+              value={l.tipo}
+              onChange={e=>updLinha(i,"tipo",e.target.value)}
+              style={{...Sg.input(), fontSize:12, height:34}}>
+              {optsDisponiveis.map(o=>(
+                <option key={o.val} value={o.val}>{o.label}</option>
+              ))}
+            </select>
+            <input
+              type="number" min="1" max={qtdTotal}
+              placeholder="Qtd"
+              value={l.qtd}
+              onChange={e=>updLinha(i,"qtd",e.target.value)}
+              style={{...Sg.input(), fontSize:12, height:34, textAlign:"center",
+                MozAppearance:"textfield", WebkitAppearance:"none"}}/>
+            <input
+              type="text"
+              placeholder={extraLabel(l.tipo)}
+              value={l.extra||""}
+              onChange={e=>updLinha(i,"extra",e.target.value)}
+              style={{...Sg.input(), fontSize:12, height:34}}/>
+            {linhas.length>1
+              ? <button onClick={()=>remLinha(i)} style={{
+                  height:34, padding:"0 10px", border:"0.5px solid "+C.border,
+                  borderRadius:6, background:"transparent", cursor:"pointer",
+                  color:C.muted, fontSize:14, fontFamily:"inherit"
+                }}>×</button>
+              : <div style={{width:34}}/>}
+          </div>;
+        })}
+
+        {/* Total */}
+        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6, marginBottom:14}}>
+          <span style={{fontSize:13, color:totalOk?C.success:C.danger, fontWeight:500}}>
+            Total: {soma} / {qtdTotal} {!totalOk && soma>0 ? "— precisa fechar exato" : ""}
+          </span>
+          {disponiveis.length>0 && <button
+            onClick={addLinha}
+            style={{fontSize:12, padding:"4px 12px", border:"0.5px dashed "+C.border,
+              borderRadius:6, background:"transparent", cursor:"pointer", color:C.muted}}>
+            + adicionar disposição
+          </button>}
         </div>
-        <div>
+
+        {/* Aprovador único (aparece quando tem concessão) */}
+        {temConcessao && <div style={{
+          background:C.surface, borderRadius:8, padding:"14px 16px", marginTop:4
+        }}>
           <label style={{display:"block", fontSize:13, fontWeight:600, color:C.text, marginBottom:6}}>
-            Enviar para aprovação de <span style={{color:C.danger}}>*</span>
+            Aprovador da concessão <span style={{color:C.danger}}>*</span>
           </label>
+          <div style={{fontSize:12, color:C.muted, marginBottom:8}}>
+            Todas as concessões desta RO irão para o mesmo aprovador.
+          </div>
           <select
-            style={Sg.input()}
-            value={aprovador} onChange={e=>setAprovador(e.target.value)}>
+            value={aprovador}
+            onChange={e=>setAprovador(e.target.value)}
+            style={Sg.input()}>
             <option value="">Selecione o aprovador...</option>
             {aprovadores.map(u=>(
               <option key={u.id} value={u.id}>{u.name}{u.area?" — "+u.area:""}</option>
             ))}
           </select>
-          <div style={{fontSize:11, color:C.muted, marginTop:6}}>O aprovador receberá a solicitação como pendência.</div>
-        </div>
+        </div>}
       </div>
+
       <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end", gap:8}}>
         <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Cancelar</button>
         <button
-          style={{...Sg.btn("primary"), fontSize:12, padding:"7px 16px", opacity:can?1:.4}}
-          disabled={!can}
-          onClick={()=>onConfirm({analise: analise.trim(), aprovador})}>
-          Enviar para aprovação
+          style={{...Sg.btn("primary"), fontSize:12, padding:"7px 18px", opacity:canConfirm?1:.4}}
+          disabled={!canConfirm}
+          onClick={()=>onConfirm({linhas:linhasValidas, aprovador})}>
+          Confirmar tratamento
         </button>
-      </div>
-    </div>
-  </Modal>;
-}
-
-// ── 4. Mover para NC — placeholder enquanto NC não está pronta ────
-function MoverNCAvisoModal({open, item, onClose, C, Sg}){
-  if(!open) return null;
-  return <Modal open={open} onClose={onClose} title="" width={520}>
-    <div style={{margin:-16}}>
-      <div style={{padding:"18px 22px 14px"}}>
-        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Mover para NC</div>
-        <div style={{fontSize:12, color:C.muted, marginTop:3}}>Tratativa formal com plano de ações</div>
-      </div>
-      <ItemInfoStrip item={item} C={C}/>
-      <div style={{padding:"24px 22px"}}>
-        <div style={{padding:"14px 16px", background:C.warning+"15", border:"1px solid "+C.warning+"40", borderRadius:8, fontSize:13, color:C.text, lineHeight:1.5}}>
-          <div style={{fontWeight:600, color:C.warning, marginBottom:6}}>Módulo NC ainda não disponível</div>
-          O módulo de Não Conformidade está em desenvolvimento. Por enquanto, escolha outra ação no menu de tratamento (Sucatar ou Pedir concessão) ou aguarde a próxima atualização.
-        </div>
-      </div>
-      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"flex-end"}}>
-        <button style={{...Sg.btn(), fontSize:12, padding:"7px 14px"}} onClick={onClose}>Entendi, voltar</button>
       </div>
     </div>
   </Modal>;
@@ -4550,15 +4578,22 @@ function MoverNCAvisoModal({open, item, onClose, C, Sg}){
 // ── 5. Aprovar Concessão ──────────────────────────────────────────
 // Aprovador lê a análise da qualidade e decide. Aprovar vai direto pra
 // assinatura. Rejeitar abre modal de motivo antes da assinatura.
-function AprovarConcessaoModal({open, item, onClose, onAprovar, onRejeitar, C, Sg}){
+function AprovarConcessaoModal({open, item, subloteIdx, onClose, onAprovar, onRejeitar, C, Sg}){
   if(!open) return null;
+  // Modelo novo: pega dados do sublote específico
+  const sublote = (subloteIdx!=null && item?.sublotes) ? item.sublotes[subloteIdx] : null;
+  const analise = sublote?.extra || item?.concessaoJustificativa || "—";
+  const solicitadoPor = sublote?.concessaoSolicitadaBy || item?.concessaoSolicitadaBy || "—";
+  const solicitadoEm = sublote?.concessaoSolicitadaAt || item?.concessaoSolicitadaAt;
+  const qtdConcessao = sublote?.qtd;
   return <Modal open={open} onClose={onClose} title="" width={580}>
     <div style={{margin:-16}}>
       <div style={{padding:"18px 22px 14px"}}>
         <div style={{fontSize:16, fontWeight:600, color:C.text}}>Aprovar concessão</div>
         <div style={{fontSize:12, color:C.muted, marginTop:3}}>
-          Solicitada por {item?.concessaoSolicitadaBy||"—"}
-          {item?.concessaoSolicitadaAt?" em "+fmt(item.concessaoSolicitadaAt):""}
+          Solicitada por {solicitadoPor}
+          {solicitadoEm?" em "+fmt(solicitadoEm):""}
+          {qtdConcessao?" · "+qtdConcessao+" unidades":""}
         </div>
       </div>
       <ItemInfoStrip item={item} C={C}/>
@@ -4569,7 +4604,7 @@ function AprovarConcessaoModal({open, item, onClose, onAprovar, onRejeitar, C, S
           lineHeight:1.6, borderLeft:"3px solid "+C.accent, borderRadius:"0 8px 8px 0",
           whiteSpace:"pre-wrap"
         }}>
-          {item?.concessaoJustificativa||"—"}
+          {analise}
         </div>
         <div style={{fontSize:11, color:C.muted, marginTop:14, paddingTop:14, borderTop:"1px solid "+C.border}}>
           Ao rejeitar, será aberto outro popup pedindo o motivo. Aprovar vai direto pra assinatura.
@@ -4634,9 +4669,9 @@ function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
         onBlur={e=>commitField("lote", e.target.value)}
         placeholder="Lote"/>
     </td>
-    <td style={{...cellMid, width:60}}>
+    <td style={{...cellMid, width:72}}>
       <input
-        style={inputStyle}
+        style={{...inputStyle, textAlign:"center", MozAppearance:"textfield", WebkitAppearance:"none"}}
         type="number" min="0"
         value={item.qtdNC||""}
         onChange={e=>onChange({...item, qtdNC:e.target.value})}
@@ -4666,23 +4701,37 @@ function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
 // ── Linha read-only ──────────────────────────────────────────────
 function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar, C, Sg}){
   const cellRO = {padding:"8px 8px", fontSize:12, verticalAlign:"middle"};
-  const showTratar = canTratar && lineIsPending(item) && (item.disposicao==="segregar" || item.disposicao==="concessao_rejeitada");
-  const showAprovar = canAprovar && item.disposicao==="concessao_solicitada";
+  // Modelo novo: segregado sem sublotes finalizados = pode tratar
+  const hasSublotes = item.sublotes && item.sublotes.length > 0;
+  const segregadoPendente = item.disposicao==="segregar" && !hasSublotes;
+  const comRejeicao = hasSublotes && item.sublotes.some(s=>s.tipo==="concessao_rejeitada");
+  const showTratar = canTratar && (segregadoPendente || comRejeicao ||
+    (!hasSublotes && (item.disposicao==="segregar" || item.disposicao==="concessao_rejeitada")));
+  const showAprovar = canAprovar && hasSublotes && item.sublotes.some(s=>s.tipo==="concessao_solicitada");
+  const showAprovarLegado = canAprovar && !hasSublotes && item.disposicao==="concessao_solicitada";
   return <tr style={{borderBottom:"1px solid "+C.border}}>
     <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
     <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
     <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
     <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
-    <td style={{...cellRO, width:240}}>
-      <div style={{display:"flex", gap:6, alignItems:"center", flexWrap:"nowrap"}}>
-        <DispBadge disp={item.disposicao} status={item.status} C={C}/>
+    <td style={{...cellRO, width:260}}>
+      <div style={{display:"flex", gap:6, alignItems:"center", flexWrap:"wrap"}}>
+        <DispBadge disp={item.disposicao} status={item.status} sublotes={hasSublotes?item.sublotes:null} C={C}/>
         {showTratar && onTratar && <button
           onClick={()=>onTratar(idx)}
           style={{fontSize:11, padding:"3px 10px", background:C.accent, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
           Tratar →
         </button>}
-        {showAprovar && onAprovar && <button
-          onClick={()=>onAprovar(idx)}
+        {(showAprovar||showAprovarLegado) && onAprovar && <button
+          onClick={()=>{
+            if(showAprovar && item.sublotes){
+              // Pega o índice do primeiro sublote de concessão pendente
+              const si = item.sublotes.findIndex(s=>s.tipo==="concessao_solicitada");
+              onAprovar(idx, si>=0?si:null);
+            } else {
+              onAprovar(idx, null);
+            }
+          }}
           style={{fontSize:11, padding:"3px 10px", background:C.warning, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
           Decidir →
         </button>}
@@ -4964,38 +5013,69 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
   const [pendingApply, setPendingApply] = useState(null);
   const [sigModal, setSigModal] = useState(null);
 
-  // Coleta itens em "concessao_solicitada" cujo aprovador é o usuário atual
+  // Coleta sublotes de concessão pendentes cujo aprovador é o usuário atual
   const pendentes = [];
   (roRecords||[]).forEach(r=>{
     const itens = r.data?.itens||[];
     itens.forEach((it, idx)=>{
-      if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===currentUser?.id){
-        pendentes.push({ro:r, idx, item:it});
+      // Modelo novo: sublotes
+      if(it.sublotes && it.sublotes.length > 0){
+        it.sublotes.forEach((s, si)=>{
+          if(s.tipo==="concessao_solicitada" && s.concessaoAprovadorId===currentUser?.id){
+            pendentes.push({ro:r, idx, subloteIdx:si, item:it, sublote:s});
+          }
+        });
+      }
+      // Modelo legado
+      else if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===currentUser?.id){
+        pendentes.push({ro:r, idx, subloteIdx:null, item:it, sublote:null});
       }
     });
   });
 
   const applyDecisao = async (sig) => {
     if(!pendingApply){ setSigModal(null); return; }
-    const {ro, idx, decisao, motivo} = pendingApply;
+    const {ro, idx, subloteIdx, decisao, motivo} = pendingApply;
     const itens = [...(ro.data?.itens||[])];
     const linha = {...itens[idx]};
     const userName = currentUser?.name || currentUser?.email || "—";
     const now = new Date().toISOString();
     let detalhe = "";
-    if(decisao==="aprovar"){
-      linha.disposicao = "concessao_aprovada";
-      linha.status = "concluida";
-      linha.concessaoAprovadaAt = now;
-      linha.concessaoAprovadaBy = userName;
-      detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão APROVADA por " + userName + ".";
+
+    if(subloteIdx!=null && linha.sublotes){
+      // Modelo novo: atualizar sublote específico
+      const sublotes = [...(linha.sublotes||[])];
+      if(decisao==="aprovar"){
+        sublotes[subloteIdx] = {...sublotes[subloteIdx],
+          tipo:"concessao_aprovada",
+          concessaoAprovadaAt:now, concessaoAprovadaBy:userName
+        };
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão de "+sublotes[subloteIdx].qtd+"x APROVADA por "+userName+".";
+      } else {
+        sublotes[subloteIdx] = {...sublotes[subloteIdx],
+          tipo:"concessao_rejeitada",
+          concessaoRejeitadaAt:now, concessaoRejeitadaBy:userName,
+          concessaoRejeitadaMotivo:motivo
+        };
+        detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão de "+sublotes[subloteIdx].qtd+"x REJEITADA.\nMotivo: "+motivo;
+      }
+      linha.sublotes = sublotes;
     } else {
-      linha.disposicao = "concessao_rejeitada";
-      linha.status = "pendente";
-      linha.concessaoRejeitadaAt = now;
-      linha.concessaoRejeitadaBy = userName;
-      linha.concessaoRejeitadaMotivo = motivo;
-      detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão REJEITADA por " + userName + ".\nMotivo: " + motivo + "\nVolta para a qualidade decidir outra disposição.";
+      // Modelo legado
+      if(decisao==="aprovar"){
+        linha.disposicao = "concessao_aprovada";
+        linha.status = "concluida";
+        linha.concessaoAprovadaAt = now;
+        linha.concessaoAprovadaBy = userName;
+        detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão APROVADA por " + userName + ".";
+      } else {
+        linha.disposicao = "concessao_rejeitada";
+        linha.status = "pendente";
+        linha.concessaoRejeitadaAt = now;
+        linha.concessaoRejeitadaBy = userName;
+        linha.concessaoRejeitadaMotivo = motivo;
+        detalhe = "Item " + (linha.codigo||"#"+(idx+1)) + ": concessão REJEITADA por " + userName + ".\nMotivo: " + motivo;
+      }
     }
     itens[idx] = linha;
     const novoHist = {
@@ -5026,18 +5106,22 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
       </div>
     ) : (
       <div style={{display:"flex", flexDirection:"column", gap:10}}>
-        {pendentes.map(({ro, idx, item})=>(
-          <div key={ro.id+"-"+idx} style={{...Sg.card(), padding:"14px 18px"}}>
+        {pendentes.map(({ro, idx, subloteIdx, item, sublote})=>{
+          const analise = sublote?.extra || item?.concessaoJustificativa || "—";
+          const solicitadoPor = sublote?.concessaoSolicitadaBy || item?.concessaoSolicitadaBy || "—";
+          const solicitadoEm = sublote?.concessaoSolicitadaAt || item?.concessaoSolicitadaAt;
+          const qtdConc = sublote?.qtd || item?.qtdNC;
+          return <div key={ro.id+"-"+idx+(subloteIdx!=null?"-s"+subloteIdx:"")} style={{...Sg.card(), padding:"14px 18px"}}>
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10, gap:12}}>
               <div style={{flex:1, minWidth:0}}>
                 <div style={{fontSize:11, color:C.muted}}>
-                  {ro.code||("RO #"+ro.id)} · Concessão
+                  {ro.code||("RO #"+ro.id)} · Concessão{qtdConc?" · "+qtdConc+" unidades":""}
                 </div>
                 <div style={{fontSize:14, fontWeight:600, color:C.text, marginTop:2}}>
-                  {item.codigo||"—"}{item.descricao?" · "+item.descricao:""} · {item.qtdNC||"—"} {item.qtdNC?"peças":""}
+                  {item.codigo||"—"}{item.descricao?" · "+item.descricao:""}
                 </div>
                 <div style={{fontSize:11, color:C.muted, marginTop:2}}>
-                  solicitado por {item.concessaoSolicitadaBy||"—"} {item.concessaoSolicitadaAt?"em "+fmt(item.concessaoSolicitadaAt):""}
+                  solicitado por {solicitadoPor} {solicitadoEm?"em "+fmt(solicitadoEm):""}
                 </div>
               </div>
               <div style={{fontSize:10, padding:"2px 8px", borderRadius:10, background:C.accent+"22", color:C.accent, whiteSpace:"nowrap"}}>Aguarda você</div>
@@ -5049,26 +5133,26 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
               whiteSpace:"pre-wrap", marginBottom:10
             }}>
               <div style={{fontSize:10, color:C.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.4}}>Análise da qualidade</div>
-              {item.concessaoJustificativa||"—"}
+              {analise}
             </div>
 
             <div style={{display:"flex", justifyContent:"flex-end", gap:8}}>
               <button
                 style={{padding:"6px 14px", fontSize:11, fontWeight:500, borderRadius:7, cursor:"pointer", fontFamily:"inherit", border:"1px solid "+C.danger, background:"transparent", color:C.danger}}
-                onClick={()=>setAcaoAlvo({ro, idx, item, step:"rejeitar"})}>
+                onClick={()=>setAcaoAlvo({ro, idx, subloteIdx, item, sublote, step:"rejeitar"})}>
                 Rejeitar
               </button>
               <button
                 style={{...Sg.btn("primary"), fontSize:11, padding:"6px 16px"}}
                 onClick={()=>{
-                  setPendingApply({ro, idx, decisao:"aprovar"});
+                  setPendingApply({ro, idx, subloteIdx, decisao:"aprovar"});
                   setSigModal({title:"Assinar — Aprovação de concessão", confirmLabel:"Assinar e aprovar", confirmStyle:"success"});
                 }}>
                 Aprovar
               </button>
             </div>
-          </div>
-        ))}
+          </div>;
+        })}
       </div>
     )}
 
@@ -5077,7 +5161,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
       open={true}
       onClose={()=>setAcaoAlvo(null)}
       onConfirm={(motivo)=>{
-        setPendingApply({ro:acaoAlvo.ro, idx:acaoAlvo.idx, decisao:"rejeitar", motivo: motivo||""});
+        setPendingApply({ro:acaoAlvo.ro, idx:acaoAlvo.idx, subloteIdx:acaoAlvo.subloteIdx, decisao:"rejeitar", motivo: motivo||""});
         setAcaoAlvo(null);
         setSigModal({title:"Assinar — Rejeição de concessão", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
       }}
@@ -5437,12 +5521,11 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const [addingAtt,setAddingAtt]=useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [motiveModal, setMotiveModal] = useState(null);
-  // tratamentoState: { idx, step: 'menu' | 'sucatar' | 'concessao' | 'migrar_nc' }
-  const [tratamentoState, setTratamentoState] = useState(null);
+  // tratarItemIdx: índice do item sendo tratado no TratarItemModal
+  const [tratarItemIdx, setTratarItemIdx] = useState(null);
   // aprovacaoState: { idx, step: 'decidir' | 'rejeitar' }
   const [aprovacaoState, setAprovacaoState] = useState(null);
   // pendingApply: dados aguardando confirmação por assinatura
-  // ex: { type: 'tratamento_sucatar', idx, motivo }
   const [pendingApply, setPendingApply] = useState(null);
   const actionMenuRef = React.useRef(null);
 
@@ -5490,7 +5573,17 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const canAnalyze = hasPerm(currentUser,'ro.analisar');
   const canClose   = hasPerm(currentUser,'ro.fechar');
 
-  // Disposição atual requer conclusão da qualidade?
+  // Calcula se todos os itens segregados já têm tratamento terminal (prontos para conclusão)
+  const itensSegregados = (d.itens||[]).filter(it=>it.disposicao==="segregar");
+  const todosItensTratados = itensSegregados.length > 0 && itensSegregados.every(it=>{
+    if(it.sublotes && it.sublotes.length > 0){
+      return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+    }
+    return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
+  });
+  const prontaParaConcluir = todosItensTratados && ["em_analise","aguardando_conclusao"].includes(status);
+
+  // Disposição atual requer conclusão da qualidade? (legado)
   const dispAtual = disposicaoEdit||d.disposicao||"";
   const needsConclusao = RO_DISP_CONCLUSAO.includes(dispAtual);
 
@@ -5587,7 +5680,6 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   };
 
   // Aplica a ação pendente após o usuário confirmar via SignatureModal.
-  // Cobre tratamentos da qualidade (sucatar/concessão) e decisões do aprovador (aprovar/rejeitar).
   const applyPending = async (sig) => {
     if(!pendingApply){ setSigModal(null); return; }
     const idx = pendingApply.idx;
@@ -5597,30 +5689,75 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     const userName = currentUser?.name || currentUser?.email || "—";
     const now = new Date().toISOString();
     let detalhe = "";
+    let histType = "tratamento_qualidade";
 
-    if(pendingApply.type==="tratamento_sucatar"){
-      linha.disposicao = "sucatamento";
-      linha.status = "concluida";
-      linha.tratamentoMotivo = pendingApply.motivo;
-      linha.tratamentoAt = now;
-      linha.tratamentoBy = userName;
-      detalhe = "Item " + codigo + " sucatado pela qualidade.\nMotivo: " + pendingApply.motivo;
+    if(pendingApply.type==="tratamento_sublotes"){
+      // Novo modelo: sublotes com disposições múltiplas
+      const { linhas, aprovador } = pendingApply;
+      const aprovadorNome = (allUsers||[]).find(u=>u.id===aprovador)?.name || "—";
+      linha.sublotes = linhas.map(l=>({
+        tipo: l.tipo,
+        qtd: parseInt(l.qtd)||0,
+        extra: l.extra||"",
+        // campos de rastreabilidade
+        ...(l.tipo==="concessao_solicitada" ? {
+          concessaoAprovadorId: aprovador,
+          concessaoAprovadorNome: aprovadorNome,
+          concessaoSolicitadaAt: now,
+          concessaoSolicitadaBy: userName,
+        } : {}),
+        ...(l.tipo==="sucatamento" ? {
+          sucatadoAt: now,
+          sucatadoBy: userName,
+        } : {}),
+        ...(l.tipo==="migrada_nc" ? {
+          migradaAt: now,
+          migradaBy: userName,
+        } : {}),
+      }));
+      // aprovador global da RO (para concessões)
+      if(aprovador) linha.concessaoAprovadorId = aprovador;
+      linha.tratadoAt = now;
+      linha.tratadoBy = userName;
+      const resumo = linhas.map(l=>{
+        const labels = {concessao_solicitada:"Concessão", sucatamento:"Sucatamento", migrada_nc:"→ NC"};
+        return (parseInt(l.qtd)||0)+"x "+(labels[l.tipo]||l.tipo)+(l.extra?" ("+l.extra+")":"");
+      }).join(", ");
+      detalhe = "Item "+codigo+" tratado: "+resumo+(aprovador?"\nAprovador concessão: "+aprovadorNome:"");
     }
-    else if(pendingApply.type==="tratamento_concessao"){
-      linha.disposicao = "concessao_solicitada";
-      linha.status = "aguardando_aprovacao";
-      linha.concessaoJustificativa = pendingApply.analise;
-      linha.concessaoAprovadorId = pendingApply.aprovador;
-      linha.concessaoSolicitadaAt = now;
-      linha.concessaoSolicitadaBy = userName;
-      const aprovadorNome = (allUsers||[]).find(u=>u.id===pendingApply.aprovador)?.name || "—";
-      detalhe = "Item " + codigo + ": concessão solicitada.\nAprovador: " + aprovadorNome + "\nAnálise da qualidade: " + pendingApply.analise;
+    else if(pendingApply.type==="aprovacao_aprovar_sublote"){
+      // Aprovar sublote de concessão específico
+      const si = pendingApply.subloteIdx;
+      const sublotes = [...(linha.sublotes||[])];
+      sublotes[si] = {...sublotes[si],
+        tipo: "concessao_aprovada",
+        concessaoAprovadaAt: now,
+        concessaoAprovadaBy: userName,
+      };
+      linha.sublotes = sublotes;
+      histType = "decisao_aprovador";
+      detalhe = "Item "+codigo+": concessão de "+sublotes[si].qtd+"x APROVADA por "+userName+".";
     }
+    else if(pendingApply.type==="aprovacao_rejeitar_sublote"){
+      const si = pendingApply.subloteIdx;
+      const sublotes = [...(linha.sublotes||[])];
+      sublotes[si] = {...sublotes[si],
+        tipo: "concessao_rejeitada",
+        concessaoRejeitadaAt: now,
+        concessaoRejeitadaBy: userName,
+        concessaoRejeitadaMotivo: pendingApply.motivo,
+      };
+      linha.sublotes = sublotes;
+      histType = "decisao_aprovador";
+      detalhe = "Item "+codigo+": concessão de "+sublotes[si].qtd+"x REJEITADA por "+userName+".\nMotivo: "+pendingApply.motivo;
+    }
+    // legado (ROs antigas com modelo antigo)
     else if(pendingApply.type==="aprovacao_aprovar"){
       linha.disposicao = "concessao_aprovada";
       linha.status = "concluida";
       linha.concessaoAprovadaAt = now;
       linha.concessaoAprovadaBy = userName;
+      histType = "decisao_aprovador";
       detalhe = "Item " + codigo + ": concessão APROVADA por " + userName + ".";
     }
     else if(pendingApply.type==="aprovacao_rejeitar"){
@@ -5629,17 +5766,14 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       linha.concessaoRejeitadaAt = now;
       linha.concessaoRejeitadaBy = userName;
       linha.concessaoRejeitadaMotivo = pendingApply.motivo;
-      detalhe = "Item " + codigo + ": concessão REJEITADA por " + userName + ".\nMotivo: " + pendingApply.motivo + "\nVolta para a qualidade decidir outra disposição.";
+      histType = "decisao_aprovador";
+      detalhe = "Item " + codigo + ": concessão REJEITADA por " + userName + ".\nMotivo: " + pendingApply.motivo;
     }
 
     itens[idx] = linha;
     const novoHist = {
-      type: pendingApply.type.startsWith("aprovacao_") ? "decisao_aprovador" : "tratamento_qualidade",
-      at: now,
-      by: userName,
-      byId: currentUser?.id,
-      itemIdx: idx,
-      itemCodigo: linha.codigo || "",
+      type: histType, at: now, by: userName, byId: currentUser?.id,
+      itemIdx: idx, itemCodigo: linha.codigo || "",
       detail: detalhe + "\n(assinado eletronicamente)"
     };
     const histTotal = [...(d.historico||[]), novoHist];
@@ -5738,8 +5872,22 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       </div>
     </div>
 
-    {/* Banner aguardando conclusão */}
-    {status==="aguardando_conclusao"&&<div style={{padding:"10px 14px",background:C.purple+"15",border:"1px solid "+C.purple+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.purple,fontWeight:600}}>
+    {/* Banner pronta para conclusão (novo modelo) */}
+    {prontaParaConcluir && canClose && <div style={{
+      padding:"12px 16px", background:C.success+"18", border:"1px solid "+C.success+"50",
+      borderRadius:8, marginBottom:14, fontSize:13, color:C.success, fontWeight:600,
+      display:"flex", alignItems:"center", justifyContent:"space-between", gap:12
+    }}>
+      <span>Todos os itens foram tratados. RO pronta para conclusão.</span>
+      <button
+        style={{...Sg.btn("success"), fontSize:12, padding:"6px 14px", whiteSpace:"nowrap"}}
+        onClick={()=>setSigModal({action:"fechar", title:"Assinar — Fechamento da RO", confirmLabel:"Assinar e fechar", confirmStyle:"success"})}>
+        Validar e concluir
+      </button>
+    </div>}
+
+    {/* Banner aguardando conclusão (legado) */}
+    {status==="aguardando_conclusao" && !prontaParaConcluir && <div style={{padding:"10px 14px",background:C.purple+"15",border:"1px solid "+C.purple+"40",borderRadius:8,marginBottom:14,fontSize:13,color:C.purple,fontWeight:600}}>
       Aguardando conclusão da qualidade — disposição: <strong>{d.disposicao}</strong>
     </div>}
 
@@ -5786,9 +5934,9 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         onChange={v=>{if(editingItens)setItensEdit(v);}}
         readOnly={!editingItens}
         currentUser={currentUser}
-        onTratar={(idx)=>setTratamentoState({idx, step:"menu"})}
+        onTratar={(idx)=>setTratarItemIdx(idx)}
         canTratar={hasPerm(currentUser,'ro.tratar_segregado') && !editingItens && !["cancelada","fechada"].includes(status)}
-        onAprovar={(idx)=>setAprovacaoState({idx, step:"decidir"})}
+        onAprovar={(idx, si)=>setAprovacaoState({idx, subloteIdx:si, step:"decidir"})}
         canAprovar={hasPerm(currentUser,'ro.aprovar_concessao') && !editingItens && !["cancelada","fechada"].includes(status)}
         C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
@@ -5855,10 +6003,14 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
     {aprovacaoState!==null && aprovacaoState.step==="decidir" && d.itens && d.itens[aprovacaoState.idx] && <AprovarConcessaoModal
       open={true}
       item={d.itens[aprovacaoState.idx]}
+      subloteIdx={aprovacaoState.subloteIdx}
       onClose={()=>setAprovacaoState(null)}
       onAprovar={()=>{
         const idx = aprovacaoState.idx;
-        setPendingApply({type:"aprovacao_aprovar", idx});
+        const si = aprovacaoState.subloteIdx;
+        setPendingApply(si!=null
+          ? {type:"aprovacao_aprovar_sublote", idx, subloteIdx:si}
+          : {type:"aprovacao_aprovar", idx});
         setAprovacaoState(null);
         setSigModal({action:"apply_pending", title:"Assinar — Aprovação de concessão", confirmLabel:"Assinar e aprovar", confirmStyle:"success"});
       }}
@@ -5874,7 +6026,10 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       onClose={()=>setAprovacaoState({...aprovacaoState, step:"decidir"})}
       onConfirm={(motivo)=>{
         const idx = aprovacaoState.idx;
-        setPendingApply({type:"aprovacao_rejeitar", idx, motivo: motivo||""});
+        const si = aprovacaoState.subloteIdx;
+        setPendingApply(si!=null
+          ? {type:"aprovacao_rejeitar_sublote", idx, subloteIdx:si, motivo: motivo||""}
+          : {type:"aprovacao_rejeitar", idx, motivo: motivo||""});
         setAprovacaoState(null);
         setSigModal({action:"apply_pending", title:"Assinar — Rejeição de concessão", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
       }}
@@ -5885,50 +6040,20 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       C={C} Sg={Sg}
     />}
 
-    {/* Tratar segregado — Menu de 3 opções */}
-    {tratamentoState!==null && tratamentoState.step==="menu" && d.itens && d.itens[tratamentoState.idx] && <TratamentoMenuModal
+    {/* Tratar segregado — novo modelo de sublotes */}
+    {tratarItemIdx!==null && d.itens && d.itens[tratarItemIdx] && <TratarItemModal
       open={true}
-      item={d.itens[tratamentoState.idx]}
-      onClose={()=>setTratamentoState(null)}
-      onPick={(decisao)=>setTratamentoState({...tratamentoState, step: decisao})}
-      C={C} Sg={Sg}
-    />}
-
-    {/* Tratar segregado — Sucatar */}
-    {tratamentoState!==null && tratamentoState.step==="sucatamento" && d.itens && d.itens[tratamentoState.idx] && <SucatarModal
-      open={true}
-      item={d.itens[tratamentoState.idx]}
-      onClose={()=>setTratamentoState({...tratamentoState, step:"menu"})}
-      onConfirm={({motivo})=>{
-        const idx = tratamentoState.idx;
-        setPendingApply({type:"tratamento_sucatar", idx, motivo});
-        setTratamentoState(null);
-        setSigModal({action:"apply_pending", title:"Assinar — Sucatamento", confirmLabel:"Assinar e sucatar", confirmStyle:"danger"});
-      }}
-      C={C} Sg={Sg}
-    />}
-
-    {/* Tratar segregado — Pedir Concessão */}
-    {tratamentoState!==null && tratamentoState.step==="concessao" && d.itens && d.itens[tratamentoState.idx] && <PedirConcessaoModal
-      open={true}
-      item={d.itens[tratamentoState.idx]}
+      item={d.itens[tratarItemIdx]}
       allUsers={allUsers}
       currentUser={currentUser}
-      onClose={()=>setTratamentoState({...tratamentoState, step:"menu"})}
-      onConfirm={({analise, aprovador})=>{
-        const idx = tratamentoState.idx;
-        setPendingApply({type:"tratamento_concessao", idx, analise, aprovador});
-        setTratamentoState(null);
-        setSigModal({action:"apply_pending", title:"Assinar — Pedido de concessão", confirmLabel:"Assinar e enviar", confirmStyle:"primary"});
+      aprovadorGlobal={(d.itens||[]).reduce((acc,it)=>acc||(it.sublotes||[]).find(s=>s.tipo==="concessao_solicitada")?.concessaoAprovadorId||it.concessaoAprovadorId, null)}
+      onClose={()=>setTratarItemIdx(null)}
+      onConfirm={({linhas, aprovador})=>{
+        const idx = tratarItemIdx;
+        setPendingApply({type:"tratamento_sublotes", idx, linhas, aprovador});
+        setTratarItemIdx(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Tratamento do item", confirmLabel:"Assinar e confirmar", confirmStyle:"primary"});
       }}
-      C={C} Sg={Sg}
-    />}
-
-    {/* Tratar segregado — Mover para NC (placeholder) */}
-    {tratamentoState!==null && tratamentoState.step==="migrar_nc" && d.itens && d.itens[tratamentoState.idx] && <MoverNCAvisoModal
-      open={true}
-      item={d.itens[tratamentoState.idx]}
-      onClose={()=>setTratamentoState({...tratamentoState, step:"menu"})}
       C={C} Sg={Sg}
     />}
 
@@ -7829,7 +7954,14 @@ const saveReq = async (r) => {
     let n=0;
     (roRecs||[]).forEach(r=>{
       (r.data?.itens||[]).forEach(it=>{
-        if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===loggedIn?.id) n++;
+        // Modelo novo: sublotes
+        if(it.sublotes && it.sublotes.length > 0){
+          it.sublotes.forEach(s=>{
+            if(s.tipo==="concessao_solicitada" && s.concessaoAprovadorId===loggedIn?.id) n++;
+          });
+        }
+        // Modelo legado
+        else if(it.disposicao==="concessao_solicitada" && it.concessaoAprovadorId===loggedIn?.id) n++;
       });
     });
     return n;
