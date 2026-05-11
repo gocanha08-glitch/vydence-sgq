@@ -5836,7 +5836,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   // Calcula se a RO está pronta para a qualidade dar validação final e fechar
   const todosItens = d.itens||[];
   const temItens = todosItens.length > 0;
-  const prontaParaConcluir = temItens && ["em_analise","aguardando_conclusao"].includes(status) && todosItens.every(it=>{
+  const prontaParaConcluir = temItens && ["em_analise","aguardando_conclusao"].includes(status) && status!=="fechada" && status!=="cancelada" && todosItens.every(it=>{
     // Correção imediata: operador já descreveu o que fez → terminal
     if(it.disposicao==="correcao") return true;
     // Segregado com sublotes: todos precisam estar em estado terminal
@@ -6661,6 +6661,7 @@ const ALL_PERMS_META = [
     {id:"ro.aprovar_correcao",   label:"Aprovar correção imediata de RO"},
     {id:"ro.aprovar",            label:"Aprovar RO"},
     {id:"ro.fechar",             label:"Fechar RO"},
+    {id:"ro.ver_todas",          label:"Ver todas as ações pendentes (gestor)"},
     {id:"ro.cancelar",           label:"Cancelar RO"},
     {id:"ro.reabrir",            label:"Reabrir RO"},
     {id:"ro.excluir",            label:"Excluir RO"},
@@ -8241,11 +8242,22 @@ const saveReq = async (r) => {
   };
 
   const pendCM = (pendEv+pendAcs)||0;
-  // Contador de pedidos de aprovação aguardando o usuário atual
+  // Contador de pendências aguardando o usuário atual
   const pendAprov = (()=>{
     let n=0;
     (roRecs||[]).forEach(r=>{
-      (r.data?.itens||[]).forEach(it=>{
+      if(["cancelada","fechada"].includes(r.status)) return;
+      const itens = r.data?.itens||[];
+      // RO pronta para fechar — conta pra quem pode fechar
+      if(hasPerm(loggedIn,'ro.fechar') && r.status==="em_analise" && itens.length>0 && itens.every(it=>{
+        if(it.disposicao==="correcao") return it.status==="concluida";
+        if(it.disposicao==="segregar"){
+          if(it.sublotes && it.sublotes.length>0) return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+          return false;
+        }
+        return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
+      })){ n++; return; }
+      itens.forEach(it=>{
         // Correção imediata aguardando aprovação
         if(it.disposicao==="correcao" && it.status==="pendente_aprovacao" && String(it.aprovadorCorrecaoId)===String(loggedIn?.id)) { n++; return; }
         // Sublotes de concessão
@@ -8293,7 +8305,7 @@ const saveReq = async (r) => {
         {/* Módulo: Ocorrências */}
         <SidebarSection sectionKey="ro" label="Ocorrências" icon="" badge={pendAprov}>
           <SidebarNavItem id="ro_list" label="Registros" indent/>
-          {(hasPerm(loggedIn,'ro.aprovar_concessao')||hasPerm(loggedIn,'ro.aprovar_correcao')||hasPerm(loggedIn,'ro.ver_todas')) && <SidebarNavItem id="ro_aprovacoes" label="Ações pendentes" badge={pendAprov} indent/>}
+          {<SidebarNavItem id="ro_aprovacoes" label="Ações pendentes" badge={pendAprov} indent/>}
         </SidebarSection>
 
         {/* Módulos futuros */}
@@ -8363,7 +8375,7 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
-      {view==='ro_aprovacoes' && (hasPerm(loggedIn,'ro.aprovar_concessao')||hasPerm(loggedIn,'ro.aprovar_correcao')||hasPerm(loggedIn,'ro.ver_todas')) && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
+      {view==='ro_aprovacoes' && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
         const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"em_analise",data:{...f,itens:itens||[],attachments:atts||[],historico:[{type:"abertura",at:now,by:loggedIn.name,byId:loggedIn.id,detail:"Ocorrência aberta pelo operador."}]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
