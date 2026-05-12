@@ -6493,6 +6493,900 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
 }
 
 // ================================================================
+// MÓDULO NC — NÃO CONFORMIDADE
+// ================================================================
+
+const NC_STATUS_LABELS = {
+  em_analise: {label:"Em Análise",  color:"#D97706"},
+  fechada:    {label:"Fechada",     color:"#16A34A"},
+  cancelada:  {label:"Cancelada",   color:"#DC2626"},
+};
+
+const NC_ORIGENS = ["Interna","Externa — Cliente","Externa — Fornecedor","Externa — Auditoria"];
+
+// Disposições dos itens na NC
+const NC_DISP = {
+  retrabalho_interno:    {label:"Retrabalho interno",         short:"Retrab. Interno",  color:"info"},
+  retrabalho_fornecedor: {label:"Retrabalho com fornecedor",  short:"Retrab. Fornec.",  color:"warning"},
+  devolucao:             {label:"Devolução",                  short:"Devolução",         color:"warning"},
+  concessao_solicitada:  {label:"Concessão solicitada",       short:"Concessão",         color:"info"},
+  concessao_aprovada:    {label:"Concessão aprovada",         short:"Concessão ✓",       color:"success"},
+  concessao_rejeitada:   {label:"Concessão rejeitada",        short:"Rejeitada",         color:"danger"},
+  sucatamento:           {label:"Sucatamento",                short:"Sucatado",          color:"danger"},
+};
+
+// Estados terminais de item — NC só fecha quando todos estão terminais
+const NC_DISP_TERMINAIS = ["retrabalho_interno","retrabalho_fornecedor","devolucao","concessao_aprovada","sucatamento"];
+
+// Status de ações do plano corretivo
+const NC_ACAO_STATUS = {
+  pendente:    {label:"Pendente",    color:"#D97706"},
+  em_andamento:{label:"Em andamento",color:"#2563EB"},
+  concluida:   {label:"Concluída",   color:"#16A34A"},
+  justificada: {label:"Justificada", color:"#64748B"},
+  cancelada:   {label:"Cancelada",   color:"#DC2626"},
+};
+
+const NC_ACAO_STATUS_TERMINAIS = ["concluida","justificada","cancelada"];
+
+function NCStatusBadge({status}){
+  const s = NC_STATUS_LABELS[status]||{label:status,color:"#64748B"};
+  return <Badge label={s.label} color={s.color}/>;
+}
+
+function NCDispBadge({disp}){
+  const d = NC_DISP[disp];
+  if(!d) return <span style={{color:"#64748B",fontSize:11}}>—</span>;
+  const colors = {info:"#2563EB",warning:"#D97706",success:"#16A34A",danger:"#DC2626"};
+  const c = colors[d.color]||"#64748B";
+  return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:500,background:c+"15",color:c,border:"1px solid "+c+"30",whiteSpace:"nowrap"}}>{d.short}</span>;
+}
+
+// ── TratarItemNCModal — qualidade define disposição do item ───────
+function TratarItemNCModal({open, item, itemIdx, allUsers, currentUser, onClose, onConfirm, C, Sg}){
+  const [disp, setDisp] = useState("");
+  const [justificativa, setJust] = useState("");
+  const [aprovadorId, setAprovadorId] = useState("");
+
+  useEffect(()=>{
+    if(open){ setDisp(""); setJust(""); setAprovadorId(""); }
+  },[open]);
+
+  if(!open||!item) return null;
+
+  const needsAprovador = disp==="concessao_solicitada";
+  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && String(u.id)!==String(currentUser?.id));
+  const canConfirm = disp && (!needsAprovador || aprovadorId) && justificativa.trim();
+
+  return <Modal open={open} onClose={onClose} title={"Definir disposição — "+item.codigo} width={560}>
+    <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>
+      <b>{item.codigo}</b>{item.descricao?" — "+item.descricao:""}{item.lote?" · Lote: "+item.lote:""}{item.qtdNC?" · Qtd NC: "+item.qtdNC:""}
+    </div>
+    <div style={{marginBottom:12}}>
+      <label style={Sg.lbl}>Disposição *</label>
+      <select style={Sg.input()} value={disp} onChange={e=>setDisp(e.target.value)}>
+        <option value="">Selecione...</option>
+        {Object.entries(NC_DISP).filter(([k])=>!["concessao_aprovada","concessao_rejeitada"].includes(k)).map(([k,v])=>(
+          <option key={k} value={k}>{v.label}</option>
+        ))}
+      </select>
+    </div>
+    {needsAprovador&&<div style={{marginBottom:12}}>
+      <label style={Sg.lbl}>Aprovador da Concessão *</label>
+      <select style={Sg.input()} value={aprovadorId} onChange={e=>setAprovadorId(e.target.value)}>
+        <option value="">Selecione o aprovador...</option>
+        {aprovadores.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+      </select>
+    </div>}
+    <div style={{marginBottom:16}}>
+      <label style={Sg.lbl}>Justificativa / Observação *</label>
+      <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={justificativa} onChange={e=>setJust(e.target.value)} placeholder="Descreva a decisão tomada..."/>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
+        const aprovador = needsAprovador ? aprovadores.find(u=>String(u.id)===String(aprovadorId)) : null;
+        onConfirm({disp, justificativa, aprovadorId: aprovador?.id, aprovadorNome: aprovador?.name});
+      }}>Confirmar</button>
+    </div>
+  </Modal>;
+}
+
+// ── AprovarConcessaoNCModal — aprovador decide sobre concessão ────
+function AprovarConcessaoNCModal({open, nc, itemIdx, currentUser, onClose, onConfirm, C, Sg}){
+  const [decisao, setDecisao] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [sigModal, setSigModal] = useState(false);
+
+  useEffect(()=>{ if(open){ setDecisao(""); setMotivo(""); }}, [open]);
+  if(!open) return null;
+
+  const d = nc?.data||{};
+  const item = (d.itens||[])[itemIdx];
+  if(!item) return null;
+
+  const canConfirm = decisao && motivo.trim();
+
+  return <Modal open={open} onClose={onClose} title={"Aprovação de Concessão — NC "+(nc?.code||"")} width={560}>
+    <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>
+      <b>{item.codigo}</b>{item.descricao?" — "+item.descricao:""}{item.lote?" · Lote: "+item.lote:""}{item.qtdNC?" · Qtd NC: "+item.qtdNC:""}
+      {item.justificativaDisposicao&&<div style={{marginTop:6,color:C.muted,fontStyle:"italic"}}>Justificativa: {item.justificativaDisposicao}</div>}
+    </div>
+    <div style={{marginBottom:12}}>
+      <label style={Sg.lbl}>Decisão *</label>
+      <div style={{display:"flex",gap:8}}>
+        <button style={{...Sg.btn(decisao==="aprovar"?"primary":""),flex:1,padding:"8px 0",background:decisao==="aprovar"?"#16A34A15":undefined,borderColor:decisao==="aprovar"?"#16A34A":undefined,color:decisao==="aprovar"?"#16A34A":undefined}} onClick={()=>setDecisao("aprovar")}>Aprovar concessão</button>
+        <button style={{...Sg.btn(decisao==="rejeitar"?"danger":""),flex:1,padding:"8px 0",background:decisao==="rejeitar"?"#DC262615":undefined,borderColor:decisao==="rejeitar"?"#DC2626":undefined,color:decisao==="rejeitar"?"#DC2626":undefined}} onClick={()=>setDecisao("rejeitar")}>Rejeitar</button>
+      </div>
+    </div>
+    <div style={{marginBottom:16}}>
+      <label style={Sg.lbl}>Motivo / Parecer *</label>
+      <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Descreva o motivo da decisão..."/>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>setSigModal(true)}>
+        {decisao==="aprovar"?"Aprovar e assinar":"Rejeitar e assinar"}
+      </button>
+    </div>
+    {sigModal&&<SignatureModal
+      open={true}
+      onClose={()=>setSigModal(false)}
+      onConfirm={(sig)=>{ setSigModal(false); onConfirm({decisao,motivo,sig}); }}
+      title={decisao==="aprovar"?"Confirmar aprovação de concessão":"Confirmar rejeição"}
+      description={"Assinatura digital para registrar decisão de concessão — item "+item.codigo}
+      confirmLabel={decisao==="aprovar"?"Confirmar aprovação":"Confirmar rejeição"}
+      saId={nc?.code} action="nc_concessao" C={C} Sg={Sg}/>}
+  </Modal>;
+}
+
+// ── FecharNCModal — qualidade fecha a NC com análise final ────────
+function FecharNCModal({open, nc, onClose, onConfirm, C, Sg}){
+  const [analise, setAnalise] = useState("");
+  const [sigModal, setSigModal] = useState(false);
+
+  useEffect(()=>{ if(open) setAnalise(""); },[open]);
+  if(!open) return null;
+
+  const canConfirm = analise.trim().length >= 10;
+
+  return <Modal open={open} onClose={onClose} title={"Fechar NC — "+(nc?.code||"")} width={560}>
+    <div style={{marginBottom:12,padding:"8px 12px",background:"#16A34A08",borderRadius:6,border:"1px solid #16A34A30",fontSize:12,color:"#16A34A"}}>
+      Todos os itens estão com disposição terminal e todas as ações do plano estão concluídas/justificadas/canceladas.
+    </div>
+    <div style={{marginBottom:16}}>
+      <label style={Sg.lbl}>Análise final / Conclusão *</label>
+      <textarea style={{...Sg.input(),minHeight:100,resize:"vertical"}} value={analise} onChange={e=>setAnalise(e.target.value)} placeholder="Descreva a conclusão desta não conformidade, eficácia das ações tomadas, observações finais..."/>
+      <div style={{fontSize:11,color:C.muted,marginTop:4}}>Mínimo 10 caracteres</div>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>setSigModal(true)}>Fechar e assinar</button>
+    </div>
+    {sigModal&&<SignatureModal
+      open={true}
+      onClose={()=>setSigModal(false)}
+      onConfirm={(sig)=>{ setSigModal(false); onConfirm({analise,sig}); }}
+      title="Confirmar fechamento da NC"
+      description="Assinatura digital obrigatória para encerrar a não conformidade"
+      confirmLabel="Fechar NC"
+      saId={nc?.code} action="nc_fechar" C={C} Sg={Sg}/>}
+  </Modal>;
+}
+
+// ── NovaAcaoNCModal — adicionar ação ao plano corretivo ───────────
+function NovaAcaoNCModal({open, onClose, onConfirm, allUsers, C, Sg}){
+  const [descricao, setDescricao] = useState("");
+  const [responsavelId, setRespId] = useState("");
+  const [prazo, setPrazo] = useState("");
+
+  useEffect(()=>{ if(open){ setDescricao(""); setRespId(""); setPrazo(""); }}, [open]);
+  if(!open) return null;
+
+  const ativos = (allUsers||[]).filter(u=>u.active!==false);
+  const canConfirm = descricao.trim() && responsavelId && prazo;
+
+  return <Modal open={open} onClose={onClose} title="Nova ação corretiva" width={500}>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div>
+        <label style={Sg.lbl}>Descrição da ação *</label>
+        <textarea style={{...Sg.input(),minHeight:64,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Ex: Atualizar IT-045 com novo critério de aceitação..."/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div>
+          <label style={Sg.lbl}>Responsável *</label>
+          <select style={Sg.input()} value={responsavelId} onChange={e=>setRespId(e.target.value)}>
+            <option value="">Selecione...</option>
+            {ativos.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Prazo *</label>
+          <input type="date" style={Sg.input()} value={prazo} onChange={e=>setPrazo(e.target.value)}/>
+        </div>
+      </div>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
+        const resp = ativos.find(u=>String(u.id)===String(responsavelId));
+        onConfirm({descricao,responsavelId:resp?.id,responsavelNome:resp?.name,prazo,status:"pendente"});
+      }}>Adicionar</button>
+    </div>
+  </Modal>;
+}
+
+// ── ConcluirAcaoNCModal — responsável conclui ou justifica ação ───
+function ConcluirAcaoNCModal({open, acao, onClose, onConfirm, C, Sg}){
+  const [tipo, setTipo] = useState("concluida");
+  const [evidencia, setEvidencia] = useState("");
+
+  useEffect(()=>{ if(open){ setTipo("concluida"); setEvidencia(""); }}, [open]);
+  if(!open||!acao) return null;
+
+  return <Modal open={open} onClose={onClose} title={"Registrar resultado — ação"} width={480}>
+    <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>{acao.descricao}</div>
+    <div style={{marginBottom:12}}>
+      <label style={Sg.lbl}>Resultado</label>
+      <div style={{display:"flex",gap:8}}>
+        {[{k:"concluida",l:"Concluída"},{k:"justificada",l:"Justificada"},{k:"cancelada",l:"Cancelada"}].map(opt=>(
+          <button key={opt.k} style={{...Sg.btn(tipo===opt.k?"primary":""),flex:1,padding:"7px 0",fontSize:12}} onClick={()=>setTipo(opt.k)}>{opt.l}</button>
+        ))}
+      </div>
+    </div>
+    <div style={{marginBottom:16}}>
+      <label style={Sg.lbl}>{tipo==="concluida"?"Evidência / Observação *":"Justificativa *"}</label>
+      <textarea style={{...Sg.input(),minHeight:64,resize:"vertical"}} value={evidencia} onChange={e=>setEvidencia(e.target.value)} placeholder={tipo==="concluida"?"Descreva o que foi feito, número do documento revisado, etc.":"Motivo pelo qual a ação não foi executada..."}/>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:evidencia.trim()?1:.4}} disabled={!evidencia.trim()} onClick={()=>onConfirm({tipo,evidencia})}>Registrar</button>
+    </div>
+  </Modal>;
+}
+
+// ── NCHistorico ───────────────────────────────────────────────────
+function NCHistorico({nc, C}){
+  const [open, setOpen] = useState(true);
+  const Sg = mkSg(C);
+  const historico = nc?.data?.historico||[];
+  return <div style={{...Sg.card({marginTop:14})}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:open?10:0}} onClick={()=>setOpen(p=>!p)}>
+      <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>HISTÓRICO ({historico.length})</span>
+      <span style={{fontSize:10,color:C.muted}}>{open?"▲":"▼"}</span>
+    </div>
+    {open&&(historico.length===0
+      ? <div style={{fontSize:12,color:C.muted,padding:"8px 0"}}>Sem eventos registrados.</div>
+      : <div style={{display:"flex",flexDirection:"column",gap:0}}>
+          {[...historico].reverse().map((ev,i)=>(
+            <div key={i} style={{display:"flex",gap:10,padding:"7px 0",borderBottom:"1px solid "+C.border,alignItems:"flex-start"}}>
+              <div style={{fontSize:11,color:C.muted,whiteSpace:"nowrap",width:112,flexShrink:0}}>{fmtShort(ev.at)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <span style={{fontSize:12,color:C.text,fontWeight:500}}>{ev.event||ev.type}</span>
+                {ev.detail&&<span style={{fontSize:11,color:C.muted,marginLeft:6}}>{ev.detail}</span>}
+              </div>
+              <div style={{fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{ev.by}</div>
+            </div>
+          ))}
+        </div>
+    )}
+  </div>;
+}
+
+// ── NCList ────────────────────────────────────────────────────────
+function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
+  const {C}=useTheme(); const Sg=mkSg(C);
+  const [fText, setFText] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const canNew = hasPerm(currentUser,'nc.abrir');
+
+  const vis = (ncRecords||[]).filter(r=>{
+    const q = fText.toLowerCase();
+    const ok = !q||(r.code||r.id||"").toLowerCase().includes(q)||(r.title||"").toLowerCase().includes(q)||(r.data?.descricao||"").toLowerCase().includes(q);
+    const okS = !fStatus||r.status===fStatus;
+    return ok&&okS;
+  });
+
+  return <div style={{padding:"18px 22px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <div>
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Não Conformidades</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{(ncRecords||[]).length} registro{(ncRecords||[]).length!==1?"s":""} no total</div>
+      </div>
+      {canNew&&<button style={{...Sg.btn("primary"),padding:"8px 16px"}} onClick={onNew}>+ Nova NC</button>}
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, descrição..." style={{...Sg.input(),maxWidth:280}}/>
+      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:180}}>
+        <option value="">Todos os status</option>
+        {Object.entries(NC_STATUS_LABELS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
+      </select>
+      <span style={{fontSize:11,color:C.muted,alignSelf:"center"}}>{vis.length} resultado{vis.length!==1?"s":""}</span>
+    </div>
+    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+      {vis.length===0
+        ? <div style={{textAlign:"center",padding:36,color:C.muted}}>Nenhum registro encontrado.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+                {["Código","Origem","Descrição","Itens","Ações","Abertura","Status"].map(h=>(
+                  <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {vis.map((r,i)=>{
+                const d = r.data||{};
+                const itens = (d.itens||[]).filter(x=>x.codigo);
+                const acoes = (d.acoes||[]);
+                const acoesAbertas = acoes.filter(a=>!NC_ACAO_STATUS_TERMINAIS.includes(a.status)).length;
+                return <tr key={r.id||i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+                  onMouseLeave={e=>e.currentTarget.style.background=""}
+                  onClick={()=>onOpen(r.id||r.code)}>
+                  <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{d.origem||"—"}</td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:280}}>
+                    <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+                    {d.linkedROs&&d.linkedROs.length>0&&<div style={{fontSize:11,color:C.accent,marginTop:2}}>{d.linkedROs.join(" · ")}</div>}
+                  </td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>
+                    {itens.length>0?<span style={{background:C.accent+"20",color:C.accent,borderRadius:10,padding:"1px 8px",fontSize:11,fontWeight:600}}>{itens.length}</span>:"—"}
+                  </td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>
+                    {acoes.length>0
+                      ? <span style={{background:acoesAbertas>0?C.warning+"20":C.success+"20",color:acoesAbertas>0?C.warning:C.success,borderRadius:10,padding:"1px 8px",fontSize:11,fontWeight:600}}>
+                          {acoesAbertas>0?acoesAbertas+" abertas":acoes.length+" ✓"}
+                        </span>
+                      : "—"}
+                  </td>
+                  <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(r.createdAt)}</td>
+                  <td style={{padding:"9px 12px"}}><NCStatusBadge status={r.status}/></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+      }
+    </div>
+  </div>;
+}
+
+// ── NewNC ─────────────────────────────────────────────────────────
+function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
+  const {C}=useTheme(); const Sg=mkSg(C);
+  const [descricao, setDescricao] = useState(linkedRO?("Originada da RO "+(linkedRO.code||linkedRO.id)+". "+(linkedRO.data?.descricao||"")):"");
+  const [origem, setOrigem] = useState("Interna");
+  const [responsavel, setResp] = useState(currentUser?.id||"");
+  const [prazo, setPrazo] = useState("");
+  const [itens, setItens] = useState(
+    linkedRO?(linkedRO.data?.itens||[]).filter(x=>x.codigo).map(it=>({...it,dispNC:"",justificativaDisposicao:"",aprovadorConcessaoId:null,aprovadorConcessaoNome:null,concessaoSolicitadaAt:null,sucatadoAt:null,retrabInternoAt:null,retrabFornecAt:null,devolucaoAt:null})):[]
+  );
+  const [attachments, setAttachments] = useState([]);
+
+  const ativos = (allUsers||[]).filter(u=>u.active!==false);
+  const ok = descricao.trim() && origem && responsavel;
+
+  const stepHeader = (n, title, desc, ativo=true) => (
+    <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:14}}>
+      <div style={{width:24,height:24,borderRadius:"50%",background:ativo?C.accent:C.surface,color:ativo?"#fff":C.muted,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0,border:ativo?"none":"1px solid "+C.border}}>{n}</div>
+      <div>
+        <div style={{fontSize:14,fontWeight:600,color:ativo?C.text:C.muted}}>{title}</div>
+        {desc&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{desc}</div>}
+      </div>
+    </div>
+  );
+
+  const addItem = () => setItens(p=>[...p,{codigo:"",descricao:"",lote:"",qtdNC:"",dispNC:"",justificativaDisposicao:""}]);
+  const updItem = (i,k,v) => setItens(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
+  const remItem = (i) => setItens(p=>p.filter((_,j)=>j!==i));
+
+  return <div style={{padding:"18px 22px",maxWidth:1100}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+      <div>
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Nova Não Conformidade{linkedRO?" — via "+(linkedRO.code||linkedRO.id):""}</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>Campos com * são obrigatórios</div>
+      </div>
+      <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
+    </div>
+
+    {/* Bloco 1 — Dados gerais */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(1,"Dados gerais","Origem, responsável e prazo")}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+        <div>
+          <label style={Sg.lbl}>Origem *</label>
+          <select style={Sg.input()} value={origem} onChange={e=>setOrigem(e.target.value)}>
+            {NC_ORIGENS.map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Responsável principal *</label>
+          <select style={Sg.input()} value={responsavel} onChange={e=>setResp(e.target.value)}>
+            <option value="">Selecione...</option>
+            {ativos.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Prazo para conclusão</label>
+          <input type="date" style={Sg.input()} value={prazo} onChange={e=>setPrazo(e.target.value)}/>
+        </div>
+      </div>
+      <div>
+        <label style={Sg.lbl}>Descrição do problema *</label>
+        <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Descreva a não conformidade identificada..."/>
+      </div>
+      {linkedRO&&<div style={{marginTop:10,padding:"7px 12px",background:C.accent+"10",borderRadius:6,border:"1px solid "+C.accent+"30",fontSize:12,color:C.dim}}>
+        Vínculo com: <span style={{fontWeight:600,color:C.accent}}>{linkedRO.code||linkedRO.id}</span>
+      </div>}
+    </div>
+
+    {/* Bloco 2 — Itens afetados */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(2,"Itens afetados","Produtos ou lotes com não conformidade")}
+      {itens.length>0&&<table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
+        <thead>
+          <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+            {["Código","Descrição","Lote","Qtd NC",""].map(h=>(
+              <th key={h} style={{padding:"6px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {itens.map((it,i)=>(
+            <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.codigo} onChange={e=>updItem(i,"codigo",e.target.value)} placeholder="Ex: PM-0047"/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.descricao} onChange={e=>updItem(i,"descricao",e.target.value)} placeholder="Descrição..."/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:120}} value={it.lote} onChange={e=>updItem(i,"lote",e.target.value)} placeholder="Lote..."/></td>
+              <td style={{padding:"5px 6px"}}><input type="number" style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:80}} value={it.qtdNC} onChange={e=>updItem(i,"qtdNC",e.target.value)} placeholder="0"/></td>
+              <td style={{padding:"5px 8px",textAlign:"center"}}><button style={{...Sg.btn(),fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.danger+"50"}} onClick={()=>remItem(i)}>remover</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>}
+      <button style={{...Sg.btn(),fontSize:12}} onClick={addItem}>+ Adicionar item</button>
+    </div>
+
+    {/* Anexos */}
+    <div style={{...Sg.card(),marginBottom:14}}>
+      <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura_nc" currentUser={currentUser} C={C}/>
+    </div>
+
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
+        const now = new Date().toISOString();
+        const resp = ativos.find(u=>String(u.id)===String(responsavel));
+        const itensReais = itens.filter(it=>it.codigo);
+        onSave({
+          descricao, origem, responsavelId: resp?.id, responsavelNome: resp?.name,
+          prazo, itens: itensReais, linkedROs: linkedRO?[linkedRO.code||linkedRO.id]:[],
+          acoes:[], comunicacoes:[], attachments, analiseFinal:null,
+          historico:[{type:"abertura",at:now,by:currentUser?.name,byId:currentUser?.id,event:"NC aberta",detail:"Origem: "+origem+(linkedRO?" · Vinculada a "+(linkedRO.code||linkedRO.id):"")+(itensReais.length>0?" · "+itensReais.length+" item(s)":"")}]
+        });
+      }}>Abrir NC</button>
+    </div>
+  </div>;
+}
+
+// ── NCDetail ──────────────────────────────────────────────────────
+function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
+  const {C}=useTheme(); const Sg=mkSg(C);
+  const [tratarIdx, setTratarIdx] = useState(null);
+  const [aprovConcessaoIdx, setAprovConcessaoIdx] = useState(null);
+  const [novaAcaoModal, setNovaAcaoModal] = useState(false);
+  const [concluirAcaoIdx, setConcluirAcaoIdx] = useState(null);
+  const [fecharModal, setFecharModal] = useState(false);
+  const [cancelarModal, setCancelarModal] = useState(false);
+  const [cancelarMotivo, setCancelarMotivo] = useState("");
+  const [abaAtiva, setAbaAtiva] = useState("comunicacoes");
+  const [novaComunicacao, setNovaComunicacao] = useState({tipo:"",resumo:""});
+  const [addingComun, setAddingComun] = useState(false);
+  const [sigModal, setSigModal] = useState(null);
+
+  useEffect(()=>{ window.__sgqModalOpen = !!(tratarIdx!==null||aprovConcessaoIdx!==null||novaAcaoModal||concluirAcaoIdx!==null||fecharModal||cancelarModal||sigModal); return ()=>{window.__sgqModalOpen=false;}; },[tratarIdx,aprovConcessaoIdx,novaAcaoModal,concluirAcaoIdx,fecharModal,cancelarModal,sigModal]);
+
+  if(!ncRecord) return null;
+
+  const d = ncRecord.data||{};
+  const itens = d.itens||[];
+  const acoes = d.acoes||[];
+  const comunicacoes = d.comunicacoes||[];
+  const status = ncRecord.status||"em_analise";
+
+  const canAnalyze  = hasPerm(currentUser,'nc.analisar');
+  const canClose    = hasPerm(currentUser,'nc.fechar');
+  const canCancel   = hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar');
+  const isAdmin     = currentUser?.role==='admin';
+
+  // Verifica se todos os itens têm disposição terminal
+  const itensReais = itens.filter(x=>x.codigo);
+  const todosItensTerminais = itensReais.length>0 && itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC));
+
+  // Verifica se todas as ações têm status terminal
+  const todasAcoesTerminais = acoes.length===0 || acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status));
+
+  const prontaParaFechar = todosItensTerminais && todasAcoesTerminais && status==="em_analise";
+
+  // Verifica se o usuário tem concessão pendente para ele
+  const minhasConcessoes = itensReais.map((it,i)=>({it,i})).filter(({it})=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id));
+
+  const save = async (updates) => {
+    const updated = {...ncRecord, ...updates, data:{...d,...(updates.data||{})}};
+    await onUpdate(updated);
+  };
+
+  const addHistorico = (ev) => {
+    const now = new Date().toISOString();
+    return [...(d.historico||[]), {at:now, by:currentUser?.name, byId:currentUser?.id, ...ev}];
+  };
+
+  // Qualidade define disposição de um item
+  const handleTratarItem = async ({disp, justificativa, aprovadorId, aprovadorNome}) => {
+    const now = new Date().toISOString();
+    const novosItens = itens.map((it,i)=>{
+      if(i!==tratarIdx) return it;
+      return {...it, dispNC:disp, justificativaDisposicao:justificativa, tratadoAt:now, tratadoBy:currentUser?.name,
+        ...(disp==="concessao_solicitada"?{aprovadorConcessaoId:aprovadorId,aprovadorConcessaoNome:aprovadorNome,concessaoSolicitadaAt:now}:{}),
+      };
+    });
+    const item = itens[tratarIdx];
+    const hist = addHistorico({type:"disposicao_item",event:"Disposição definida",detail:(NC_DISP[disp]||{}).label+" — "+item.codigo});
+    await save({status:"em_analise",data:{...d,itens:novosItens,historico:hist}});
+    setTratarIdx(null);
+  };
+
+  // Aprovador decide sobre concessão
+  const handleAprovConcessao = async ({decisao, motivo, sig}) => {
+    const now = new Date().toISOString();
+    const novosItens = itens.map((it,i)=>{
+      if(i!==aprovConcessaoIdx) return it;
+      if(decisao==="aprovar") return {...it, dispNC:"concessao_aprovada", concessaoAprovadaAt:now, concessaoAprovadaBy:currentUser?.name, concessaoMotivo:motivo};
+      else return {...it, dispNC:"concessao_rejeitada", concessaoRejeitadaAt:now, concessaoRejeitadaBy:currentUser?.name, concessaoMotivo:motivo};
+    });
+    const item = itens[aprovConcessaoIdx];
+    const hist = addHistorico({type:"concessao",event:decisao==="aprovar"?"Concessão aprovada":"Concessão rejeitada",detail:item.codigo+" — "+motivo});
+    await save({data:{...d,itens:novosItens,historico:hist}});
+    setAprovConcessaoIdx(null);
+  };
+
+  // Adicionar ação ao plano
+  const handleNovaAcao = async (acao) => {
+    const now = new Date().toISOString();
+    const novasAcoes = [...acoes, {...acao, id:Date.now(), criadaAt:now, criadaBy:currentUser?.name}];
+    const hist = addHistorico({type:"acao_adicionada",event:"Ação adicionada ao plano",detail:acao.descricao.substring(0,60)});
+    await save({data:{...d,acoes:novasAcoes,historico:hist}});
+    setNovaAcaoModal(false);
+  };
+
+  // Concluir/justificar/cancelar ação
+  const handleConcluirAcao = async ({tipo, evidencia}) => {
+    const now = new Date().toISOString();
+    const novasAcoes = acoes.map((a,i)=>{
+      if(i!==concluirAcaoIdx) return a;
+      return {...a, status:tipo, evidencia, concluidaAt:now, concluidaBy:currentUser?.name};
+    });
+    const acao = acoes[concluirAcaoIdx];
+    const hist = addHistorico({type:"acao_concluida",event:"Ação "+tipo,detail:acao.descricao.substring(0,60)});
+    await save({data:{...d,acoes:novasAcoes,historico:hist}});
+    setConcluirAcaoIdx(null);
+  };
+
+  // Fechar NC
+  const handleFechar = async ({analise, sig}) => {
+    const now = new Date().toISOString();
+    const hist = addHistorico({type:"fechamento",event:"NC fechada",detail:"Análise final registrada"});
+    await save({status:"fechada",data:{...d,analiseFinal:analise,fechadoBy:currentUser?.name,fechadoByName:currentUser?.name,fechadoAt:now,historico:hist}});
+    setFecharModal(false);
+  };
+
+  // Cancelar NC com assinatura
+  const handleCancelar = async (sig) => {
+    const now = new Date().toISOString();
+    const hist = addHistorico({type:"cancelamento",event:"NC cancelada",detail:cancelarMotivo});
+    await save({status:"cancelada",data:{...d,canceladaBy:currentUser?.name,canceladaAt:now,cancelamentoMotivo:cancelarMotivo,historico:hist}});
+    setCancelarModal(false); setCancelarMotivo("");
+  };
+
+  // Adicionar comunicação
+  const handleAddComunicacao = async () => {
+    if(!novaComunicacao.tipo||!novaComunicacao.resumo.trim()) return;
+    const now = new Date().toISOString();
+    const nova = {...novaComunicacao, at:now, by:currentUser?.name, id:Date.now()};
+    const novasCom = [...comunicacoes, nova];
+    const hist = addHistorico({type:"comunicacao",event:"Comunicação registrada",detail:novaComunicacao.tipo+" — "+novaComunicacao.resumo.substring(0,50)});
+    await save({data:{...d,comunicacoes:novasCom,historico:hist}});
+    setNovaComunicacao({tipo:"",resumo:""}); setAddingComun(false);
+  };
+
+  // Badges de concessão pendente
+  const badgeColors = {info:C.accent,warning:C.warning,success:C.success,danger:C.danger};
+  const dispBadge = (disp) => {
+    const dd = NC_DISP[disp];
+    if(!dd) return <span style={{color:C.muted,fontSize:11}}>—</span>;
+    const c = badgeColors[dd.color]||C.muted;
+    return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:500,background:c+"15",color:c,border:"1px solid "+c+"30",whiteSpace:"nowrap"}}>{dd.short}</span>;
+  };
+
+  const acoesStatusBadge = (st) => {
+    const s = NC_ACAO_STATUS[st]||{label:st,color:"#64748B"};
+    return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:500,background:s.color+"15",color:s.color,border:"1px solid "+s.color+"30",whiteSpace:"nowrap"}}>{s.label}</span>;
+  };
+
+  return <div style={{padding:"18px 22px",maxWidth:1100}}>
+
+    {/* Cabeçalho */}
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16,gap:12,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <button style={{...Sg.btn(),fontSize:11,padding:"4px 10px"}} onClick={onBack}>← Voltar</button>
+        <div>
+          <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>{ncRecord.code||ncRecord.id}</h1>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4,flexWrap:"wrap"}}>
+            <NCStatusBadge status={status}/>
+            {d.origem&&<span style={{fontSize:12,color:C.dim,padding:"2px 8px",background:C.surface,borderRadius:4,border:"1px solid "+C.border}}>{d.origem}</span>}
+            {(d.linkedROs||[]).map(ro=>(
+              <span key={ro} style={{fontSize:12,color:C.accent,padding:"2px 8px",background:C.accent+"10",borderRadius:4,border:"1px solid "+C.accent+"30"}}>{ro}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {canCancel&&status==="em_analise"&&<button style={{...Sg.btn(),color:C.danger,borderColor:C.danger+"50",fontSize:12}} onClick={()=>setCancelarModal(true)}>Cancelar NC</button>}
+        {canClose&&prontaParaFechar&&<button style={{...Sg.btn("primary"),fontSize:12,background:"#16A34A",borderColor:"#16A34A"}} onClick={()=>setFecharModal(true)}>Fechar NC</button>}
+      </div>
+    </div>
+
+    {/* Banner pronta para fechar */}
+    {prontaParaFechar&&<div style={{marginBottom:14,padding:"10px 16px",background:"#16A34A10",borderRadius:8,border:"1px solid #16A34A40",fontSize:13,color:"#16A34A",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <span>Todos os itens e ações estão concluídos. Esta NC está pronta para ser fechada.</span>
+      {canClose&&<button style={{...Sg.btn(),background:"#16A34A",color:"#fff",borderColor:"#16A34A",fontSize:12,padding:"5px 14px"}} onClick={()=>setFecharModal(true)}>Fechar NC</button>}
+    </div>}
+
+    {/* Banner concessão pendente pra mim */}
+    {minhasConcessoes.length>0&&<div style={{marginBottom:14,padding:"10px 16px",background:C.accent+"10",borderRadius:8,border:"1px solid "+C.accent+"40",fontSize:13,color:C.accent}}>
+      Você tem {minhasConcessoes.length} aprovação(ões) de concessão pendente(s).
+      {minhasConcessoes.map(({i})=>(
+        <button key={i} style={{...Sg.btn(),fontSize:11,marginLeft:10,borderColor:C.accent,color:C.accent}} onClick={()=>setAprovConcessaoIdx(i)}>Aprovar item {(itens[i]||{}).codigo}</button>
+      ))}
+    </div>}
+
+    {/* Análise final (quando fechada) */}
+    {status==="fechada"&&d.analiseFinal&&<div style={{marginBottom:14,padding:"12px 16px",background:"#16A34A08",borderRadius:8,border:"1px solid #16A34A30"}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#16A34A",marginBottom:4,letterSpacing:.3}}>ANÁLISE FINAL</div>
+      <div style={{fontSize:13,color:C.text}}>{d.analiseFinal}</div>
+      <div style={{fontSize:11,color:C.muted,marginTop:6}}>Fechada por {d.fechadoByName} em {fmtShort(d.fechadoAt)}</div>
+    </div>}
+
+    {/* Dados gerais */}
+    <div style={{...Sg.card({marginBottom:14})}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Dados gerais</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Descrição</div>
+          <div style={{fontSize:13,color:C.text}}>{d.descricao||"—"}</div>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Responsável</div>
+          <div style={{fontSize:13,color:C.text}}>{d.responsavelNome||"—"}</div>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Prazo</div>
+          <div style={{fontSize:13,color:C.text}}>{d.prazo?new Date(d.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</div>
+        </div>
+      </div>
+      <div style={{fontSize:11,color:C.muted,marginTop:10}}>Aberta por {ncRecord.createdByName||ncRecord.owner_name||"—"} em {fmt(ncRecord.createdAt)}</div>
+    </div>
+
+    {/* Itens afetados */}
+    <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border}}>
+        <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>ITENS AFETADOS ({itensReais.length})</span>
+      </div>
+      {itensReais.length===0
+        ? <div style={{padding:24,textAlign:"center",color:C.muted,fontSize:12}}>Nenhum item registrado.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+                {["Código","Descrição","Lote","Qtd NC","Disposição","Justificativa","Tratado por","Aprovado por",""].map((h,i)=>(
+                  <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((it,i)=>{
+                if(!it.codigo) return null;
+                const pendenteMinha = it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id);
+                const podeTratar = canAnalyze && status==="em_analise" && !NC_DISP_TERMINAIS.includes(it.dispNC) && it.dispNC!=="concessao_solicitada";
+                // Coluna "Aprovado por"
+                let aprovadoPor = "—";
+                if(it.dispNC==="concessao_aprovada") aprovadoPor = (it.concessaoAprovadaBy||"—") + (it.concessaoAprovadaAt?" · "+fmtShort(it.concessaoAprovadaAt):"");
+                else if(it.dispNC==="concessao_rejeitada") aprovadoPor = (it.concessaoRejeitadaBy||"—") + " (rejeitada)";
+                else if(it.dispNC==="concessao_solicitada") aprovadoPor = it.aprovadorConcessaoNome||"—";
+                else if(NC_DISP_TERMINAIS.includes(it.dispNC)&&!it.dispNC.includes("concessao")) aprovadoPor = it.tratadoBy||"—";
+
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border,background:pendenteMinha?C.accent+"06":""}}>
+                  <td style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:C.text}}>{it.codigo}</td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.dim,maxWidth:180}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.descricao||"—"}</div></td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.muted}}>{it.lote||"—"}</td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.muted,textAlign:"center"}}>{it.qtdNC||"—"}</td>
+                  <td style={{padding:"8px 10px"}}>
+                    {it.dispNC ? dispBadge(it.dispNC) : <span style={{color:C.warning,fontSize:11,fontStyle:"italic"}}>Aguardando</span>}
+                  </td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,maxWidth:180}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.justificativaDisposicao||"—"}</div></td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{it.tratadoBy||(it.dispNC?"—":"—")}</td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{aprovadoPor}</td>
+                  <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
+                    {podeTratar&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setTratarIdx(i)}>Definir</button>}
+                    {pendenteMinha&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovConcessaoIdx(i)}>Aprovar</button>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+      }
+    </div>
+
+    {/* Plano de ações corretivas */}
+    <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border}}>
+        <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>PLANO DE AÇÕES CORRETIVAS ({acoes.length})</span>
+        {canAnalyze&&status==="em_analise"&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>setNovaAcaoModal(true)}>+ Nova ação</button>}
+      </div>
+      {acoes.length===0
+        ? <div style={{padding:24,textAlign:"center",color:C.muted,fontSize:12}}>Nenhuma ação no plano.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+                {["Ação","Responsável","Prazo","Status","Concluída por","Em",""].map((h,i)=>(
+                  <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {acoes.map((a,i)=>{
+                const isTerminal = NC_ACAO_STATUS_TERMINAIS.includes(a.status);
+                const isResp = String(a.responsavelId)===String(currentUser?.id);
+                const podeConcluir = (isResp||canAnalyze) && !isTerminal && status==="em_analise";
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.text,maxWidth:260}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.descricao}</div></td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{a.responsavelNome||"—"}</td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{a.prazo?new Date(a.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                  <td style={{padding:"8px 10px"}}>{acoesStatusBadge(a.status)}</td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{a.concluidaBy||"—"}</td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{a.concluidaAt?fmtShort(a.concluidaAt):"—"}</td>
+                  <td style={{padding:"8px 10px"}}>
+                    {podeConcluir&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setConcluirAcaoIdx(i)}>Registrar</button>}
+                    {a.evidencia&&<div style={{fontSize:11,color:C.muted,marginTop:2,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:"italic"}}>{a.evidencia}</div>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+      }
+    </div>
+
+    {/* Abas: Comunicações / Histórico */}
+    <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
+      <div style={{display:"flex",borderBottom:"1px solid "+C.border}}>
+        {[{k:"comunicacoes",l:"Comunicações ("+comunicacoes.length+")"},{k:"historico",l:"Histórico ("+(d.historico||[]).length+")"}].map(tab=>(
+          <button key={tab.k} onClick={()=>setAbaAtiva(tab.k)} style={{padding:"9px 18px",fontSize:12,fontWeight:abaAtiva===tab.k?600:400,color:abaAtiva===tab.k?C.accent:C.muted,background:"none",border:"none",cursor:"pointer",borderBottom:"2px solid "+(abaAtiva===tab.k?C.accent:"transparent"),marginBottom:-1,fontFamily:"inherit"}}>{tab.l}</button>
+        ))}
+      </div>
+      <div style={{padding:"0"}}>
+        {abaAtiva==="comunicacoes"&&<div>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+                {["Data","Tipo","Resumo","Registrou"].map((h,i)=>(
+                  <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {comunicacoes.map((c,i)=>(
+                <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmtShort(c.at)}</td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.text,whiteSpace:"nowrap"}}>{c.tipo}</td>
+                  <td style={{padding:"8px 10px",fontSize:12,color:C.dim}}>{c.resumo}</td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{c.by}</td>
+                </tr>
+              ))}
+              {comunicacoes.length===0&&!addingComun&&<tr><td colSpan={4} style={{padding:"20px 10px",textAlign:"center",fontSize:12,color:C.muted,fontStyle:"italic"}}>Nenhuma comunicação registrada.</td></tr>}
+              {addingComun&&<tr style={{background:C.surface}}>
+                <td style={{padding:"6px 8px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{new Date().toLocaleDateString("pt-BR")}</td>
+                <td style={{padding:"6px 8px"}}>
+                  <select style={{...Sg.input(),padding:"3px 6px",fontSize:11}} value={novaComunicacao.tipo} onChange={e=>setNovaComunicacao(p=>({...p,tipo:e.target.value}))}>
+                    <option value="">Tipo...</option>
+                    {["E-mail","Reunião","Telefone","Carta","Outro"].map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:"6px 8px"}}><input style={{...Sg.input(),padding:"3px 6px",fontSize:11}} value={novaComunicacao.resumo} onChange={e=>setNovaComunicacao(p=>({...p,resumo:e.target.value}))} placeholder="Resumo da comunicação..."/></td>
+                <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
+                  <button style={{...Sg.btn("primary"),fontSize:10,padding:"3px 8px",marginRight:4}} onClick={handleAddComunicacao} disabled={!novaComunicacao.tipo||!novaComunicacao.resumo.trim()}>Salvar</button>
+                  <button style={{...Sg.btn(),fontSize:10,padding:"3px 8px"}} onClick={()=>{setAddingComun(false);setNovaComunicacao({tipo:"",resumo:""});}}>✕</button>
+                </td>
+              </tr>}
+            </tbody>
+          </table>
+          {canAnalyze&&status==="em_analise"&&!addingComun&&<div style={{padding:"8px 10px",borderTop:"1px solid "+C.border}}>
+            <button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>setAddingComun(true)}>+ Registrar comunicação</button>
+          </div>}
+        </div>}
+        {abaAtiva==="historico"&&<div style={{padding:"8px 14px"}}>
+          {(d.historico||[]).length===0
+            ? <div style={{fontSize:12,color:C.muted,padding:"12px 0"}}>Sem eventos registrados.</div>
+            : <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                {[...(d.historico||[])].reverse().map((ev,i)=>(
+                  <div key={i} style={{display:"flex",gap:10,padding:"7px 0",borderBottom:"1px solid "+C.border,alignItems:"flex-start"}}>
+                    <div style={{fontSize:11,color:C.muted,whiteSpace:"nowrap",width:112,flexShrink:0}}>{fmtShort(ev.at)}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <span style={{fontSize:12,color:C.text,fontWeight:500}}>{ev.event||ev.type}</span>
+                      {ev.detail&&<span style={{fontSize:11,color:C.muted,marginLeft:6}}>{ev.detail}</span>}
+                    </div>
+                    <div style={{fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{ev.by}</div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>}
+      </div>
+    </div>
+
+    {/* Rodapé */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:10,borderTop:"1px solid "+C.border}}>
+      <div style={{fontSize:11,color:C.muted}}>Aberta por {ncRecord.createdByName||ncRecord.owner_name||"—"} em {fmt(ncRecord.createdAt)} · Última atividade {fmt(ncRecord.updatedAt||ncRecord.createdAt)}</div>
+      <button style={{...Sg.btn(),fontSize:11,padding:"4px 12px",color:C.accent,borderColor:C.accent+"50"}}>Criar RIACP a partir desta NC</button>
+    </div>
+
+    {/* Modals */}
+    {tratarIdx!==null&&<TratarItemNCModal
+      open={true} item={itens[tratarIdx]} itemIdx={tratarIdx}
+      allUsers={allUsers} currentUser={currentUser}
+      onClose={()=>setTratarIdx(null)}
+      onConfirm={handleTratarItem} C={C} Sg={Sg}/>}
+
+    {aprovConcessaoIdx!==null&&<AprovarConcessaoNCModal
+      open={true} nc={ncRecord} itemIdx={aprovConcessaoIdx}
+      currentUser={currentUser}
+      onClose={()=>setAprovConcessaoIdx(null)}
+      onConfirm={handleAprovConcessao} C={C} Sg={Sg}/>}
+
+    {novaAcaoModal&&<NovaAcaoNCModal
+      open={true} allUsers={allUsers}
+      onClose={()=>setNovaAcaoModal(false)}
+      onConfirm={handleNovaAcao} C={C} Sg={Sg}/>}
+
+    {concluirAcaoIdx!==null&&<ConcluirAcaoNCModal
+      open={true} acao={acoes[concluirAcaoIdx]}
+      onClose={()=>setConcluirAcaoIdx(null)}
+      onConfirm={handleConcluirAcao} C={C} Sg={Sg}/>}
+
+    {fecharModal&&<FecharNCModal
+      open={true} nc={ncRecord}
+      onClose={()=>setFecharModal(false)}
+      onConfirm={handleFechar} C={C} Sg={Sg}/>}
+
+    {cancelarModal&&<Modal open={true} onClose={()=>setCancelarModal(false)} title="Cancelar NC" width={480}>
+      <div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>Motivo do cancelamento *</label>
+        <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={cancelarMotivo} onChange={e=>setCancelarMotivo(e.target.value)} placeholder="Descreva o motivo..."/>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <button style={Sg.btn()} onClick={()=>setCancelarModal(false)}>Voltar</button>
+        <button style={{...Sg.btn(),color:C.danger,borderColor:C.danger,opacity:cancelarMotivo.trim()?1:.4}} disabled={!cancelarMotivo.trim()} onClick={()=>setSigModal({action:handleCancelar,title:"Confirmar cancelamento",desc:"Cancelamento da NC "+ncRecord.code,label:"Cancelar NC"})}>
+          Cancelar e assinar
+        </button>
+      </div>
+      {sigModal&&<SignatureModal
+        open={true}
+        onClose={()=>setSigModal(null)}
+        onConfirm={(sig)=>{ setSigModal(null); sigModal.action(sig); }}
+        title={sigModal.title} description={sigModal.desc} confirmLabel={sigModal.label}
+        saId={ncRecord?.code} action="nc_cancelar" C={C} Sg={Sg}/>}
+    </Modal>}
+  </div>;
+}
+
+// ================================================================
 // PRODUTOS — gerenciamento da base de produtos
 // ================================================================
 function SeedProdutos({currentUser}){
@@ -7959,14 +8853,16 @@ function App() {
   }, [loggedIn]);
 
 const loadAll = async () => {
-    const [us, rs, ros] = await Promise.all([
+    const [us, rs, ros, ncs] = await Promise.all([
       apiGet('/api/users').catch(()=>null),
       apiGet('/api/records?module=sa').catch(()=>null),
       apiGet('/api/records?module=ro').catch(()=>null),
+      apiGet('/api/records?module=nc').catch(()=>null),
     ]);
     if (us) setUR(us);
     if (rs) setRR(rs);
     if (ros) setRO(ros);
+    if (ncs) setNC_(ncs);
     try {
       const mx = await apiGet('/api/config?key=matrix');
       if (mx) {
@@ -8194,6 +9090,7 @@ const saveReq = async (r) => {
   const isSuperAdmin = loggedIn && hasPerm(loggedIn,'grupos.gerenciar');
   const selected = requests.find(r => r.id === selId);
   const selectedRO = roRecs.find(r => r.id === selId || r.code === selId);
+  const selectedNC = ncRecs.find(r => r.id === selId || r.code === selId);
 
   // ---- Browser history (back/forward button support) ----
   // Only active on real domains (not srcdoc/iframe previews)
@@ -8238,10 +9135,11 @@ const saveReq = async (r) => {
     const refresh = async () => {
       try {
         // Only refresh requests and users — config rarely changes
-        const [us, rs, ros] = await Promise.all([
+        const [us, rs, ros, ncs] = await Promise.all([
           apiGet('/api/users').catch(()=>null),
           apiGet('/api/records?module=sa').catch(()=>null),
           apiGet('/api/records?module=ro').catch(()=>null),
+          apiGet('/api/records?module=nc').catch(()=>null),
         ]);
         // Merge carefully: don't overwrite if user is actively editing
         // We compare by updatedAt / log length to detect server changes
@@ -8260,6 +9158,7 @@ const saveReq = async (r) => {
         });
         // Só atualiza ROs se não houver modal aberto (evita resetar estado do usuário)
         if (ros && !window.__sgqModalOpen) setRO(ros);
+        if (ncs && !window.__sgqModalOpen) setNC_(ncs);
         if (us) setUR(us);
       } catch {}
     };
@@ -8275,13 +9174,14 @@ const saveReq = async (r) => {
 
   // ---- Sidebar expandable sections state ----
   const [expandedSections, setExpandedSections] = useState(()=>{
-    // Auto-expand the section that contains the current view
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
     const roViews=['ro_list','ro_detail','ro_new'];
+    const ncViews=['nc_list','nc_detail','nc_new'];
     const admViews=['users','grupos','log','signatures','produtos'];
     return {
       cm: cmViews.includes(view),
       ro: roViews.includes(view),
+      nc: ncViews.includes(view),
       adm: admViews.includes(view),
     };
   });
@@ -8291,9 +9191,11 @@ const saveReq = async (r) => {
   React.useEffect(()=>{
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
     const roViews=['ro_list','ro_detail','ro_new'];
+    const ncViews=['nc_list','nc_detail','nc_new'];
     const admViews=['users','grupos','log','signatures','produtos'];
     if(cmViews.includes(view)) setExpandedSections(p=>({...p,cm:true}));
     if(roViews.includes(view)) setExpandedSections(p=>({...p,ro:true}));
+    if(ncViews.includes(view)) setExpandedSections(p=>({...p,nc:true}));
     if(admViews.includes(view)) setExpandedSections(p=>({...p,adm:true}));
   },[view]);
 
@@ -8319,6 +9221,7 @@ const saveReq = async (r) => {
     const isChildActive = view && (
       (sectionKey==='cm' && ['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'].includes(view)) ||
       (sectionKey==='ro' && ['ro_list','ro_detail','ro_new'].includes(view)) ||
+      (sectionKey==='nc' && ['nc_list','nc_detail','nc_new'].includes(view)) ||
       (sectionKey==='adm' && ['users','grupos','log','signatures'].includes(view))
     );
     return <div>
@@ -8402,8 +9305,15 @@ const saveReq = async (r) => {
           {<SidebarNavItem id="ro_aprovacoes" label="Ações pendentes" badge={pendAprov} indent/>}
         </SidebarSection>
 
+        {/* Módulo: Não Conformidade */}
+        <SidebarSection sectionKey="nc" label="Não Conformidade" icon="">
+          {hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin'
+            ? <SidebarNavItem id="nc_list" label="Registros" indent/>
+            : null}
+        </SidebarSection>
+
         {/* Módulos futuros */}
-        {['Não Conformidade','RIACP'].map(m=>(
+        {['RIACP'].map(m=>(
           <div key={m} style={{padding:'6px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',opacity:.35,cursor:'not-allowed'}}>
             <span style={{fontSize:12,color:C.muted}}>{m}</span>
             <span style={{fontSize:9,color:C.muted}}>em breve</span>
@@ -8478,6 +9388,15 @@ const saveReq = async (r) => {
         setView('ro_list');
       }}/>}
       {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
+      {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
+      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} onCancel={()=>setView('nc_list')} onSave={async(data)=>{
+        const now=new Date().toISOString();
+        const r={title:data.descricao.substring(0,80)||"Não Conformidade",status:"em_analise",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
+        const saved=await saveNC(r);
+        addSL(loggedIn.name,'criacao','Nova NC aberta',(saved&&(saved.code||saved.id))||"");
+        setView('nc_list');
+      }}/>}
+      {view==='nc_detail'&&selId&&selectedNC&&<NCDetail ncRecord={selectedNC} currentUser={loggedIn} allUsers={users} onBack={()=>setView('nc_list')} onUpdate={saveNC}/>}
       {view==='new'       &&<NewRequest currentUser={loggedIn} onSave={(f,atts)=>{const pd=phaseDl||DEFAULT_PHASE_DEADLINES;const now=new Date().toISOString();const yr=new Date().getFullYear();const id='SA-'+String(requests.length+1).padStart(3,'0')+'/'+yr;const r={id,...f,area:f.area||loggedIn.area||'Administrativo',status:'aberta',triage:null,evaluations:{},actions:[],attachments:atts||[],deadlineExtensions:[],stageDeadlines:{avaliacao_inicial:addDays(todayStr(),pd.avaliacao_inicial.days),avaliacao_areas:null,aprovacao_plano:null,montagem_plano:null,execucao:null},log:[{at:now,by:loggedIn.name,type:'criacao',event:'SA criada',detail:'Tipo: '+f.type}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now};createReq(r);nav('detail',r.id);}} onCancel={()=>nav('changes')}/>}
       {view==='detail'&&selId&&selected&&<RequestDetail request={selected} allUsers={users} matrix={matrix||mkMatrix()} crits={crits} phaseDl={phaseDl} deptQuestions={deptQ} currentUser={loggedIn} onBack={()=>nav('changes')} onUpdate={updateReq} initialTab={initialTab} focusDept={focusDept} focusAcId={focusAcId} autoOpenDrawer={!!(focusDept||focusAcId)}/>}
       {view==='matrix'    &&<MatrixEditor matrix={matrix||mkMatrix()} crits={crits} currentUser={loggedIn} onSave={saveMatrix}/>}
