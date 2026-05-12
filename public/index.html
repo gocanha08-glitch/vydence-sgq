@@ -7491,68 +7491,102 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
   </div>;
 }
 
-// ── NCPendenciasInbox — ações pendentes na NC ─────────────────────
+// ── NCAcoesGerais — gestão de todas as ações NC com filtros ──────
 function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}){
   const {C}=useTheme(); const Sg=mkSg(C);
-  const [verTudo, setVerTudo] = useState(false);
-  const [concluirModal, setConcluirModal] = useState(null); // {nc, acaoIdx}
-  const [aprovModal, setAprovModal] = useState(null);       // {nc, itemIdx}
+  const [fStatus,  setFStatus]  = useState("");   // status da ação
+  const [fTipo,    setFTipo]    = useState("");   // tipo (acao|concessao|fechar)
+  const [fNC,      setFNC]      = useState("");   // código da NC
+  const [fResp,    setFResp]    = useState("");   // responsável (id)
+  const [fMinha,   setFMinha]   = useState(false);// só minhas
+  const [concluirModal, setConcluirModal] = useState(null);
+  const [aprovModal,    setAprovModal]    = useState(null);
 
-  const isGestor = hasPerm(currentUser,'nc.ver_todas')||currentUser?.role==='admin';
-  const ncAtivas = (ncRecords||[]).filter(r=>!["fechada","cancelada"].includes(r.status));
+  const canAnalisar = hasPerm(currentUser,'nc.analisar')||currentUser?.role==='admin';
 
-  // Coleta TODAS as pendências
-  const todasPendencias = [];
-  ncAtivas.forEach(r=>{
+  // Coleta TUDO — todas NCs, todos status
+  const todasLinhas = [];
+  (ncRecords||[]).forEach(r=>{
     const d = r.data||{};
-    // Itens com concessão aguardando aprovação
-    (d.itens||[]).forEach((it,idx)=>{
-      if(it.dispNC==="concessao_solicitada"){
-        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorConcessaoId));
-        todasPendencias.push({
-          nc:r, tipo:"concessao", itemIdx:idx, item:it,
-          descricao:"Concessão — "+it.codigo+(it.descricao?" ("+it.descricao+")":""),
-          aguardando: aprov?.name||"—", aguardandoId: it.aprovadorConcessaoId,
-          isMinha: String(it.aprovadorConcessaoId)===String(currentUser?.id),
-          prazo: null,
-        });
-      }
-    });
-    // Ações do plano não terminais
+    // Ações do plano — TODAS independente de status NC
     (d.acoes||[]).forEach((a,acaoIdx)=>{
-      if(NC_ACAO_STATUS_TERMINAIS.includes(a.status)) return;
       const resp = (allUsers||[]).find(u=>String(u.id)===String(a.responsavelId));
-      todasPendencias.push({
+      todasLinhas.push({
         nc:r, tipo:"acao", acaoIdx,
         descricao: a.descricao,
-        aguardando: resp?.name||"—", aguardandoId: a.responsavelId,
+        responsavel: resp?.name||"—", responsavelId: a.responsavelId,
+        prazo: a.prazo, statusAcao: a.status,
         isMinha: String(a.responsavelId)===String(currentUser?.id),
-        prazo: a.prazo, status: a.status,
+        isTerminal: NC_ACAO_STATUS_TERMINAIS.includes(a.status),
       });
     });
-    // NC pronta para fechar
-    const itensReais = (d.itens||[]).filter(x=>x.codigo);
-    const acoes = d.acoes||[];
-    if(itensReais.length>0 &&
-       itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC)) &&
-       (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)))){
-      const canClose = hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
-      todasPendencias.push({
-        nc:r, tipo:"fechar",
-        descricao:"NC pronta para fechamento — análise final pendente",
-        aguardando:"Qualidade", aguardandoId:null,
-        isMinha: canClose, prazo:null,
+    // Concessões de itens
+    (d.itens||[]).forEach((it,itemIdx)=>{
+      if(!["concessao_solicitada","concessao_aprovada","concessao_rejeitada"].includes(it.dispNC)) return;
+      const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorConcessaoId));
+      const stConc = it.dispNC==="concessao_solicitada"?"pendente":it.dispNC==="concessao_aprovada"?"concluida":"cancelada";
+      todasLinhas.push({
+        nc:r, tipo:"concessao", itemIdx,
+        descricao: "Concessão — "+it.codigo+(it.descricao?" ("+it.descricao+")":""),
+        responsavel: aprov?.name||"—", responsavelId: it.aprovadorConcessaoId,
+        prazo: null, statusAcao: stConc,
+        isMinha: String(it.aprovadorConcessaoId)===String(currentUser?.id),
+        isTerminal: it.dispNC!=="concessao_solicitada",
       });
+    });
+    // NC pronta para fechar — só mostra se não fechada/cancelada
+    if(!["fechada","cancelada"].includes(r.status)){
+      const itensReais=(d.itens||[]).filter(x=>x.codigo);
+      const acoes=d.acoes||[];
+      const pronta = itensReais.length>0 &&
+        itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC)) &&
+        (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)));
+      if(pronta){
+        const canClose=hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
+        todasLinhas.push({
+          nc:r, tipo:"fechar", itemIdx:null, acaoIdx:null,
+          descricao:"NC pronta — análise final pendente",
+          responsavel:"Qualidade", responsavelId:null,
+          prazo:null, statusAcao:"pendente",
+          isMinha:canClose, isTerminal:false,
+        });
+      }
     }
   });
 
-  const minhasPendencias = todasPendencias.filter(p=>p.isMinha);
-  const listaVisivel = (isGestor&&verTudo) ? todasPendencias : minhasPendencias;
+  // Filtros
+  const vis = todasLinhas.filter(p=>{
+    if(fMinha && !p.isMinha) return false;
+    if(fStatus){
+      if(fStatus==="pendente" && p.isTerminal) return false;
+      if(fStatus==="terminal" && !p.isTerminal) return false;
+      if(!["pendente","terminal"].includes(fStatus) && p.statusAcao!==fStatus) return false;
+    }
+    if(fTipo && p.tipo!==fTipo) return false;
+    if(fNC && !(p.nc.code||p.nc.id||"").toLowerCase().includes(fNC.toLowerCase())) return false;
+    if(fResp && String(p.responsavelId)!==String(fResp)) return false;
+    return true;
+  });
+
+  const pendentes = todasLinhas.filter(p=>p.isMinha&&!p.isTerminal).length;
+
+  // Lista de NCs únicas para o filtro
+  const ncsUnicas = [...new Map((ncRecords||[]).map(r=>[(r.code||r.id), r])).values()];
+  const responsaveisUnicos = [...new Map(todasLinhas.filter(p=>p.responsavelId).map(p=>[String(p.responsavelId),{id:p.responsavelId,name:p.responsavel}])).values()];
 
   const TIPO_META = {
     concessao: {label:"Concessão",          cor:"#185FA5"},
     acao:      {label:"Ação corretiva",     cor:"#D97706"},
-    fechar:    {label:"Pronta para fechar", cor:"#16A34A"},
+    fechar:    {label:"Pronta p/ fechar",   cor:"#16A34A"},
+  };
+
+  const statusBadge = (st, isTerminal) => {
+    if(st==="pendente"&&!isTerminal){
+      const s=NC_ACAO_STATUS["pendente"]||{label:"Pendente",color:"#D97706"};
+      return <span style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:s.color+"18",color:s.color,fontWeight:500,whiteSpace:"nowrap"}}>{s.label}</span>;
+    }
+    const s = NC_ACAO_STATUS[st]||{label:st||"—",color:"#64748B"};
+    return <span style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:s.color+"18",color:s.color,fontWeight:500,whiteSpace:"nowrap"}}>{s.label}</span>;
   };
 
   const handleConcluirAcao = async ({tipo, evidencia}) => {
@@ -7569,7 +7603,7 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
     setConcluirModal(null);
   };
 
-  const handleAprovConcessao = async ({decisao, motivo, sig}) => {
+  const handleAprovConcessao = async ({decisao, motivo}) => {
     if(!aprovModal) return;
     const {nc, itemIdx} = aprovModal;
     const d = nc.data||{};
@@ -7579,76 +7613,96 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
       if(decisao==="aprovar") return {...it,dispNC:"concessao_aprovada",concessaoAprovadaAt:now,concessaoAprovadaBy:currentUser?.name,concessaoMotivo:motivo};
       return {...it,dispNC:"concessao_rejeitada",concessaoRejeitadaAt:now,concessaoRejeitadaBy:currentUser?.name,concessaoMotivo:motivo};
     });
-    const item = (d.itens||[])[itemIdx];
-    const hist = [...(d.historico||[]),{type:"concessao",at:now,by:currentUser?.name,byId:currentUser?.id,event:decisao==="aprovar"?"Concessão aprovada":"Concessão rejeitada",detail:(item?.codigo||"")+" — "+motivo}];
+    const item=(d.itens||[])[itemIdx];
+    const hist=[...(d.historico||[]),{type:"concessao",at:now,by:currentUser?.name,byId:currentUser?.id,event:decisao==="aprovar"?"Concessão aprovada":"Concessão rejeitada",detail:(item?.codigo||"")+" — "+motivo}];
     await onUpdate({...nc, data:{...d, itens:novosItens, historico:hist}});
     setAprovModal(null);
   };
 
   return <div style={{padding:"18px 22px",maxWidth:1100}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
       <div>
-        <div style={{fontSize:18,fontWeight:600,color:C.text}}>Ações pendentes — NC</div>
-        <div style={{fontSize:12,color:C.muted,marginTop:3}}>
-          {listaVisivel.length===0?"Nenhuma pendência":listaVisivel.length+" pendência"+(listaVisivel.length!==1?"s":"")}
-          {!verTudo&&isGestor&&todasPendencias.length>minhasPendencias.length&&
-            <span style={{color:C.accent}}> · {todasPendencias.length-minhasPendencias.length} de outras pessoas</span>}
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Gestão de ações — NC</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+          {vis.length} registro{vis.length!==1?"s":""} · {pendentes} pendente{pendentes!==1?"s":""} para você
         </div>
       </div>
-      {isGestor&&<div style={{display:"flex",gap:6}}>
-        <button style={{...Sg.btn(!verTudo?"primary":""),fontSize:12,padding:"6px 14px"}} onClick={()=>setVerTudo(false)}>Minhas ({minhasPendencias.length})</button>
-        <button style={{...Sg.btn(verTudo?"primary":""),fontSize:12,padding:"6px 14px"}} onClick={()=>setVerTudo(true)}>Todas ({todasPendencias.length})</button>
-      </div>}
     </div>
 
-    {listaVisivel.length===0
-      ? <div style={{...Sg.card(),padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13}}>
-          {verTudo&&isGestor?"Nenhuma pendência em aberto nas NCs.":"Nenhuma pendência aguardando você nas NCs."}
-        </div>
-      : <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+    {/* Filtros */}
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
+        <option value="">Todos os status</option>
+        <option value="pendente">Pendentes</option>
+        <option value="em_andamento">Em andamento</option>
+        <option value="concluida">Concluídas</option>
+        <option value="justificada">Justificadas</option>
+        <option value="cancelada">Canceladas</option>
+        <option value="terminal">Todos terminais</option>
+      </select>
+      <select value={fTipo} onChange={e=>setFTipo(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
+        <option value="">Todos os tipos</option>
+        <option value="acao">Ação corretiva</option>
+        <option value="concessao">Concessão</option>
+        <option value="fechar">Pronta p/ fechar</option>
+      </select>
+      <select value={fNC} onChange={e=>setFNC(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
+        <option value="">Todas as NCs</option>
+        {ncsUnicas.map(r=><option key={r.code||r.id} value={r.code||r.id}>{r.code||r.id}</option>)}
+      </select>
+      <select value={fResp} onChange={e=>setFResp(e.target.value)} style={{...Sg.input(),maxWidth:180}}>
+        <option value="">Todos os responsáveis</option>
+        {responsaveisUnicos.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+      </select>
+      <label style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.dim,cursor:"pointer",userSelect:"none"}}>
+        <input type="checkbox" checked={fMinha} onChange={e=>setFMinha(e.target.checked)} style={{cursor:"pointer"}}/>
+        Só minhas
+      </label>
+      {(fStatus||fTipo||fNC||fResp||fMinha)&&
+        <button style={{...Sg.btn(),fontSize:11,padding:"3px 10px",color:C.muted}} onClick={()=>{setFStatus("");setFTipo("");setFNC("");setFResp("");setFMinha(false);}}>Limpar</button>}
+      <span style={{fontSize:11,color:C.muted,marginLeft:"auto"}}>{vis.length} resultado{vis.length!==1?"s":""}</span>
+    </div>
+
+    {/* Tabela */}
+    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+      {vis.length===0
+        ? <div style={{padding:"32px 20px",textAlign:"center",color:C.muted,fontSize:13}}>Nenhum registro encontrado com esses filtros.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
             <thead>
               <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>NC</th>
-                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Tipo</th>
-                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Descrição</th>
-                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Prazo</th>
-                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Status</th>
-                {verTudo&&isGestor&&<th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Aguardando</th>}
-                <th style={{padding:"7px 10px"}}></th>
+                {["NC","Tipo","Descrição","Responsável","Prazo","Status",""].map((h,i)=>(
+                  <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {listaVisivel.map((p,i)=>{
+              {vis.map((p,i)=>{
                 const meta = TIPO_META[p.tipo]||{label:p.tipo,cor:C.muted};
-                const st = p.tipo==="acao" ? (NC_ACAO_STATUS[p.status]||{label:p.status,color:C.muted}) : null;
-                return <tr key={i} style={{borderBottom:"1px solid "+C.border+"44"}}>
-                  <td style={{padding:"10px 10px",fontWeight:700,color:C.accent,whiteSpace:"nowrap",cursor:"pointer"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>
-                    {p.nc.code||p.nc.id}
+                const podeAgir = p.isMinha && !p.isTerminal;
+                const ncStatus = NC_STATUS_LABELS[p.nc.status]||{label:p.nc.status,color:"#64748B"};
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border+"55",background:podeAgir&&!p.isTerminal?"":undefined}}>
+                  <td style={{padding:"9px 10px",whiteSpace:"nowrap"}}>
+                    <span style={{fontWeight:700,color:C.accent,cursor:"pointer"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>{p.nc.code||p.nc.id}</span>
+                    <div style={{fontSize:10,marginTop:2}}><span style={{padding:"1px 5px",borderRadius:3,background:ncStatus.color+"18",color:ncStatus.color,fontWeight:500}}>{ncStatus.label}</span></div>
                   </td>
-                  <td style={{padding:"10px 10px"}}>
-                    <span style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:meta.cor+"18",color:meta.cor,fontWeight:500,whiteSpace:"nowrap"}}>{meta.label}</span>
+                  <td style={{padding:"9px 10px"}}>
+                    <span style={{fontSize:11,padding:"2px 7px",borderRadius:5,background:meta.cor+"18",color:meta.cor,fontWeight:500,whiteSpace:"nowrap"}}>{meta.label}</span>
                   </td>
-                  <td style={{padding:"10px 10px",color:C.text,fontSize:12,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.descricao}</td>
-                  <td style={{padding:"10px 10px",fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{p.prazo?new Date(p.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
-                  <td style={{padding:"10px 10px"}}>
-                    {st&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:st.color+"18",color:st.color,fontWeight:500,whiteSpace:"nowrap"}}>{st.label}</span>}
-                    {p.tipo==="concessao"&&<span style={{fontSize:11,color:C.accent,fontStyle:"italic"}}>Aguardando aprovação</span>}
-                    {p.tipo==="fechar"&&<span style={{fontSize:11,color:C.success,fontStyle:"italic"}}>Pronta para fechar</span>}
-                  </td>
-                  {verTudo&&isGestor&&<td style={{padding:"10px 10px",fontSize:12,color:p.isMinha?C.accent:C.text,fontWeight:p.isMinha?600:400}}>{p.isMinha?"Você":p.aguardando}</td>}
-                  <td style={{padding:"10px 10px",textAlign:"right",whiteSpace:"nowrap"}}>
-                    {p.tipo==="acao"&&p.isMinha&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 12px"}} onClick={()=>setConcluirModal({nc:p.nc,acaoIdx:p.acaoIdx})}>Registrar</button>}
-                    {p.tipo==="concessao"&&p.isMinha&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 12px"}} onClick={()=>setAprovModal({nc:p.nc,itemIdx:p.itemIdx})}>Aprovar</button>}
-                    {p.tipo==="fechar"&&p.isMinha&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px",color:C.success,borderColor:C.success+"50"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>Ver NC</button>}
-                    {!p.isMinha&&<span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>aguardando</span>}
+                  <td style={{padding:"9px 10px",color:C.text,maxWidth:240}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.descricao}</div></td>
+                  <td style={{padding:"9px 10px",color:p.isMinha?C.accent:C.dim,fontWeight:p.isMinha?600:400,whiteSpace:"nowrap"}}>{p.isMinha?"Você":p.responsavel}</td>
+                  <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{p.prazo?new Date(p.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                  <td style={{padding:"9px 10px"}}>{statusBadge(p.statusAcao,p.isTerminal)}</td>
+                  <td style={{padding:"9px 10px",textAlign:"right",whiteSpace:"nowrap"}}>
+                    {p.tipo==="acao"&&podeAgir&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setConcluirModal({nc:p.nc,acaoIdx:p.acaoIdx})}>Registrar</button>}
+                    {p.tipo==="concessao"&&podeAgir&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovModal({nc:p.nc,itemIdx:p.itemIdx})}>Aprovar</button>}
+                    {p.tipo==="fechar"&&podeAgir&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px",color:C.success,borderColor:C.success+"50"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>Ver NC</button>}
                   </td>
                 </tr>;
               })}
             </tbody>
           </table>
-        </div>
-    }
+      }
+    </div>
 
     {concluirModal&&<ConcluirAcaoNCModal
       open={true}
@@ -7941,6 +7995,7 @@ const ALL_PERMS_META = [
     {id:"nc.analisar", label:"Analisar NC"},
     {id:"nc.aprovar",  label:"Aprovar NC"},
     {id:"nc.fechar",   label:"Fechar NC"},
+    {id:"nc.cancelar", label:"Cancelar NC"},
     {id:"nc.excluir",  label:"Excluir NC"},
     {id:"nc.ver_todas",label:"Ver todas as NCs"},
   ]},
@@ -9615,7 +9670,7 @@ const saveReq = async (r) => {
             ? <SidebarNavItem id="nc_list" label="Registros" indent/>
             : null}
           {(hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||loggedIn?.role==='admin')&&
-            <SidebarNavItem id="nc_pendencias" label="Ações pendentes" badge={pendNCBadge} indent/>}
+            <SidebarNavItem id="nc_pendencias" label="Gestão de ações" badge={pendNCBadge} indent/>}
         </SidebarSection>
 
         {/* Módulos futuros */}
