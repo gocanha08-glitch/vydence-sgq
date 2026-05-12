@@ -3124,7 +3124,7 @@ function MyTasksDrawer({open,onClose,requests,currentUser,allUsers,crits,initial
 }
 
 // ================================================================
-function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onOpenEval,onOpenAction,onNew}){
+function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNavRO,onNavNC,onOpenEval,onOpenAction,onNew}){
   const {C}=useTheme();const Sg=mkSg(C);
   const isAdmin=hasPerm(currentUser,'sa.avaliacao_inicial');
   const h=new Date().getHours(),nome=currentUser.name.split(" ")[0];
@@ -3234,6 +3234,31 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
   }) : [];
 
   const pendRO = roParaAnalisar.length + roParaAprovar.length + roParaConcluir.length + roParaValidar.length;
+
+  // ── Pendências NC ────────────────────────────────────────────────
+  const canNC = hasPerm(currentUser,'nc.abrir')||hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
+  const ncAtivas = (ncRecs||[]).filter(r=>!["fechada","cancelada"].includes(r.status));
+  // Itens com concessão aguardando minha aprovação
+  const ncConcessoesMinha = ncAtivas.reduce((acc,r)=>{
+    const itens = r.data?.itens||[];
+    const minhas = itens.filter(it=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id));
+    return acc + minhas.length;
+  },0);
+  // Ações do plano onde sou responsável e não terminais
+  const ncAcoesMinha = ncAtivas.reduce((acc,r)=>{
+    const acoes = r.data?.acoes||[];
+    return acc + acoes.filter(a=>String(a.responsavelId)===String(currentUser?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status)).length;
+  },0);
+  // NCs prontas para fechar
+  const canCloseNC = hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
+  const ncParaFechar = canCloseNC ? ncAtivas.filter(r=>{
+    const itens = (r.data?.itens||[]).filter(x=>x.codigo);
+    const acoes = r.data?.acoes||[];
+    if(!itens.length) return false;
+    return itens.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC)) &&
+           (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)));
+  }) : [];
+  const pendNC = ncConcessoesMinha + ncAcoesMinha + ncParaFechar.length;
   const pendCMTotal=aprovSGQ.length+analises.length+acoes.length;
   const daysSince=d=>d?Math.floor((Date.now()-new Date(d))/(1000*60*60*24)):null;
 
@@ -3253,7 +3278,11 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
           analises.length>0&&{label:analises.length+" avaliar",color:C.accent},
           acoes.length>0&&{label:acoes.length+" ações",color:C.success},
         ].filter(Boolean)},
-        {key:'nc',label:'Não Conformidade',pend:0,tags:[],disabled:true},
+        {key:'nc',label:'Não Conformidade',pend:pendNC,tags:[
+          ncConcessoesMinha>0&&{label:ncConcessoesMinha+" concessões",color:C.accent},
+          ncAcoesMinha>0&&{label:ncAcoesMinha+" ações",color:C.warning},
+          ncParaFechar.length>0&&{label:ncParaFechar.length+" fechar",color:C.success},
+        ].filter(Boolean),disabled:!canNC},
         {key:'riacp',label:'RIACP',pend:0,tags:[],disabled:true},
       ].map(mod=>(
         <div key={mod.key}
@@ -3290,10 +3319,10 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     <ModuleCards/>
 
     {activeModule===null&&<div style={{marginBottom:16}}>
-      {(pendRO+pendCMTotal)>0
+      {(pendRO+pendCMTotal+pendNC)>0
         ?<div style={{...Sg.card({marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px"})}}>
           <div>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>{pendRO+pendCMTotal} pendência{(pendRO+pendCMTotal)!==1?"s":""} no total</div>
+            <div style={{fontSize:13,fontWeight:600,color:C.text}}>{pendRO+pendCMTotal+pendNC} pendência{(pendRO+pendCMTotal+pendNC)!==1?"s":""} no total</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>Selecione um módulo acima para ver os detalhes</div>
           </div>
         </div>
@@ -3305,8 +3334,10 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
       <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase",marginBottom:8}}>Ações rápidas</div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         {hasPerm(currentUser,'ro.abrir')&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('ro_new')}>+ Nova RO</button>}
+        {hasPerm(currentUser,'nc.abrir')&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('nc_new')}>+ Nova NC</button>}
         {isAdmin&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNew()}>+ Nova SA</button>}
         {hasPerm(currentUser,'ro.abrir')&&<button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('ro_list')}>Ver Ocorrências</button>}
+        {canNC&&<button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('nc_list')}>Ver NCs</button>}
         <button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('changes')}>Ver Controles</button>
       </div>
     </div>}
@@ -3559,12 +3590,86 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
         </div>
       </div>}
     </div>}
+    {activeModule==='nc'&&<div style={{marginBottom:16}}>
+      {ncConcessoesMinha>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>CONCESSÕES A APROVAR ({ncConcessoesMinha})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 130px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["NC","Descrição","Item","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {ncAtivas.filter(r=>(r.data?.itens||[]).some(it=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id))).map((r,i)=>{
+            const itPend = (r.data?.itens||[]).filter(it=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id));
+            return itPend.map((it,j)=>(
+              <div key={i+"-"+j} onClick={()=>onNavNC(r.id||r.code)}
+                style={{display:"grid",gridTemplateColumns:"110px 1fr 130px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+                <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.data?.descricao||r.title||"—"}</div>
+                <div style={{fontSize:11,color:C.dim,fontWeight:600}}>{it.codigo}</div>
+                <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.accent+"18",color:C.accent}}>Aprovar</span>
+              </div>
+            ));
+          })}
+        </div>
+      </div>}
+      {ncAcoesMinha>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>AÇÕES DO PLANO — MINHA RESPONSABILIDADE ({ncAcoesMinha})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 120px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["NC","Ação","Prazo","Status"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {ncAtivas.filter(r=>(r.data?.acoes||[]).some(a=>String(a.responsavelId)===String(currentUser?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status))).map((r,i)=>{
+            const acoesMinha = (r.data?.acoes||[]).filter(a=>String(a.responsavelId)===String(currentUser?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status));
+            return acoesMinha.map((a,j)=>{
+              const st = NC_ACAO_STATUS[a.status]||{label:a.status,color:C.muted};
+              return <div key={i+"-"+j} onClick={()=>onNavNC(r.id||r.code)}
+                style={{display:"grid",gridTemplateColumns:"110px 1fr 120px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+                <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.descricao}</div>
+                <div style={{fontSize:11,color:C.muted}}>{a.prazo?new Date(a.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</div>
+                <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:st.color+"18",color:st.color,whiteSpace:"nowrap"}}>{st.label}</span>
+              </div>;
+            });
+          })}
+        </div>
+      </div>}
+      {ncParaFechar.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.success,letterSpacing:.7,marginBottom:6}}>PRONTAS PARA FECHAR ({ncParaFechar.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 120px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["NC","Descrição","Origem","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {ncParaFechar.map((r,i)=>(
+            <div key={i} onClick={()=>onNavNC(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 120px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+              <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.data?.descricao||r.title||"—"}</div>
+              <div style={{fontSize:11,color:C.dim}}>{r.data?.origem||"—"}</div>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.success+"18",color:C.success}}>Fechar</span>
+            </div>
+          ))}
+        </div>
+      </div>}
+      {pendNC===0&&<div style={{...Sg.card({padding:"28px 20px",textAlign:"center"}),color:C.muted,fontSize:13}}>Nenhuma pendência em NC no momento.</div>}
+      <div style={{marginTop:10,display:"flex",gap:8}}>
+        {hasPerm(currentUser,'nc.abrir')&&<button style={{...Sg.btn("primary"),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('nc_new')}>+ Nova NC</button>}
+        <button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('nc_list')}>Ver todas as NCs</button>
+        <button style={{...Sg.btn(),fontSize:12,padding:"7px 16px"}} onClick={()=>onNav('nc_pendencias')}>Ações pendentes</button>
+      </div>
+    </div>}
   </div>;
 }
-
-
-// ================================================================
-// CONTROLES DE MUDANCA v10 — lista de SAs com data abertura + prazo etapa
 // ================================================================
 // ResizableTable — table with draggable column dividers
 // ================================================================
@@ -7386,6 +7491,183 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
   </div>;
 }
 
+// ── NCPendenciasInbox — ações pendentes na NC ─────────────────────
+function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}){
+  const {C}=useTheme(); const Sg=mkSg(C);
+  const [verTudo, setVerTudo] = useState(false);
+  const [concluirModal, setConcluirModal] = useState(null); // {nc, acaoIdx}
+  const [aprovModal, setAprovModal] = useState(null);       // {nc, itemIdx}
+
+  const isGestor = hasPerm(currentUser,'nc.ver_todas')||currentUser?.role==='admin';
+  const ncAtivas = (ncRecords||[]).filter(r=>!["fechada","cancelada"].includes(r.status));
+
+  // Coleta TODAS as pendências
+  const todasPendencias = [];
+  ncAtivas.forEach(r=>{
+    const d = r.data||{};
+    // Itens com concessão aguardando aprovação
+    (d.itens||[]).forEach((it,idx)=>{
+      if(it.dispNC==="concessao_solicitada"){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorConcessaoId));
+        todasPendencias.push({
+          nc:r, tipo:"concessao", itemIdx:idx, item:it,
+          descricao:"Concessão — "+it.codigo+(it.descricao?" ("+it.descricao+")":""),
+          aguardando: aprov?.name||"—", aguardandoId: it.aprovadorConcessaoId,
+          isMinha: String(it.aprovadorConcessaoId)===String(currentUser?.id),
+          prazo: null,
+        });
+      }
+    });
+    // Ações do plano não terminais
+    (d.acoes||[]).forEach((a,acaoIdx)=>{
+      if(NC_ACAO_STATUS_TERMINAIS.includes(a.status)) return;
+      const resp = (allUsers||[]).find(u=>String(u.id)===String(a.responsavelId));
+      todasPendencias.push({
+        nc:r, tipo:"acao", acaoIdx,
+        descricao: a.descricao,
+        aguardando: resp?.name||"—", aguardandoId: a.responsavelId,
+        isMinha: String(a.responsavelId)===String(currentUser?.id),
+        prazo: a.prazo, status: a.status,
+      });
+    });
+    // NC pronta para fechar
+    const itensReais = (d.itens||[]).filter(x=>x.codigo);
+    const acoes = d.acoes||[];
+    if(itensReais.length>0 &&
+       itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC)) &&
+       (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)))){
+      const canClose = hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
+      todasPendencias.push({
+        nc:r, tipo:"fechar",
+        descricao:"NC pronta para fechamento — análise final pendente",
+        aguardando:"Qualidade", aguardandoId:null,
+        isMinha: canClose, prazo:null,
+      });
+    }
+  });
+
+  const minhasPendencias = todasPendencias.filter(p=>p.isMinha);
+  const listaVisivel = (isGestor&&verTudo) ? todasPendencias : minhasPendencias;
+
+  const TIPO_META = {
+    concessao: {label:"Concessão",          cor:"#185FA5"},
+    acao:      {label:"Ação corretiva",     cor:"#D97706"},
+    fechar:    {label:"Pronta para fechar", cor:"#16A34A"},
+  };
+
+  const handleConcluirAcao = async ({tipo, evidencia}) => {
+    if(!concluirModal) return;
+    const {nc, acaoIdx} = concluirModal;
+    const d = nc.data||{};
+    const now = new Date().toISOString();
+    const novasAcoes = (d.acoes||[]).map((a,i)=>{
+      if(i!==acaoIdx) return a;
+      return {...a, status:tipo, evidencia, concluidaAt:now, concluidaBy:currentUser?.name};
+    });
+    const hist = [...(d.historico||[]),{type:"acao_concluida",at:now,by:currentUser?.name,byId:currentUser?.id,event:"Ação "+tipo,detail:(d.acoes[acaoIdx]?.descricao||"").substring(0,60)}];
+    await onUpdate({...nc, data:{...d, acoes:novasAcoes, historico:hist}});
+    setConcluirModal(null);
+  };
+
+  const handleAprovConcessao = async ({decisao, motivo, sig}) => {
+    if(!aprovModal) return;
+    const {nc, itemIdx} = aprovModal;
+    const d = nc.data||{};
+    const now = new Date().toISOString();
+    const novosItens = (d.itens||[]).map((it,i)=>{
+      if(i!==itemIdx) return it;
+      if(decisao==="aprovar") return {...it,dispNC:"concessao_aprovada",concessaoAprovadaAt:now,concessaoAprovadaBy:currentUser?.name,concessaoMotivo:motivo};
+      return {...it,dispNC:"concessao_rejeitada",concessaoRejeitadaAt:now,concessaoRejeitadaBy:currentUser?.name,concessaoMotivo:motivo};
+    });
+    const item = (d.itens||[])[itemIdx];
+    const hist = [...(d.historico||[]),{type:"concessao",at:now,by:currentUser?.name,byId:currentUser?.id,event:decisao==="aprovar"?"Concessão aprovada":"Concessão rejeitada",detail:(item?.codigo||"")+" — "+motivo}];
+    await onUpdate({...nc, data:{...d, itens:novosItens, historico:hist}});
+    setAprovModal(null);
+  };
+
+  return <div style={{padding:"18px 22px",maxWidth:1100}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+      <div>
+        <div style={{fontSize:18,fontWeight:600,color:C.text}}>Ações pendentes — NC</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:3}}>
+          {listaVisivel.length===0?"Nenhuma pendência":listaVisivel.length+" pendência"+(listaVisivel.length!==1?"s":"")}
+          {!verTudo&&isGestor&&todasPendencias.length>minhasPendencias.length&&
+            <span style={{color:C.accent}}> · {todasPendencias.length-minhasPendencias.length} de outras pessoas</span>}
+        </div>
+      </div>
+      {isGestor&&<div style={{display:"flex",gap:6}}>
+        <button style={{...Sg.btn(!verTudo?"primary":""),fontSize:12,padding:"6px 14px"}} onClick={()=>setVerTudo(false)}>Minhas ({minhasPendencias.length})</button>
+        <button style={{...Sg.btn(verTudo?"primary":""),fontSize:12,padding:"6px 14px"}} onClick={()=>setVerTudo(true)}>Todas ({todasPendencias.length})</button>
+      </div>}
+    </div>
+
+    {listaVisivel.length===0
+      ? <div style={{...Sg.card(),padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13}}>
+          {verTudo&&isGestor?"Nenhuma pendência em aberto nas NCs.":"Nenhuma pendência aguardando você nas NCs."}
+        </div>
+      : <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>NC</th>
+                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Tipo</th>
+                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Descrição</th>
+                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Prazo</th>
+                <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Status</th>
+                {verTudo&&isGestor&&<th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:C.muted,fontSize:11}}>Aguardando</th>}
+                <th style={{padding:"7px 10px"}}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaVisivel.map((p,i)=>{
+                const meta = TIPO_META[p.tipo]||{label:p.tipo,cor:C.muted};
+                const st = p.tipo==="acao" ? (NC_ACAO_STATUS[p.status]||{label:p.status,color:C.muted}) : null;
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border+"44"}}>
+                  <td style={{padding:"10px 10px",fontWeight:700,color:C.accent,whiteSpace:"nowrap",cursor:"pointer"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>
+                    {p.nc.code||p.nc.id}
+                  </td>
+                  <td style={{padding:"10px 10px"}}>
+                    <span style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:meta.cor+"18",color:meta.cor,fontWeight:500,whiteSpace:"nowrap"}}>{meta.label}</span>
+                  </td>
+                  <td style={{padding:"10px 10px",color:C.text,fontSize:12,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.descricao}</td>
+                  <td style={{padding:"10px 10px",fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{p.prazo?new Date(p.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                  <td style={{padding:"10px 10px"}}>
+                    {st&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:st.color+"18",color:st.color,fontWeight:500,whiteSpace:"nowrap"}}>{st.label}</span>}
+                    {p.tipo==="concessao"&&<span style={{fontSize:11,color:C.accent,fontStyle:"italic"}}>Aguardando aprovação</span>}
+                    {p.tipo==="fechar"&&<span style={{fontSize:11,color:C.success,fontStyle:"italic"}}>Pronta para fechar</span>}
+                  </td>
+                  {verTudo&&isGestor&&<td style={{padding:"10px 10px",fontSize:12,color:p.isMinha?C.accent:C.text,fontWeight:p.isMinha?600:400}}>{p.isMinha?"Você":p.aguardando}</td>}
+                  <td style={{padding:"10px 10px",textAlign:"right",whiteSpace:"nowrap"}}>
+                    {p.tipo==="acao"&&p.isMinha&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 12px"}} onClick={()=>setConcluirModal({nc:p.nc,acaoIdx:p.acaoIdx})}>Registrar</button>}
+                    {p.tipo==="concessao"&&p.isMinha&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"4px 12px"}} onClick={()=>setAprovModal({nc:p.nc,itemIdx:p.itemIdx})}>Aprovar</button>}
+                    {p.tipo==="fechar"&&p.isMinha&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px",color:C.success,borderColor:C.success+"50"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>Ver NC</button>}
+                    {!p.isMinha&&<span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>aguardando</span>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+    }
+
+    {concluirModal&&<ConcluirAcaoNCModal
+      open={true}
+      acao={(concluirModal.nc.data?.acoes||[])[concluirModal.acaoIdx]}
+      onClose={()=>setConcluirModal(null)}
+      onConfirm={handleConcluirAcao}
+      C={C} Sg={Sg}/>}
+
+    {aprovModal&&<AprovarConcessaoNCModal
+      open={true}
+      nc={aprovModal.nc}
+      itemIdx={aprovModal.itemIdx}
+      currentUser={currentUser}
+      onClose={()=>setAprovModal(null)}
+      onConfirm={handleAprovConcessao}
+      C={C} Sg={Sg}/>}
+  </div>;
+}
+
 // ================================================================
 // PRODUTOS — gerenciamento da base de produtos
 // ================================================================
@@ -7660,6 +7942,7 @@ const ALL_PERMS_META = [
     {id:"nc.aprovar",  label:"Aprovar NC"},
     {id:"nc.fechar",   label:"Fechar NC"},
     {id:"nc.excluir",  label:"Excluir NC"},
+    {id:"nc.ver_todas",label:"Ver todas as NCs"},
   ]},
   {section:"RIACP", items:[
     {id:"riacp.abrir",    label:"Abrir RIACP"},
@@ -9176,7 +9459,7 @@ const saveReq = async (r) => {
   const [expandedSections, setExpandedSections] = useState(()=>{
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
     const roViews=['ro_list','ro_detail','ro_new'];
-    const ncViews=['nc_list','nc_detail','nc_new'];
+    const ncViews=['nc_list','nc_detail','nc_new','nc_pendencias'];
     const admViews=['users','grupos','log','signatures','produtos'];
     return {
       cm: cmViews.includes(view),
@@ -9191,7 +9474,7 @@ const saveReq = async (r) => {
   React.useEffect(()=>{
     const cmViews=['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'];
     const roViews=['ro_list','ro_detail','ro_new'];
-    const ncViews=['nc_list','nc_detail','nc_new'];
+    const ncViews=['nc_list','nc_detail','nc_new','nc_pendencias'];
     const admViews=['users','grupos','log','signatures','produtos'];
     if(cmViews.includes(view)) setExpandedSections(p=>({...p,cm:true}));
     if(roViews.includes(view)) setExpandedSections(p=>({...p,ro:true}));
@@ -9221,7 +9504,7 @@ const saveReq = async (r) => {
     const isChildActive = view && (
       (sectionKey==='cm' && ['changes','acoes','new','detail','matrix','crits','perguntas','cm_config'].includes(view)) ||
       (sectionKey==='ro' && ['ro_list','ro_detail','ro_new'].includes(view)) ||
-      (sectionKey==='nc' && ['nc_list','nc_detail','nc_new'].includes(view)) ||
+      (sectionKey==='nc' && ['nc_list','nc_detail','nc_new','nc_pendencias'].includes(view)) ||
       (sectionKey==='adm' && ['users','grupos','log','signatures'].includes(view))
     );
     return <div>
@@ -9270,6 +9553,27 @@ const saveReq = async (r) => {
     return n;
   })();
   const pendAdm = (hasPerm(loggedIn,'auditoria.ver') ? 0 : 0);
+
+  // Badge NC — concessões + ações pendentes pra mim + prontas para fechar
+  const pendNCBadge = (()=>{
+    let n=0;
+    (ncRecs||[]).forEach(r=>{
+      if(["fechada","cancelada"].includes(r.status)) return;
+      const d=r.data||{};
+      (d.itens||[]).forEach(it=>{
+        if(it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(loggedIn?.id)) n++;
+      });
+      (d.acoes||[]).forEach(a=>{
+        if(String(a.responsavelId)===String(loggedIn?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status)) n++;
+      });
+      const itensReais=(d.itens||[]).filter(x=>x.codigo);
+      const acoes=d.acoes||[];
+      if(hasPerm(loggedIn,'nc.fechar')||loggedIn?.role==='admin'){
+        if(itensReais.length>0&&itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC))&&(acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)))) n++;
+      }
+    });
+    return n;
+  })();
   const canSeeAdm = hasPerm(loggedIn,'users')||hasPerm(loggedIn,'usuarios.gerenciar')||hasPerm(loggedIn,'grupos.ver')||hasPerm(loggedIn,'grupos.gerenciar')||hasPerm(loggedIn,'auditoria.ver')||isAdmin;
 
   const Sidebar = () => (
@@ -9306,10 +9610,12 @@ const saveReq = async (r) => {
         </SidebarSection>
 
         {/* Módulo: Não Conformidade */}
-        <SidebarSection sectionKey="nc" label="Não Conformidade" icon="">
+        <SidebarSection sectionKey="nc" label="Não Conformidade" icon="" badge={pendNCBadge}>
           {hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin'
             ? <SidebarNavItem id="nc_list" label="Registros" indent/>
             : null}
+          {(hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||loggedIn?.role==='admin')&&
+            <SidebarNavItem id="nc_pendencias" label="Ações pendentes" badge={pendNCBadge} indent/>}
         </SidebarSection>
 
         {/* Módulos futuros */}
@@ -9360,7 +9666,7 @@ const saveReq = async (r) => {
   return <div style={{display:'flex',minHeight:'100vh'}}>
     <Sidebar/>
     <div style={{marginLeft:192,flex:1,minHeight:'100vh',background:C.bg,overflowY:'auto'}}>
-      {view==='dashboard' &&<Dashboard requests={requests} roRecs={roRecs} currentUser={loggedIn} allUsers={users} crits={crits} isAdmin={isAdmin} onNav={nav} onNavRO={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>nav('new')} onOpenEval={(r,dept)=>{nav("detail",r.id,"avaliacao",dept);}} onOpenAction={(r,ac)=>{nav("detail",r.id,"execucao",null,ac.id);}}/>}
+      {view==='dashboard' &&<Dashboard requests={requests} roRecs={roRecs} ncRecs={ncRecs} currentUser={loggedIn} allUsers={users} crits={crits} isAdmin={isAdmin} onNav={nav} onNavRO={(id)=>{setSel(id);setView('ro_detail');}} onNavNC={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>nav('new')} onOpenEval={(r,dept)=>{nav("detail",r.id,"avaliacao",dept);}} onOpenAction={(r,ac)=>{nav("detail",r.id,"execucao",null,ac.id);}}/>}
       <MyTasksDrawer
         open={myTasksOpen}
         onClose={()=>{setMyTasksOpen(false);setMyTasksTarget(null);}}
@@ -9389,6 +9695,7 @@ const saveReq = async (r) => {
       }}/>}
       {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
       {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
+      {view==='nc_pendencias'&&<NCPendenciasInbox ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveNC} onNavNC={(id)=>{setSel(id);setView('nc_detail');}}/>}
       {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} onCancel={()=>setView('nc_list')} onSave={async(data)=>{
         const now=new Date().toISOString();
         const r={title:data.descricao.substring(0,80)||"Não Conformidade",status:"em_analise",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
