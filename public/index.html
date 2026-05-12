@@ -3236,20 +3236,17 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
   const pendRO = roParaAnalisar.length + roParaAprovar.length + roParaConcluir.length + roParaValidar.length;
 
   // ── Pendências NC ────────────────────────────────────────────────
-  const canNC = hasPerm(currentUser,'nc.abrir')||hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
+  const canNC = hasPerm(currentUser,'nc.abrir')||hasPerm(currentUser,'nc.tratar_itens')||hasPerm(currentUser,'nc.gerenciar_acoes')||hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
   const ncAtivas = (ncRecs||[]).filter(r=>!["fechada","cancelada"].includes(r.status));
-  // Itens com concessão aguardando minha aprovação
   const ncConcessoesMinha = ncAtivas.reduce((acc,r)=>{
     const itens = r.data?.itens||[];
     const minhas = itens.filter(it=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id));
     return acc + minhas.length;
   },0);
-  // Ações do plano onde sou responsável e não terminais
   const ncAcoesMinha = ncAtivas.reduce((acc,r)=>{
     const acoes = r.data?.acoes||[];
     return acc + acoes.filter(a=>String(a.responsavelId)===String(currentUser?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status)).length;
   },0);
-  // NCs prontas para fechar
   const canCloseNC = hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
   const ncParaFechar = canCloseNC ? ncAtivas.filter(r=>{
     const itens = (r.data?.itens||[]).filter(x=>x.codigo);
@@ -6884,7 +6881,6 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
   const [fText, setFText] = useState("");
   const [fStatus, setFStatus] = useState("");
   const canNew = hasPerm(currentUser,'nc.abrir');
-
   const vis = (ncRecords||[]).filter(r=>{
     const q = fText.toLowerCase();
     const ok = !q||(r.code||r.id||"").toLowerCase().includes(q)||(r.title||"").toLowerCase().includes(q)||(r.data?.descricao||"").toLowerCase().includes(q);
@@ -7098,10 +7094,15 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
   const comunicacoes = d.comunicacoes||[];
   const status = ncRecord.status||"em_analise";
 
-  const canAnalyze  = hasPerm(currentUser,'nc.analisar');
-  const canClose    = hasPerm(currentUser,'nc.fechar');
-  const canCancel   = hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar');
-  const isAdmin     = currentUser?.role==='admin';
+  const canAbrir     = hasPerm(currentUser,'nc.abrir')||isAdmin;
+  const canTratar    = hasPerm(currentUser,'nc.tratar_itens')||isAdmin;
+  const canAprovConc = hasPerm(currentUser,'nc.aprovar_concessao')||isAdmin;
+  const canGerAcoes  = hasPerm(currentUser,'nc.gerenciar_acoes')||isAdmin;
+  const canConclAcao = hasPerm(currentUser,'nc.concluir_acao')||hasPerm(currentUser,'nc.gerenciar_acoes')||isAdmin;
+  const canAnalyze   = hasPerm(currentUser,'nc.analisar')||canTratar||canGerAcoes||isAdmin;
+  const canClose     = hasPerm(currentUser,'nc.fechar')||isAdmin;
+  const canCancel    = hasPerm(currentUser,'nc.cancelar')||isAdmin;
+  const canReopen    = hasPerm(currentUser,'nc.reabrir')||isAdmin;
 
   // Verifica se todos os itens têm disposição terminal
   const itensReais = itens.filter(x=>x.codigo);
@@ -7300,7 +7301,8 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
               {itens.map((it,i)=>{
                 if(!it.codigo) return null;
                 const pendenteMinha = it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id);
-                const podeTratar = canAnalyze && status==="em_analise" && !NC_DISP_TERMINAIS.includes(it.dispNC) && it.dispNC!=="concessao_solicitada";
+                const podeTratar = canTratar && status==="em_analise" && !NC_DISP_TERMINAIS.includes(it.dispNC) && it.dispNC!=="concessao_solicitada";
+                const podeAprovarConcessao = canAprovConc && pendenteMinha;
                 // Coluna "Aprovado por"
                 let aprovadoPor = "—";
                 if(it.dispNC==="concessao_aprovada") aprovadoPor = (it.concessaoAprovadaBy||"—") + (it.concessaoAprovadaAt?" · "+fmtShort(it.concessaoAprovadaAt):"");
@@ -7321,7 +7323,7 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
                   <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{aprovadoPor}</td>
                   <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
                     {podeTratar&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setTratarIdx(i)}>Definir</button>}
-                    {pendenteMinha&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovConcessaoIdx(i)}>Aprovar</button>}
+                    {podeAprovarConcessao&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovConcessaoIdx(i)}>Aprovar</button>}
                   </td>
                 </tr>;
               })}
@@ -7334,7 +7336,7 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
     <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border}}>
         <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>PLANO DE AÇÕES CORRETIVAS ({acoes.length})</span>
-        {canAnalyze&&status==="em_analise"&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>setNovaAcaoModal(true)}>+ Nova ação</button>}
+        {canGerAcoes&&status==="em_analise"&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>setNovaAcaoModal(true)}>+ Nova ação</button>}
       </div>
       {acoes.length===0
         ? <div style={{padding:24,textAlign:"center",color:C.muted,fontSize:12}}>Nenhuma ação no plano.</div>
@@ -7350,7 +7352,7 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
               {acoes.map((a,i)=>{
                 const isTerminal = NC_ACAO_STATUS_TERMINAIS.includes(a.status);
                 const isResp = String(a.responsavelId)===String(currentUser?.id);
-                const podeConcluir = (isResp||canAnalyze) && !isTerminal && status==="em_analise";
+                const podeConcluir = (isResp||canConclAcao) && !isTerminal && status==="em_analise";
                 return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
                   <td style={{padding:"8px 10px",fontSize:12,color:C.text,maxWidth:260}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.descricao}</div></td>
                   <td style={{padding:"8px 10px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{a.responsavelNome||"—"}</td>
@@ -7412,7 +7414,7 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
               </tr>}
             </tbody>
           </table>
-          {canAnalyze&&status==="em_analise"&&!addingComun&&<div style={{padding:"8px 10px",borderTop:"1px solid "+C.border}}>
+          {(canAnalyze||canTratar||canGerAcoes)&&status==="em_analise"&&!addingComun&&<div style={{padding:"8px 10px",borderTop:"1px solid "+C.border}}>
             <button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>setAddingComun(true)}>+ Registrar comunicação</button>
           </div>}
         </div>}
@@ -7991,13 +7993,17 @@ const ALL_PERMS_META = [
     {id:"ro.excluir",            label:"Excluir RO"},
   ]},
   {section:"Não Conformidade (NC)", items:[
-    {id:"nc.abrir",    label:"Abrir NC"},
-    {id:"nc.analisar", label:"Analisar NC"},
-    {id:"nc.aprovar",  label:"Aprovar NC"},
-    {id:"nc.fechar",   label:"Fechar NC"},
-    {id:"nc.cancelar", label:"Cancelar NC"},
-    {id:"nc.excluir",  label:"Excluir NC"},
-    {id:"nc.ver_todas",label:"Ver todas as NCs"},
+    {id:"nc.abrir",           label:"Abrir NC"},
+    {id:"nc.tratar_itens",    label:"Tratar itens (definir disposição)"},
+    {id:"nc.aprovar_concessao",label:"Aprovar concessão"},
+    {id:"nc.gerenciar_acoes", label:"Gerenciar ações do plano"},
+    {id:"nc.concluir_acao",   label:"Concluir/justificar ação"},
+    {id:"nc.analisar",        label:"Analisar NC"},
+    {id:"nc.fechar",          label:"Fechar NC"},
+    {id:"nc.cancelar",        label:"Cancelar NC"},
+    {id:"nc.reabrir",         label:"Reabrir NC"},
+    {id:"nc.excluir",         label:"Excluir NC"},
+    {id:"nc.ver_todas",       label:"Ver todas as NCs"},
   ]},
   {section:"RIACP", items:[
     {id:"riacp.abrir",    label:"Abrir RIACP"},
@@ -9666,10 +9672,10 @@ const saveReq = async (r) => {
 
         {/* Módulo: Não Conformidade */}
         <SidebarSection sectionKey="nc" label="Não Conformidade" icon="" badge={pendNCBadge}>
-          {hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin'
+          {hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.tratar_itens')||hasPerm(loggedIn,'nc.gerenciar_acoes')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin'
             ? <SidebarNavItem id="nc_list" label="Registros" indent/>
             : null}
-          {(hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||loggedIn?.role==='admin')&&
+          {(hasPerm(loggedIn,'nc.tratar_itens')||hasPerm(loggedIn,'nc.aprovar_concessao')||hasPerm(loggedIn,'nc.gerenciar_acoes')||hasPerm(loggedIn,'nc.concluir_acao')||hasPerm(loggedIn,'nc.fechar')||loggedIn?.role==='admin')&&
             <SidebarNavItem id="nc_pendencias" label="Gestão de ações" badge={pendNCBadge} indent/>}
         </SidebarSection>
 
@@ -9749,7 +9755,7 @@ const saveReq = async (r) => {
         setView('ro_list');
       }}/>}
       {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
-      {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
+      {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.tratar_itens')||hasPerm(loggedIn,'nc.gerenciar_acoes')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
       {view==='nc_pendencias'&&<NCPendenciasInbox ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveNC} onNavNC={(id)=>{setSel(id);setView('nc_detail');}}/>}
       {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} onCancel={()=>setView('nc_list')} onSave={async(data)=>{
         const now=new Date().toISOString();
