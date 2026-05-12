@@ -3222,11 +3222,12 @@ function Dashboard({requests,roRecs,currentUser,allUsers,crits,onNav,onNavRO,onO
     const itens = r.data?.itens||[];
     if(!itens.length) return false;
     return itens.every(it=>{
-      if(it.disposicao==="correcao") return it.status==="concluida"; // precisa aprovação do aprovador
+      if(!it.disposicao) return false; // sem disposição = pendente
+      if(it.disposicao==="correcao") return it.status==="concluida"; // precisa aprovação
       if(it.disposicao==="segregar"){
         if(it.sublotes && it.sublotes.length>0)
           return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
-        return false;
+        return false; // segregado sem sublotes = ainda não tratado
       }
       return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
     });
@@ -4876,9 +4877,84 @@ function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
 }
 
 // ── Linha read-only ──────────────────────────────────────────────
+// Helper: formata data curta
+function fmtShort(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+}
+
+// Monta as "linhas de disposição" de um item para a tabela expandida
+function buildDispLinhas(item){
+  const linhas = [];
+  const disp = item.disposicao;
+
+  if(disp==="correcao"){
+    linhas.push({
+      tipo:"correcao",
+      tipoLabel:"Correção imediata",
+      tipoBg:"#EAF3DE", tipoCol:"#27500A",
+      qtd: item.qtdNC,
+      analise: item.acaoCorrecao||"—",
+      solicitadoPor: null, // operador = quem abriu a RO
+      solicitadoEm: item.dispDefinedAt,
+      aprovadoPor: item.correcaoAprovadaBy||null,
+      aprovadoEm: item.correcaoAprovadaAt||null,
+      pendente: item.status==="pendente_aprovacao",
+      rejeitado: item.status==="correcao_rejeitada",
+      motivoRejeicao: item.correcaoRejeitadaMotivo||null,
+    });
+    return linhas;
+  }
+
+  if(disp==="segregar" && item.sublotes && item.sublotes.length>0){
+    item.sublotes.forEach(s=>{
+      const LABELS = {
+        sucatamento:          {label:"Sucatamento",        bg:"#FCEBEB", col:"#501313"},
+        concessao_solicitada: {label:"Concessão",          bg:"#E6F1FB", col:"#0C447C"},
+        concessao_aprovada:   {label:"Concessão aprovada", bg:"#EAF3DE", col:"#27500A"},
+        concessao_rejeitada:  {label:"Concessão rejeitada",bg:"#FCEBEB", col:"#501313"},
+        migrada_nc:           {label:"Mover para NC",      bg:"#EEE8FB", col:"#3D1F8C"},
+      };
+      const m = LABELS[s.tipo]||{label:s.tipo, bg:"#eee", col:"#555"};
+      linhas.push({
+        tipo: s.tipo,
+        tipoLabel: m.label,
+        tipoBg: m.bg, tipoCol: m.col,
+        qtd: s.qtd,
+        analise: s.extra||"—",
+        solicitadoPor: s.concessaoSolicitadaBy||s.sucatadoBy||item.tratadoBy||null,
+        solicitadoEm: s.concessaoSolicitadaAt||s.sucatadoAt||item.tratadoAt||null,
+        aprovadoPor: s.concessaoAprovadaBy||s.concessaoRejeitadaBy||(s.tipo==="sucatamento"?s.sucatadoBy:null)||null,
+        aprovadoEm: s.concessaoAprovadaAt||s.concessaoRejeitadaAt||(s.tipo==="sucatamento"?s.sucatadoAt:null)||null,
+        pendente: s.tipo==="concessao_solicitada",
+        rejeitado: s.tipo==="concessao_rejeitada",
+        motivoRejeicao: s.concessaoRejeitadaMotivo||null,
+        subloteIdx: item.sublotes.indexOf(s),
+      });
+    });
+    return linhas;
+  }
+
+  // Modelo legado ou sem tratamento
+  linhas.push({
+    tipo: disp||"pendente",
+    tipoLabel: disp==="segregar"?"Aguardando tratamento": disp||"Pendente",
+    tipoBg: disp==="segregar"?"#FAEEDA":"#eee",
+    tipoCol: disp==="segregar"?"#633806":"#555",
+    qtd: item.qtdNC,
+    analise: item.concessaoJustificativa||item.tratamentoMotivo||"—",
+    solicitadoPor: item.concessaoSolicitadaBy||item.tratadoBy||null,
+    solicitadoEm: item.concessaoSolicitadaAt||item.tratadoAt||null,
+    aprovadoPor: item.concessaoAprovadaBy||null,
+    aprovadoEm: item.concessaoAprovadaAt||null,
+    pendente: !disp || disp==="segregar" || disp==="concessao_solicitada",
+  });
+  return linhas;
+}
+
 function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar, C, Sg}){
-  const cellRO = {padding:"8px 8px", fontSize:12, verticalAlign:"middle"};
-  // Modelo novo: segregado sem sublotes finalizados = pode tratar
+  const cell = {padding:"7px 8px", fontSize:12, verticalAlign:"top"};
   const hasSublotes = item.sublotes && item.sublotes.length > 0;
   const segregadoPendente = item.disposicao==="segregar" && !hasSublotes;
   const comRejeicao = hasSublotes && item.sublotes.some(s=>s.tipo==="concessao_rejeitada");
@@ -4886,36 +4962,54 @@ function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar,
     (!hasSublotes && (item.disposicao==="segregar" || item.disposicao==="concessao_rejeitada")));
   const showAprovar = canAprovar && hasSublotes && item.sublotes.some(s=>s.tipo==="concessao_solicitada");
   const showAprovarLegado = canAprovar && !hasSublotes && item.disposicao==="concessao_solicitada";
-  return <tr style={{borderBottom:"1px solid "+C.border}}>
-    <td style={{...cellRO, fontWeight:700, color:C.accent, width:140}}>{item.codigo||"—"}</td>
-    <td style={{...cellRO, color:C.text, whiteSpace:"pre-wrap"}}>{item.descricao||"—"}</td>
-    <td style={{...cellRO, color:C.dim, width:110}}>{item.lote||"—"}</td>
-    <td style={{...cellRO, color:C.text, width:60}}>{item.qtdNC||"—"}</td>
-    <td style={{...cellRO, width:260}}>
-      <div style={{display:"flex", gap:6, alignItems:"center", flexWrap:"wrap"}}>
-        <DispBadge disp={item.disposicao} status={item.status} sublotes={hasSublotes?item.sublotes:null} C={C}/>
-        {showTratar && onTratar && <button
-          onClick={()=>onTratar(idx)}
-          style={{fontSize:11, padding:"3px 10px", background:C.accent, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
-          Tratar →
-        </button>}
-        {(showAprovar||showAprovarLegado) && onAprovar && <button
-          onClick={()=>{
-            if(showAprovar && item.sublotes){
-              // Pega o índice do primeiro sublote de concessão pendente
-              const si = item.sublotes.findIndex(s=>s.tipo==="concessao_solicitada");
-              onAprovar(idx, si>=0?si:null);
-            } else {
-              onAprovar(idx, null);
-            }
-          }}
-          style={{fontSize:11, padding:"3px 10px", background:C.warning, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
-          Decidir →
-        </button>}
-      </div>
-    </td>
-    <td style={{...cellRO, width:32}}/>
-  </tr>;
+
+  const dispLinhas = buildDispLinhas(item);
+
+  return <React.Fragment>
+    {dispLinhas.map((dl, di)=>(
+      <tr key={di} style={{borderBottom: di===dispLinhas.length-1?"1px solid "+C.border:"0.5px dashed "+C.border+"66"}}>
+        <td style={{...cell, fontWeight:600, color:C.accent, width:110}}>{item.codigo||"—"}</td>
+        <td style={{...cell, color:C.text, maxWidth:180}}>{item.descricao||"—"}</td>
+        <td style={{...cell, color:C.muted, width:90, whiteSpace:"nowrap"}}>{item.lote||"—"}</td>
+        <td style={{...cell, width:40, textAlign:"center"}}>{dl.qtd||"—"}</td>
+        <td style={{...cell, width:130}}>
+          <span style={{fontSize:11, padding:"2px 7px", borderRadius:6, background:dl.tipoBg, color:dl.tipoCol, fontWeight:500, whiteSpace:"nowrap"}}>
+            {dl.tipoLabel}
+          </span>
+          {dl.rejeitado && dl.motivoRejeicao && <div style={{fontSize:10, color:C.danger, marginTop:3}}>Rejeitado: {dl.motivoRejeicao}</div>}
+        </td>
+        <td style={{...cell, color:C.muted, maxWidth:200, fontSize:11}}>{dl.analise}</td>
+        <td style={{...cell, width:110}}>
+          {dl.solicitadoPor && <div style={{fontSize:11, color:C.text}}>{dl.solicitadoPor}</div>}
+          {dl.solicitadoEm && <div style={{fontSize:10, color:C.muted}}>{fmtShort(dl.solicitadoEm)}</div>}
+          {!dl.solicitadoPor && <span style={{color:C.muted}}>—</span>}
+        </td>
+        <td style={{...cell, width:110}}>
+          {dl.aprovadoPor && <div style={{fontSize:11, color:C.text}}>{dl.aprovadoPor}</div>}
+          {dl.aprovadoEm && <div style={{fontSize:10, color:C.muted}}>{fmtShort(dl.aprovadoEm)}</div>}
+          {dl.pendente && !dl.aprovadoPor && <span style={{fontSize:10, color:C.warning, fontStyle:"italic"}}>aguardando</span>}
+          {!dl.pendente && !dl.aprovadoPor && <span style={{color:C.muted}}>—</span>}
+        </td>
+        <td style={{...cell, width:80, textAlign:"right"}}>
+          {di===0 && showTratar && onTratar && <button
+            onClick={()=>onTratar(idx)}
+            style={{fontSize:11, padding:"3px 10px", background:C.accent, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
+            Tratar →
+          </button>}
+          {di===0 && (showAprovar||showAprovarLegado) && onAprovar && <button
+            onClick={()=>{
+              if(showAprovar && item.sublotes){
+                const si = item.sublotes.findIndex(s=>s.tipo==="concessao_solicitada");
+                onAprovar(idx, si>=0?si:null);
+              } else { onAprovar(idx, null); }
+            }}
+            style={{fontSize:11, padding:"3px 10px", background:C.warning, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
+            Decidir →
+          </button>}
+        </td>
+      </tr>
+    ))}
+  </React.Fragment>;
 }
 
 // ── Tabela de itens dinâmica ─────────────────────────────────────
@@ -5027,7 +5121,10 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTra
         </colgroup>
         <thead>
           <tr style={{background:C.surface, borderBottom:"1px solid "+C.border}}>
-            {["Código","Descrição","Lote","Qtd","Disposição",""].map((h,i)=>(
+            {(readOnly
+              ? ["Código","Descrição","Lote","Qtd","Disposição","Análise / O que foi feito","Solicitado por","Aprovado por",""]
+              : ["Código","Descrição","Lote","Qtd","Disposição",""]
+            ).map((h,i)=>(
               <th key={i} style={{padding:"7px 10px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>{h}</th>
             ))}
           </tr>
@@ -5206,6 +5303,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
 
     // RO pronta para fechar
     if(r.status==="em_analise" && itens.length>0 && itens.every(it=>{
+      if(!it.disposicao) return false;
       if(it.disposicao==="correcao") return it.status==="concluida";
       if(it.disposicao==="segregar"){
         if(it.sublotes && it.sublotes.length>0)
@@ -5837,17 +5935,13 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const todosItens = d.itens||[];
   const temItens = todosItens.length > 0;
   const prontaParaConcluir = temItens && ["em_analise","aguardando_conclusao"].includes(status) && status!=="fechada" && status!=="cancelada" && todosItens.every(it=>{
-    // Correção imediata: operador já descreveu o que fez → terminal
-    if(it.disposicao==="correcao") return true;
-    // Segregado com sublotes: todos precisam estar em estado terminal
+    if(!it.disposicao) return false; // sem disposição = pendente
+    if(it.disposicao==="correcao") return it.status==="concluida"; // precisa aprovação
     if(it.disposicao==="segregar"){
-      if(it.sublotes && it.sublotes.length > 0){
+      if(it.sublotes && it.sublotes.length > 0)
         return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
-      }
-      // Segregado sem sublotes = ainda pendente
-      return false;
+      return false; // segregado sem sublotes = não tratado
     }
-    // Modelo legado (disposição direta no item)
     return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
   });
 
