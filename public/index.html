@@ -6667,15 +6667,18 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
     if(open){ setBusca(""); setSelecionadas({}); setExpandida(null); }
   },[open]);
 
-  // Helper: item da RO ainda pode ser migrado pra NC?
-  const itemPodeMigrar = (it) => {
+  // Helper: item da RO está segregado e pendente (único caso elegível pra ir pra NC)
+  const itemSegregadoPendente = (it) => {
     if(!it || !it.codigo) return false;
-    const TERMINAIS = ["sucatamento","concessao_aprovada","migrada_nc"];
+    // Com sublotes: algum sublote "segregar" ou sem tipo (= ainda não tratado)
     if(it.sublotes && it.sublotes.length > 0){
-      return it.sublotes.some(s => !TERMINAIS.includes(s.tipo));
+      return it.sublotes.some(s => s.tipo === "segregar" || !s.tipo);
     }
-    return !TERMINAIS.includes(it.disposicao);
+    // Sem sublotes: disposição "segregar" (não concluída) OU sem disposição ainda
+    if(!it.disposicao) return true;
+    return it.disposicao === "segregar" && it.status !== "concluida";
   };
+  const itemPodeMigrar = itemSegregadoPendente;
 
   // Helper: a RO toda está em outra NC ativa?
   const roEmOutraNC = (code) => (ncRecords||[]).find(nc => {
@@ -6700,13 +6703,12 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
 
   // Conta quantos itens da RO ainda dão pra importar nesta NC
   const itensImportaveis = (ro) => {
-    const itens = roItens(ro).filter(itemPodeMigrar).filter(it => !isDup(it));
-    return itens;
+    return roItens(ro).filter(itemPodeMigrar).filter(it => !isDup(it));
   };
 
-  // Lista filtrada
+  // Lista filtrada — só ROs ativas (não fechada/cancelada)
   const visiveis = (roRecs||[])
-    .filter(ro => ro.status !== "cancelada")
+    .filter(ro => ro.status !== "cancelada" && ro.status !== "fechada")
     .filter(ro => !(alreadyLinkedROs||[]).map(x=>String(x).toLowerCase()).includes(String(ro.code||ro.id).toLowerCase()))
     .map(ro => {
       const bloqueio = roEmOutraNC(ro.code||ro.id);
@@ -6756,7 +6758,7 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
     {visiveis.length === 0 && <div style={{padding:"24px 12px",textAlign:"center",color:C.muted,fontSize:13}}>
       {busca
         ? <>Nenhuma RO encontrada para "<b>{busca}</b>".</>
-        : <>Nenhuma RO disponível para vincular.<br/><span style={{fontSize:11}}>ROs já vinculadas, canceladas ou sem itens elegíveis ficam ocultas.</span></>
+        : <>Nenhuma RO disponível para vincular.<br/><span style={{fontSize:11}}>Apenas ROs ativas (não fechadas) com itens segregados aguardando tratativa aparecem aqui.</span></>
       }
     </div>}
 
@@ -7287,27 +7289,47 @@ function ConcluirAcaoNCModal({open, acao, onClose, onConfirm, C, Sg}){
 function NCHistorico({nc, C}){
   const [open, setOpen] = useState(true);
   const Sg = mkSg(C);
-  const historico = nc?.data?.historico||[];
-  return <div style={{...Sg.card({marginTop:14})}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:open?10:0}} onClick={()=>setOpen(p=>!p)}>
-      <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>HISTÓRICO ({historico.length})</span>
-      <span style={{fontSize:10,color:C.muted}}>{open?"▲":"▼"}</span>
+  const d = nc?.data || nc || {};
+  const novo = d.historico || [];
+  const velho = (nc?.log || []).map(e=>({
+    at: e.at,
+    by: e.by || "—",
+    detail: (e.event||"") + (e.detail?": "+e.detail:""),
+  }));
+  const todos = [...novo, ...velho]
+    .filter(e=>e.at)
+    .sort((a,b)=> (b.at||"").localeCompare(a.at||""));
+
+  return <div style={{...Sg.card({padding:0, overflow:"hidden"})}}>
+    <div
+      onClick={()=>setOpen(o=>!o)}
+      style={{display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", padding:"12px 14px", borderBottom: open?"1px solid "+C.border:"none"}}>
+      <span style={{fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
+        Histórico {todos.length>0 && <span style={{color:C.dim, fontWeight:400}}>({todos.length})</span>}
+      </span>
+      <span style={{fontSize:11, color:C.muted}}>{open?"− minimizar":"+ expandir"}</span>
     </div>
-    {open&&(historico.length===0
-      ? <div style={{fontSize:12,color:C.muted,padding:"8px 0"}}>Sem eventos registrados.</div>
-      : <div style={{display:"flex",flexDirection:"column",gap:0}}>
-          {[...historico].reverse().map((ev,i)=>(
-            <div key={i} style={{display:"flex",gap:10,padding:"7px 0",borderBottom:"1px solid "+C.border,alignItems:"flex-start"}}>
-              <div style={{fontSize:11,color:C.muted,whiteSpace:"nowrap",width:112,flexShrink:0}}>{fmtShort(ev.at)}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <span style={{fontSize:12,color:C.text,fontWeight:500}}>{ev.event||ev.type}</span>
-                {ev.detail&&<span style={{fontSize:11,color:C.muted,marginLeft:6}}>{ev.detail}</span>}
-              </div>
-              <div style={{fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{ev.by}</div>
-            </div>
-          ))}
-        </div>
-    )}
+    {open && (todos.length===0
+      ? <div style={{padding:"20px 14px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma alteração registrada.</div>
+      : <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+          <thead>
+            <tr style={{background:C.surface}}>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:140}}>Data</th>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:160}}>Usuário</th>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>O que foi feito</th>
+            </tr>
+          </thead>
+          <tbody>
+            {todos.map((h,i)=>(
+              <tr key={i} style={{borderTop:"1px solid "+C.border}}>
+                <td style={{padding:"10px 14px", color:C.muted, fontSize:11, verticalAlign:"top", whiteSpace:"nowrap"}}>{fmt(h.at)}</td>
+                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top"}}>{h.by||"—"}</td>
+                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top", whiteSpace:"pre-wrap"}}>{h.detail||"—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>)
+    }
   </div>;
 }
 
@@ -10158,6 +10180,61 @@ const saveReq = async (r) => {
     }
   };
 
+  // Migração one-shot: reverter itens com migrada_nc apontando pra NC que não existe
+  // Roda 1 vez por sessão depois que roRecs e ncRecs forem carregados.
+  const reverterMigradasOrfasFeita = React.useRef(false);
+  React.useEffect(() => {
+    if(reverterMigradasOrfasFeita.current) return;
+    if(!roRecs || roRecs.length === 0) return;
+    if(!ncRecs) return; // pode ser vazia, mas precisa estar carregada
+    reverterMigradasOrfasFeita.current = true;
+
+    const ncCodes = new Set((ncRecs||[]).map(n => String(n.code || n.id).toLowerCase()).filter(Boolean));
+    const ncCancelOuEncerr = new Set(
+      (ncRecs||[])
+        .filter(n => n.status === "cancelada" || n.status === "encerrada")
+        .map(n => String(n.code || n.id).toLowerCase())
+    );
+
+    (async () => {
+      for(const ro of roRecs){
+        try{
+          const roData = ro.data || ro;
+          const itens = roData.itens || [];
+          let mudou = false;
+          const itensRevertidos = itens.map(it => {
+            if(it.disposicao !== "migrada_nc") return it;
+            const alvo = String(it.migrada_para_nc || "").toLowerCase();
+            // Órfão = NC alvo não existe OU foi cancelada/encerrada
+            const orfao = !alvo || !ncCodes.has(alvo) || ncCancelOuEncerr.has(alvo);
+            if(orfao){
+              mudou = true;
+              const { migrada_para_nc, migrada_em, ...resto } = it;
+              return { ...resto, disposicao: "segregar", status: "pendente" };
+            }
+            return it;
+          });
+          if(mudou){
+            const now = new Date().toISOString();
+            const updatedRO = {
+              ...ro,
+              status: (ro.status === "fechada" ? "em_analise" : ro.status), // reabre se estava fechada
+              data: { ...roData, itens: itensRevertidos },
+              log: [
+                ...(ro.log || []),
+                { at: now, by: "sistema", type: "migracao_revertida", event: "Itens revertidos", detail: "Itens com migrada_nc órfã voltaram para segregar" }
+              ],
+            };
+            await saveRO(updatedRO);
+            console.log("[migração] RO " + (ro.code||ro.id) + " teve itens órfãos revertidos");
+          }
+        }catch(e){
+          console.error("[migração] erro em " + (ro.code||ro.id), e);
+        }
+      }
+    })();
+  }, [roRecs, ncRecs]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const generateNC = async ({roCode}) => {
     // Caminho A: gerar NC a partir da RO. Agora navega para o NewNC com a RO carregada,
     // unificando o fluxo de abertura (mesma tela, mesma lógica de migração de item).
@@ -10529,6 +10606,7 @@ const saveReq = async (r) => {
         if(saved){
           const ncCode = saved.code || saved.id;
           // Para cada RO vinculada, marca os itens importados como migrada_nc
+          // e auto-fecha a RO se TODOS os itens segregados foram migrados
           for(const roCode of (data.linkedROs||[])){
             try{
               const ro = await apiGet('/api/records?module=ro&id='+encodeURIComponent(roCode));
@@ -10545,12 +10623,33 @@ const saveReq = async (r) => {
                   return it;
                 });
                 const linkedNCsRO = [...(((roData.linkedNCs)||[])), ncCode];
-                const logEntry = {at:now, by:loggedIn.name, type:'nc_vinculada', event:'Itens migrados para NC', detail:ncCode+' ('+itensDessaRO.length+' item(s))'};
+
+                // Auto-fechar: se nenhum item da RO ainda está pendente, fecha a RO
+                const aindaPendente = (it) => {
+                  if(!it.codigo) return false;
+                  if(it.sublotes && it.sublotes.length > 0){
+                    return it.sublotes.some(s => s.tipo === "segregar" || !s.tipo);
+                  }
+                  if(!it.disposicao) return true;
+                  return it.disposicao === "segregar" && it.status !== "concluida";
+                };
+                const temPendente = itensRO.some(aindaPendente);
+                const roStatusAntes = ro.status;
+                const novoStatus = (!temPendente && roStatusAntes !== "fechada" && roStatusAntes !== "cancelada") ? "fechada" : roStatusAntes;
+                const autoFechou = novoStatus === "fechada" && roStatusAntes !== "fechada";
+
+                const logEntries = [
+                  {at:now, by:loggedIn.name, type:'nc_vinculada', event:'Itens migrados para NC', detail:ncCode+' ('+itensDessaRO.length+' item(s))'},
+                ];
+                if(autoFechou){
+                  logEntries.push({at:now, by:loggedIn.name, type:'auto_fechada', event:'RO fechada automaticamente', detail:'Todos os itens segregados foram migrados para '+ncCode});
+                }
 
                 const updatedRO = {
                   ...ro,
+                  status: novoStatus,
                   data: {...roData, itens:itensRO, linkedNCs:linkedNCsRO},
-                  log: [...((ro.log)||[]), logEntry],
+                  log: [...((ro.log)||[]), ...logEntries],
                 };
                 await saveRO(updatedRO);
               }
