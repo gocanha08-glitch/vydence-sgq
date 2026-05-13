@@ -6733,18 +6733,18 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
     return roItens(ro).filter(itemPodeMigrar).filter(it => !isDup(it));
   };
 
-  // Lista filtrada — só ROs ativas (não fechada/cancelada)
+  // Lista filtrada — só ROs ativas, sem vínculo com NC ativa, com item segregado
   const visiveis = (roRecs||[])
     .filter(ro => ro.status !== "cancelada" && ro.status !== "fechada")
     .filter(ro => !(alreadyLinkedROs||[]).map(x=>String(x).toLowerCase()).includes(String(ro.code||ro.id).toLowerCase()))
+    .filter(ro => !roEmOutraNC(ro.code||ro.id))  // exclui ROs já em outra NC ativa
     .map(ro => {
-      const bloqueio = roEmOutraNC(ro.code||ro.id);
       const importaveis = itensImportaveis(ro);
-      return { ro, bloqueio, importaveis };
+      return { ro, bloqueio: null, importaveis };
     })
     .filter(({ro, bloqueio, importaveis}) => {
-      // Mostra a RO se: tem item importável OU está bloqueada (pra mostrar o porquê)
-      if(importaveis.length === 0 && !bloqueio) return false;
+      // Só mostra se tem item importável
+      if(importaveis.length === 0) return false;
       // Aplica busca
       const q = busca.toLowerCase().trim();
       if(!q) return true;
@@ -7945,15 +7945,15 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
   const comunicacoes = d.comunicacoes||[];
   const status = ncRecord.status||"em_analise";
 
-  const canAbrir     = hasPerm(currentUser,'nc.abrir')||isAdmin;
-  const canTratar    = hasPerm(currentUser,'nc.tratar_itens')||isAdmin;
-  const canAprovConc = hasPerm(currentUser,'nc.aprovar_concessao')||isAdmin;
-  const canGerAcoes  = hasPerm(currentUser,'nc.gerenciar_acoes')||isAdmin;
-  const canConclAcao = hasPerm(currentUser,'nc.concluir_acao')||hasPerm(currentUser,'nc.gerenciar_acoes')||isAdmin;
-  const canAnalyze   = hasPerm(currentUser,'nc.analisar')||canTratar||canGerAcoes||isAdmin;
-  const canClose     = hasPerm(currentUser,'nc.fechar')||isAdmin;
-  const canCancel    = hasPerm(currentUser,'nc.cancelar')||isAdmin;
-  const canReopen    = hasPerm(currentUser,'nc.reabrir')||isAdmin;
+  const canAbrir     = hasPerm(currentUser,'nc.abrir');
+  const canTratar    = hasPerm(currentUser,'nc.tratar_itens');
+  const canAprovConc = hasPerm(currentUser,'nc.aprovar_concessao');
+  const canGerAcoes  = hasPerm(currentUser,'nc.gerenciar_acoes');
+  const canConclAcao = hasPerm(currentUser,'nc.concluir_acao')||hasPerm(currentUser,'nc.gerenciar_acoes');
+  const canAnalyze   = hasPerm(currentUser,'nc.analisar')||canTratar||canGerAcoes;
+  const canClose     = hasPerm(currentUser,'nc.fechar');
+  const canCancel    = hasPerm(currentUser,'nc.cancelar');
+  const canReopen    = hasPerm(currentUser,'nc.reabrir');
 
   // Verifica se todos os itens têm disposição terminal
   const itensReais = itens.filter(x=>x.codigo);
@@ -10241,12 +10241,48 @@ const saveReq = async (r) => {
         .map(n => String(n.code || n.id).toLowerCase())
     );
 
+    // Helper: item ainda pendente (mesma regra do auto-fechamento)
+    const itemAindaPendente = (it) => {
+      if(!it.codigo) return false;
+      if(it.sublotes && it.sublotes.length > 0){
+        return it.sublotes.some(s => {
+          const t = s.tipo;
+          if(!t || t === "segregar") return true;
+          if(t === "concessao_solicitada") return true;
+          if(t === "concessao_rejeitada") return true;
+          if(t === "migrada_nc" && !s.nc_code) return true;
+          return false;
+        });
+      }
+      if(!it.disposicao) return true;
+      if(it.disposicao === "segregar" && it.status !== "concluida") return true;
+      if(it.disposicao === "correcao") return it.status !== "concluida" && it.status !== "correcao_aprovada";
+      if(it.disposicao === "concessao_solicitada") return true;
+      if(it.disposicao === "concessao_rejeitada") return true;
+      return false;
+    };
+
     (async () => {
       for(const ro of roRecs){
         try{
           const roData = ro.data || ro;
           const itens = roData.itens || [];
           let mudou = false;
+
+          // Checagem extra: RO foi auto-fechada mas ainda tem pendência?
+          const wasAutoFechada = (ro.log||[]).some(e => e.type === "auto_fechada");
+          const temPendencia = itens.some(itemAindaPendente);
+          if(ro.status === "fechada" && wasAutoFechada && temPendencia){
+            const now = new Date().toISOString();
+            await saveRO({
+              ...ro,
+              status: "em_analise",
+              log: [...(ro.log||[]), {at: now, by: "sistema", type: "auto_reaberta", event: "RO reaberta automaticamente", detail: "Auto-fechamento incorreto detectado — ainda há itens pendentes"}],
+            });
+            console.log("[migração] RO " + (ro.code||ro.id) + " reaberta — pendência detectada");
+            continue;
+          }
+
           const itensRevertidos = itens.map(it => {
             if(it.disposicao !== "migrada_nc") return it;
             const alvo = String(it.migrada_para_nc || "").toLowerCase();
@@ -10729,14 +10765,36 @@ const saveReq = async (r) => {
                 });
                 const linkedNCsRO = [...(((roData.linkedNCs)||[])), ncCode];
 
-                // Auto-fechar: se nenhum item da RO ainda está pendente, fecha a RO
+                // Auto-fechar: rigoroso. Só fecha se TUDO tá realmente resolvido.
+                // Pendentes que mantêm a RO aberta:
+                //   - disposicao "segregar" não concluída
+                //   - disposicao "correcao" com status diferente de "concluida"/"correcao_aprovada"
+                //   - sem disposicao definida
+                //   - sublote "segregar" ou sem tipo
+                //   - sublote "concessao_solicitada" (aguardando aprovação)
+                //   - sublote "concessao_rejeitada" (precisa redecidir)
                 const aindaPendente = (it) => {
                   if(!it.codigo) return false;
                   if(it.sublotes && it.sublotes.length > 0){
-                    return it.sublotes.some(s => s.tipo === "segregar" || !s.tipo);
+                    return it.sublotes.some(s => {
+                      const t = s.tipo;
+                      if(!t || t === "segregar") return true;
+                      if(t === "concessao_solicitada") return true;
+                      if(t === "concessao_rejeitada") return true;
+                      // sublote migrada_nc sem nc_code = pendente
+                      if(t === "migrada_nc" && !s.nc_code) return true;
+                      return false;
+                    });
                   }
                   if(!it.disposicao) return true;
-                  return it.disposicao === "segregar" && it.status !== "concluida";
+                  if(it.disposicao === "segregar" && it.status !== "concluida") return true;
+                  if(it.disposicao === "correcao"){
+                    // Correção: pendente até ser aprovada/concluida
+                    return it.status !== "concluida" && it.status !== "correcao_aprovada";
+                  }
+                  if(it.disposicao === "concessao_solicitada") return true;
+                  if(it.disposicao === "concessao_rejeitada") return true;
+                  return false;
                 };
                 const temPendente = itensRO.some(aindaPendente);
                 const roStatusAntes = ro.status;
