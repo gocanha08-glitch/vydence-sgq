@@ -6656,7 +6656,207 @@ function ROQuickViewModal({open, roCode, onClose, C, Sg}){
   </Modal>;
 }
 
-// ─── VincularROModal — confirma importação de itens da RO na NC ───
+// ─── SelecionarROsModal — busca ROs locais com multi-select ───────
+// Substitui VincularROModal antigo (que dependia de chamada API com URL contendo "/")
+function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLinkedROs, onClose, onConfirm, C, Sg}){
+  const [busca, setBusca]               = React.useState("");
+  const [selecionadas, setSelecionadas] = React.useState({}); // {roCode: true}
+  const [expandida, setExpandida]       = React.useState(null);
+
+  React.useEffect(()=>{
+    if(open){ setBusca(""); setSelecionadas({}); setExpandida(null); }
+  },[open]);
+
+  // Helper: item da RO ainda pode ser migrado pra NC?
+  const itemPodeMigrar = (it) => {
+    if(!it || !it.codigo) return false;
+    const TERMINAIS = ["sucatamento","concessao_aprovada","migrada_nc"];
+    if(it.sublotes && it.sublotes.length > 0){
+      return it.sublotes.some(s => !TERMINAIS.includes(s.tipo));
+    }
+    return !TERMINAIS.includes(it.disposicao);
+  };
+
+  // Helper: a RO toda está em outra NC ativa?
+  const roEmOutraNC = (code) => (ncRecords||[]).find(nc => {
+    if(nc.status==="cancelada" || nc.status==="encerrada") return false;
+    const ls = nc.data?.linkedROs || nc.linkedROs || [];
+    return ls.some(c => String(c).toLowerCase()===String(code).toLowerCase());
+  });
+
+  // Helper: item duplicado na NC atual? (mesmo código + lote/série)
+  const isDup = (it) => (currentNCItens||[]).some(cur => {
+    if((cur.codigo||"").toLowerCase() !== (it.codigo||"").toLowerCase()) return false;
+    const curLs = cur.lote_serie || "";
+    const itLs  = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+    return curLs === itLs;
+  });
+
+  // Conta quantos itens da RO ainda dão pra importar nesta NC
+  const itensImportaveis = (ro) => {
+    const itens = (ro?.itens || []).filter(itemPodeMigrar).filter(it => !isDup(it));
+    return itens;
+  };
+
+  // Lista filtrada
+  const visiveis = (roRecs||[])
+    .filter(ro => ro.status !== "cancelada")
+    .filter(ro => !(alreadyLinkedROs||[]).map(x=>String(x).toLowerCase()).includes(String(ro.code||ro.id).toLowerCase()))
+    .map(ro => {
+      const bloqueio = roEmOutraNC(ro.code||ro.id);
+      const importaveis = itensImportaveis(ro);
+      return { ro, bloqueio, importaveis };
+    })
+    .filter(({ro, bloqueio, importaveis}) => {
+      // Mostra a RO se: tem item importável OU está bloqueada (pra mostrar o porquê)
+      if(importaveis.length === 0 && !bloqueio) return false;
+      // Aplica busca
+      const q = busca.toLowerCase().trim();
+      if(!q) return true;
+      const code = (ro.code||ro.id||"").toLowerCase();
+      const desc = (ro.descricao||ro.title||"").toLowerCase();
+      const local= (ro.local||"").toLowerCase();
+      const tipo = (ro.tipo||"").toLowerCase();
+      const itensMatch = (ro.itens||[]).some(it =>
+        (it.codigo||"").toLowerCase().includes(q) ||
+        (it.descricao||"").toLowerCase().includes(q)
+      );
+      return code.includes(q) || desc.includes(q) || local.includes(q) || tipo.includes(q) || itensMatch;
+    });
+
+  const toggle = (code) => setSelecionadas(p => ({...p, [code]: !p[code]}));
+
+  // Conta selecionadas + itens
+  const codesSelec = Object.keys(selecionadas).filter(c=>selecionadas[c]);
+  const itensTotal = codesSelec.reduce((acc, code) => {
+    const item = visiveis.find(v => (v.ro.code||v.ro.id)===code);
+    return acc + (item ? item.importaveis.length : 0);
+  }, 0);
+
+  const canConfirm = codesSelec.length > 0 && itensTotal > 0;
+
+  if(!open) return null;
+
+  return <Modal open={open} onClose={onClose} title="Selecionar ROs para vincular" width={760}>
+    <div style={{marginBottom:12}}>
+      <input
+        autoFocus
+        style={{...Sg.input(),fontSize:13}}
+        value={busca}
+        onChange={e=>setBusca(e.target.value)}
+        placeholder="Buscar por código, descrição, local, tipo ou código de item..."/>
+    </div>
+
+    {visiveis.length === 0 && <div style={{padding:"24px 12px",textAlign:"center",color:C.muted,fontSize:13}}>
+      {busca
+        ? <>Nenhuma RO encontrada para "<b>{busca}</b>".</>
+        : <>Nenhuma RO disponível para vincular.<br/><span style={{fontSize:11}}>ROs já vinculadas, canceladas ou sem itens elegíveis ficam ocultas.</span></>
+      }
+    </div>}
+
+    {visiveis.length > 0 && <div style={{maxHeight:"50vh",overflowY:"auto",border:"1px solid "+C.border,borderRadius:6}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead>
+          <tr style={{background:C.surface,borderBottom:"1px solid "+C.border,position:"sticky",top:0,zIndex:1}}>
+            <th style={{padding:"7px 8px",width:32}}></th>
+            <th style={{padding:"7px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",width:120}}>Código</th>
+            <th style={{padding:"7px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",width:80}}>Status</th>
+            <th style={{padding:"7px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>Descrição / Local</th>
+            <th style={{padding:"7px 8px",textAlign:"center",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",width:70}}>Itens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visiveis.map(({ro, bloqueio, importaveis}) => {
+            const code = ro.code || ro.id;
+            const sel  = !!selecionadas[code];
+            const exp  = expandida === code;
+            const desabilitada = bloqueio || importaveis.length === 0;
+            return <React.Fragment key={code}>
+              <tr
+                style={{
+                  borderBottom:"1px solid "+C.border,
+                  cursor: desabilitada ? "default" : "pointer",
+                  background: sel ? C.accent+"10" : "",
+                  opacity: desabilitada ? 0.55 : 1,
+                }}
+                onClick={()=>{ if(!desabilitada) toggle(code); }}>
+                <td style={{padding:"7px 8px",textAlign:"center"}}>
+                  <input type="checkbox" checked={sel} disabled={desabilitada} onChange={()=>toggle(code)} onClick={e=>e.stopPropagation()}/>
+                </td>
+                <td style={{padding:"7px 8px",fontWeight:700,color:C.accent}}>{code}</td>
+                <td style={{padding:"7px 8px"}}><ROStatusBadge status={ro.status}/></td>
+                <td style={{padding:"7px 8px",color:C.text}}>
+                  <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:340}}>
+                    {ro.descricao || ro.title || "—"}
+                  </div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:2}}>
+                    {ro.tipo || "—"}{ro.local?" · "+ro.local:""}
+                    {bloqueio && <span style={{color:C.danger,marginLeft:8}}> • Já em {bloqueio.code||bloqueio.id} (ativa)</span>}
+                  </div>
+                </td>
+                <td style={{padding:"7px 8px",textAlign:"center"}}>
+                  {importaveis.length > 0 ? (
+                    <span
+                      title="Clique pra expandir"
+                      onClick={e=>{e.stopPropagation(); setExpandida(exp?null:code);}}
+                      style={{display:"inline-block",padding:"2px 8px",borderRadius:10,background:C.accent+"20",color:C.accent,fontWeight:600,fontSize:11,cursor:"pointer"}}>
+                      {importaveis.length} {exp?"▴":"▾"}
+                    </span>
+                  ) : (
+                    <span style={{color:C.muted,fontSize:11}}>0</span>
+                  )}
+                </td>
+              </tr>
+              {exp && importaveis.length>0 && <tr>
+                <td colSpan={5} style={{padding:"0 8px 10px 40px",background:C.surface}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead><tr>
+                      {["Código","Descrição","Lote/Série","Qtd"].map(h=>(
+                        <th key={h} style={{padding:"4px 6px",textAlign:"left",fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {importaveis.map((it,i)=>{
+                        const ls = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+                        return <tr key={i}>
+                          <td style={{padding:"3px 6px",fontWeight:600,color:C.accent}}>{it.codigo}</td>
+                          <td style={{padding:"3px 6px"}}>{it.descricao||"—"}</td>
+                          <td style={{padding:"3px 6px",color:C.muted}}>{ls||"—"}</td>
+                          <td style={{padding:"3px 6px"}}>{it.qtdNC||"—"}</td>
+                        </tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>}
+            </React.Fragment>;
+          })}
+        </tbody>
+      </table>
+    </div>}
+
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14,paddingTop:12,borderTop:"1px solid "+C.border,gap:12}}>
+      <div style={{fontSize:12,color:C.muted}}>
+        {codesSelec.length > 0
+          ? <><b style={{color:C.accent}}>{codesSelec.length}</b> RO{codesSelec.length!==1?"s":""} selecionada{codesSelec.length!==1?"s":""} · <b style={{color:C.accent}}>{itensTotal}</b> ite{itensTotal!==1?"ns":"m"} será{itensTotal!==1?"o":""} importado{itensTotal!==1?"s":""}</>
+          : "Nenhuma RO selecionada"}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+        <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
+          // Monta o payload: lista de {ro, itensNovos} pra cada RO selecionada
+          const payload = codesSelec.map(code => {
+            const item = visiveis.find(v => (v.ro.code||v.ro.id)===code);
+            return { ro: item.ro, itensNovos: item.importaveis };
+          });
+          onConfirm(payload);
+        }}>Vincular e importar</button>
+      </div>
+    </div>
+  </Modal>;
+}
+
+// ─── VincularROModal (LEGADO — não mais usado pela NewNC) ─────────
 function VincularROModal({open, roCode, currentNCItens, alreadyLinkedROs, onClose, onConfirm, ncRecords, currentUser, C, Sg}){
   const [loading, setLoading] = React.useState(false);
   const [error, setError]     = React.useState("");
@@ -7200,7 +7400,7 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
 }
 
 // ── NewNC ─────────────────────────────────────────────────────────
-function NewNC({currentUser, allUsers, ncRecords, onSave, onCancel, linkedRO}){
+function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, linkedRO}){
   const {C}=useTheme(); const Sg=mkSg(C);
 
   const canVincularRO = hasPerm(currentUser,'nc.vincular_ro');
@@ -7242,9 +7442,8 @@ function NewNC({currentUser, allUsers, ncRecords, onSave, onCancel, linkedRO}){
   },[]);
 
   // Modais
-  const [vincularROModal, setVincularROModal] = useState(null);  // {roCode}
-  const [verROModal, setVerROModal]           = useState(null);  // {roCode}
-  const [roInput, setRoInput]                 = useState("");
+  const [selecROModal, setSelecROModal] = useState(false);
+  const [verROModal, setVerROModal]     = useState(null);  // {roCode}
 
   const [attachments, setAttachments] = useState([]);
 
@@ -7289,30 +7488,32 @@ function NewNC({currentUser, allUsers, ncRecords, onSave, onCancel, linkedRO}){
   const updProc = (i,k,v) => setItensProcesso(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
   const remProc = (i) => setItensProcesso(p=>p.filter((_,j)=>j!==i));
 
-  // Tentar vincular RO: abre modal de confirmação
-  const tryVincularRO = () => {
-    const v = roInput.trim();
-    if(!v) return;
-    setVincularROModal({ roCode: v });
-  };
-
-  // Confirmou no modal: importa itens e adiciona aos linkedROs
-  const confirmVincularRO = ({ ro, itensNovos }) => {
-    const code = ro.code || vincularROModal.roCode;
-    const importados = itensNovos.map(it=>{
-      const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
-      return {
-        origem: code,
-        codigo: it.codigo||"",
-        descricao: it.descricao||"",
-        lote_serie: lote_serie,
-        qtd_nc: it.qtdNC||"",
-      };
+  // Confirmou seleção múltipla: importa itens de várias ROs de uma vez
+  const confirmSelecROs = (payload) => {
+    // payload = [{ ro, itensNovos }, ...]
+    const todosImportados = [];
+    const novosLinkedROs = [];
+    payload.forEach(({ ro, itensNovos }) => {
+      const code = ro.code || ro.id;
+      novosLinkedROs.push(code);
+      itensNovos.forEach(it => {
+        const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+        todosImportados.push({
+          origem: code,
+          codigo: it.codigo||"",
+          descricao: it.descricao||"",
+          lote_serie: lote_serie,
+          qtd_nc: it.qtdNC||"",
+        });
+      });
     });
-    setItensProduto(p=>[...p, ...importados]);
-    setLinkedROs(p=>p.includes(code) ? p : [...p, code]);
-    setVincularROModal(null);
-    setRoInput("");
+    setItensProduto(p=>[...p, ...todosImportados]);
+    setLinkedROs(p=>{
+      const novo = [...p];
+      novosLinkedROs.forEach(c => { if(!novo.includes(c)) novo.push(c); });
+      return novo;
+    });
+    setSelecROModal(false);
   };
 
   // Validação
@@ -7492,28 +7693,22 @@ function NewNC({currentUser, allUsers, ncRecords, onSave, onCancel, linkedRO}){
       </div>}
 
       {natureza==="produto" && canVincularRO && <div style={{marginBottom:12}}>
-        <label style={Sg.lbl}>Vincular RO (importa os itens dela)</label>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <input
-            style={{...Sg.input(),maxWidth:240}}
-            value={roInput}
-            onChange={e=>setRoInput(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); tryVincularRO(); } }}
-            placeholder="Código da RO (Ex: RO-001/2026)"/>
-          <button style={{...Sg.btn(),fontSize:12}} onClick={tryVincularRO} disabled={!roInput.trim()}>+ buscar e vincular</button>
+        <label style={Sg.lbl}>Vincular ROs (importa os itens delas)</label>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <button style={{...Sg.btn(),fontSize:12}} onClick={()=>setSelecROModal(true)}>+ Selecionar ROs</button>
+          {linkedROs.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {linkedROs.map(code=>(
+              <span key={code}
+                onClick={()=>setVerROModal({roCode: code})}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:12,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:12,color:C.accent,fontWeight:600,cursor:"pointer"}}
+                title="Ver detalhes da RO">
+                {code} ↗
+              </span>
+            ))}
+          </div>}
         </div>
-        {linkedROs.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
-          {linkedROs.map(code=>(
-            <span key={code}
-              onClick={()=>setVerROModal({roCode: code})}
-              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:12,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:12,color:C.accent,fontWeight:600,cursor:"pointer"}}
-              title="Ver detalhes da RO">
-              {code} ↗
-            </span>
-          ))}
-        </div>}
         <div style={{fontSize:11,color:C.muted,marginTop:6,fontStyle:"italic"}}>
-          Para desvincular uma RO, remova todos os itens dela na tabela acima.
+          Busca por código, descrição ou item. Para desvincular, remova todos os itens da RO na tabela acima.
         </div>
       </div>}
 
@@ -7634,17 +7829,16 @@ function NewNC({currentUser, allUsers, ncRecords, onSave, onCancel, linkedRO}){
     </div>
 
     {/* Modais */}
-    {vincularROModal && <VincularROModal
-      open={true}
-      roCode={vincularROModal.roCode}
+    <SelecionarROsModal
+      open={selecROModal}
+      roRecs={roRecords}
+      ncRecords={ncRecords}
       currentNCItens={itensProduto}
       alreadyLinkedROs={linkedROs}
-      ncRecords={ncRecords}
-      currentUser={currentUser}
       C={C} Sg={Sg}
-      onClose={()=>setVincularROModal(null)}
-      onConfirm={confirmVincularRO}
-    />}
+      onClose={()=>setSelecROModal(false)}
+      onConfirm={confirmSelecROs}
+    />
 
     {verROModal && <ROQuickViewModal
       open={true}
@@ -10322,7 +10516,7 @@ const saveReq = async (r) => {
       {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
       {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.tratar_itens')||hasPerm(loggedIn,'nc.gerenciar_acoes')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
       {view==='nc_pendencias'&&<NCPendenciasInbox ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveNC} onNavNC={(id)=>{setSel(id);setView('nc_detail');}}/>}
-      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} ncRecords={ncRecs} linkedRO={ncOriginRO} onCancel={()=>{setNcOriginRO(null);setView('nc_list');}} onSave={async(data)=>{
+      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} ncRecords={ncRecs} roRecords={roRecs} linkedRO={ncOriginRO} onCancel={()=>{setNcOriginRO(null);setView('nc_list');}} onSave={async(data)=>{
         const now=new Date().toISOString();
         const r={title:(data.descricao||"").substring(0,80)||"Não Conformidade",status:data.status||"aberta",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveNC(r);
