@@ -94,7 +94,7 @@ module.exports = async (req, res) => {
       `;
       if (!rec) return res.status(404).json({ error: 'Nao encontrado' });
 
-      if (mod === 'sa') {
+      if (mod === "sa") {
         return res.json({
           ...( rec.data || {} ),
           _db_id: rec.id,
