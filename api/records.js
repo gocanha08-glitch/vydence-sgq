@@ -103,7 +103,18 @@ module.exports = async (req, res) => {
         });
       }
 
-      return res.json(rec);
+      // RO/NC/RIACP — mesma forma que GET lista (espalha rec.data no nivel raiz)
+      // O frontend lê ro.data.tipo, ro.data.itens etc. — esses campos vivem em rec.data.data
+      // porque o save grava o objeto inteiro {title, status, data:{...}, log} no JSONB.
+      return res.json({
+        ...( rec.data || {} ),
+        _db_id: rec.id,
+        id: (rec.data && (rec.data.id || rec.data.code)) || rec.code,
+        code: rec.code,
+        status: rec.status,
+        createdAt: rec.created_at,
+        updatedAt: rec.updated_at,
+      });
     } catch (err) {
       return res.status(500).json({ error: 'Erro interno' });
     }
