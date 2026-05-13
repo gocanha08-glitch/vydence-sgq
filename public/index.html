@@ -5019,17 +5019,36 @@ function buildDispLinhas(item){
         migrada_nc:           {label:"Mover para NC",      bg:"#EEE8FB", col:"#3D1F8C"},
       };
       const m = LABELS[s.tipo]||{label:s.tipo, bg:"#eee", col:"#555"};
+      // Sublote migrada_nc: análise mostra "Migrado para NC-XXX" ou "Aguardando criação de NC"
+      let analise = s.extra || "—";
+      if(s.tipo === "migrada_nc"){
+        if(s.nc_code){
+          analise = "Migrado para " + s.nc_code + (s.extra && !s.extra.includes("Migrado para") ? " · " + s.extra : "");
+        } else {
+          analise = "Aguardando criação da NC" + (s.extra ? " · " + s.extra : "");
+        }
+      }
+      // migrada_nc: solicitado por = quem assinou tratativa; aprovado por = quem criou a NC (ou mesmo se sublote sem nc_code)
+      const solicitadoPor = s.migradaBy || s.concessaoSolicitadaBy || s.sucatadoBy || item.tratadoBy || null;
+      const solicitadoEm  = s.migradaAt || s.concessaoSolicitadaAt || s.sucatadoAt || item.tratadoAt || null;
+      let aprovadoPor = s.concessaoAprovadaBy || s.concessaoRejeitadaBy || null;
+      let aprovadoEm  = s.concessaoAprovadaAt || s.concessaoRejeitadaAt || null;
+      if(s.tipo === "sucatamento"){ aprovadoPor = s.sucatadoBy || null; aprovadoEm = s.sucatadoAt || null; }
+      if(s.tipo === "migrada_nc" && s.nc_code){
+        aprovadoPor = s.migradaAprovadaBy || s.migradaBy || item.tratadoBy || null;
+        aprovadoEm  = s.migradaAprovadaAt || s.migradaAt  || item.tratadoAt || null;
+      }
       linhas.push({
         tipo: s.tipo,
         tipoLabel: m.label,
         tipoBg: m.bg, tipoCol: m.col,
         qtd: s.qtd,
-        analise: s.extra||"—",
-        solicitadoPor: s.concessaoSolicitadaBy||s.sucatadoBy||item.tratadoBy||null,
-        solicitadoEm: s.concessaoSolicitadaAt||s.sucatadoAt||item.tratadoAt||null,
-        aprovadoPor: s.concessaoAprovadaBy||s.concessaoRejeitadaBy||(s.tipo==="sucatamento"?s.sucatadoBy:null)||null,
-        aprovadoEm: s.concessaoAprovadaAt||s.concessaoRejeitadaAt||(s.tipo==="sucatamento"?s.sucatadoAt:null)||null,
-        pendente: s.tipo==="concessao_solicitada",
+        analise,
+        solicitadoPor,
+        solicitadoEm,
+        aprovadoPor,
+        aprovadoEm,
+        pendente: s.tipo==="concessao_solicitada" || (s.tipo==="migrada_nc" && !s.nc_code),
         rejeitado: s.tipo==="concessao_rejeitada",
         motivoRejeicao: s.concessaoRejeitadaMotivo||null,
         subloteIdx: item.sublotes.indexOf(s),
@@ -5959,7 +5978,7 @@ function ROHistorico({r, C}){
   </div>;
 }
 
-function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC}){
+function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC, onMigracaoIniciada}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [sigModal,setSigModal]=useState(null);
   const [ncModal,setNcModal]=useState(false);
@@ -6251,9 +6270,17 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       detail: detalhe + "\n(assinado eletronicamente)"
     };
     const histTotal = [...(d.historico||[]), novoHist];
-    await onUpdate({...r, data: {...d, itens, historico: histTotal}});
+    const roAtualizada = {...r, data: {...d, itens, historico: histTotal}};
+    await onUpdate(roAtualizada);
     setPendingApply(null);
     setSigModal(null);
+
+    // Se a tratativa criou sublote migrada_nc sem nc_code, dispara abertura do NewNC
+    const sublotes = linha.sublotes || [];
+    const temMigracaoNova = sublotes.some(s => s.tipo === "migrada_nc" && !s.nc_code);
+    if(temMigracaoNova && typeof onMigracaoIniciada === "function"){
+      onMigracaoIniciada(roAtualizada, idx);
+    }
   };
 
   const itensVisiveis = editingItens ? itensEdit : (d.itens||[]);
@@ -7428,7 +7455,7 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
 }
 
 // ── NewNC ─────────────────────────────────────────────────────────
-function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, linkedRO}){
+function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, linkedRO, pendingMigracao}){
   const {C}=useTheme(); const Sg=mkSg(C);
 
   const canVincularRO = hasPerm(currentUser,'nc.vincular_ro');
@@ -7447,25 +7474,41 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
   // ROs vinculadas: array de { code, ro_snapshot_brief }
   const [linkedROs, setLinkedROs] = useState([]);
 
-  // Quando vier de "Gerar NC" no RODetail, importa os itens do linkedRO automaticamente
-  // mas só uma vez (na montagem inicial)
+  // Quando vier de "Gerar NC" no RODetail OU de migração via TratarItemModal,
+  // importa os itens do linkedRO automaticamente (só uma vez na montagem)
   React.useEffect(()=>{
-    if(linkedRO){
-      const code = linkedRO.code||linkedRO.id;
-      const itens = (linkedRO.data?.itens||[]).filter(x=>x.codigo && x.disposicao!=="migrada_nc");
-      const importados = itens.map(it=>{
-        const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
-        return {
-          origem: code,
-          codigo: it.codigo||"",
-          descricao: it.descricao||"",
-          lote_serie: lote_serie,
-          qtd_nc: it.qtdNC||"",
-        };
-      });
-      setItensProduto(importados);
-      setLinkedROs([code]);
+    if(!linkedRO) return;
+    const code = linkedRO.code||linkedRO.id;
+    const itensRO = linkedRO.data?.itens || [];
+
+    let itensParaImportar;
+    if(pendingMigracao && String(pendingMigracao.roCode)===String(code)){
+      // Migração via TratarItemModal: importa SÓ o item específico que ganhou sublote migrada_nc pendente
+      const itemAlvo = itensRO[pendingMigracao.itemIdx];
+      itensParaImportar = itemAlvo && itemAlvo.codigo ? [itemAlvo] : [];
+    } else {
+      // Gerar NC tradicional: importa todos os itens elegíveis (não-migrados ainda)
+      itensParaImportar = itensRO.filter(x => x.codigo && x.disposicao !== "migrada_nc");
     }
+
+    const importados = itensParaImportar.map(it=>{
+      const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+      // Para migração via TratarItemModal, pega qtd do sublote migrada_nc pendente
+      let qtd = it.qtdNC || "";
+      if(pendingMigracao && it.sublotes){
+        const sub = it.sublotes.find(s => s.tipo==="migrada_nc" && !s.nc_code);
+        if(sub) qtd = sub.qtd || qtd;
+      }
+      return {
+        origem: code,
+        codigo: it.codigo||"",
+        descricao: it.descricao||"",
+        lote_serie: lote_serie,
+        qtd_nc: qtd,
+      };
+    });
+    setItensProduto(importados);
+    setLinkedROs([code]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
@@ -9970,6 +10013,8 @@ function App() {
   const [requests, setRR] = useState([]);
   const [roRecs,   setRO] = useState([]);
   const [ncOriginRO, setNcOriginRO] = useState(null);
+  // pendingMigracao: quando RODetail dispara migração via TratarItemModal, marca o item específico
+  const [pendingMigracao, setPendingMigracao] = useState(null); // {roCode, itemIdx}
   const [ncRecs,   setNC_] = useState([]);
   const [matrix,   setMR] = useState(null);
   const [crits,    setCR] = useState(DEFAULT_CRITS);
@@ -10596,10 +10641,52 @@ const saveReq = async (r) => {
         addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
         setView('ro_list');
       }}/>}
-      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
+      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC} onMigracaoIniciada={(ro, itemIdx)=>{
+        setNcOriginRO(ro);
+        setPendingMigracao({roCode: ro.code||ro.id, itemIdx});
+        setView('nc_new');
+      }}/>}
       {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.tratar_itens')||hasPerm(loggedIn,'nc.gerenciar_acoes')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
       {view==='nc_pendencias'&&<NCPendenciasInbox ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveNC} onNavNC={(id)=>{setSel(id);setView('nc_detail');}}/>}
-      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} ncRecords={ncRecs} roRecords={roRecs} linkedRO={ncOriginRO} onCancel={()=>{setNcOriginRO(null);setView('nc_list');}} onSave={async(data)=>{
+      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} ncRecords={ncRecs} roRecords={roRecs} linkedRO={ncOriginRO} pendingMigracao={pendingMigracao} onCancel={async ()=>{
+        // Se veio de migração via TratarItemModal, oferece reverter
+        if(pendingMigracao && ncOriginRO){
+          const reverter = window.confirm("O item da RO foi marcado como \"Mover para NC\". Cancelar agora sem criar a NC vai DESFAZER essa marcação e o item voltará a ficar segregado. Continuar?");
+          if(reverter){
+            try{
+              const roFresh = await apiGet('/api/records?module=ro&id='+encodeURIComponent(pendingMigracao.roCode));
+              if(roFresh){
+                const roData = roFresh.data || roFresh;
+                const itens = (roData.itens||[]).map((it,idx)=>{
+                  if(idx !== pendingMigracao.itemIdx) return it;
+                  if(!it.sublotes) return it;
+                  // remove sublotes migrada_nc sem nc_code (pendentes)
+                  const sublotesRestantes = it.sublotes.filter(s => !(s.tipo==="migrada_nc" && !s.nc_code));
+                  if(sublotesRestantes.length === 0){
+                    // Era o único sublote: volta pra segregar
+                    const { sublotes, tratadoAt, tratadoBy, concessaoAprovadorId, ...resto } = it;
+                    return { ...resto, disposicao: "segregar", status: "pendente" };
+                  }
+                  return { ...it, sublotes: sublotesRestantes };
+                });
+                const now = new Date().toISOString();
+                await saveRO({
+                  ...roFresh,
+                  data: { ...roData, itens, historico: [...(roData.historico||[]), {
+                    type: "migracao_revertida", at: now, by: loggedIn.name, byId: loggedIn.id,
+                    detail: "Migração para NC cancelada pelo usuário — sublote revertido"
+                  }]},
+                });
+              }
+            }catch(e){ console.error("Erro ao reverter migração:", e); }
+          } else {
+            return; // não cancela, deixa o NewNC aberto
+          }
+        }
+        setNcOriginRO(null);
+        setPendingMigracao(null);
+        setView('nc_list');
+      }} onSave={async(data)=>{
         const now=new Date().toISOString();
         const r={title:(data.descricao||"").substring(0,80)||"Não Conformidade",status:data.status||"aberta",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveNC(r);
@@ -10617,10 +10704,28 @@ const saveReq = async (r) => {
 
                 const roData = ro.data || ro;
                 const itensRO = (roData.itens||[]).map(it=>{
-                  if(codigosImportados.includes((it.codigo||"").toLowerCase())){
-                    return {...it, disposicao:"migrada_nc", migrada_para_nc: ncCode, migrada_em: now};
+                  if(!codigosImportados.includes((it.codigo||"").toLowerCase())) return it;
+
+                  // Se tem sublote migrada_nc pendente (sem nc_code), atualiza ele
+                  if(it.sublotes && it.sublotes.some(s=>s.tipo==="migrada_nc" && !s.nc_code)){
+                    const novosSublotes = it.sublotes.map(s=>{
+                      if(s.tipo==="migrada_nc" && !s.nc_code){
+                        return {
+                          ...s,
+                          nc_code: ncCode,
+                          nc_em: now,
+                          extra: (s.extra ? s.extra + " · " : "") + "Migrado para " + ncCode,
+                          migradaAprovadaBy: loggedIn.name,
+                          migradaAprovadaAt: now,
+                        };
+                      }
+                      return s;
+                    });
+                    return {...it, sublotes: novosSublotes};
                   }
-                  return it;
+
+                  // Fallback (modelo legacy): marca disposicao direto
+                  return {...it, disposicao:"migrada_nc", migrada_para_nc: ncCode, migrada_em: now};
                 });
                 const linkedNCsRO = [...(((roData.linkedNCs)||[])), ncCode];
 
@@ -10658,6 +10763,7 @@ const saveReq = async (r) => {
         }
         addSL(loggedIn.name,'criacao','Nova NC aberta',(saved&&(saved.code||saved.id))||"");
         setNcOriginRO(null);
+        setPendingMigracao(null);
         setView('nc_list');
       }}/>}
       {view==='nc_detail'&&selId&&selectedNC&&<NCDetail ncRecord={selectedNC} currentUser={loggedIn} allUsers={users} onBack={()=>setView('nc_list')} onUpdate={saveNC}/>}
