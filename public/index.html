@@ -5903,8 +5903,8 @@ function GerarNCModal({ro, currentUser, C, Sg, onClose, onConfirm}){
     </div>
     <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}>
       <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
-      <button style={{...Sg.btn("primary"),opacity:ok?1:.4}} disabled={!ok} onClick={()=>onConfirm({titulo,descricao,roCode:ro.code||ro.id,itens:d.itens||[],tipo:d.tipo,local:d.local,classificacao:d.classificacao})}>
-        Criar NC
+      <button style={{...Sg.btn("primary")}} onClick={()=>onConfirm({roCode:ro.code||ro.id})}>
+        Ir para abertura da NC
       </button>
     </div>
   </Modal>;
@@ -6594,6 +6594,189 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   </div>;
 }
 
+// ─── ROQuickViewModal — popup de detalhes rápidos de uma RO ─────
+function ROQuickViewModal({open, roCode, onClose, C, Sg}){
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError]     = React.useState("");
+  const [ro, setRo]           = React.useState(null);
+
+  React.useEffect(()=>{
+    if(!open || !roCode){ setRo(null); setError(""); return; }
+    setLoading(true); setError(""); setRo(null);
+    apiGet('/api/records?module=ro&id=' + encodeURIComponent(roCode))
+      .then(r => { setRo(r); setLoading(false); })
+      .catch(e => { setError(e?.message || "RO não encontrada"); setLoading(false); });
+  },[open, roCode]);
+
+  if(!open) return null;
+
+  const d = (ro && (ro.data || ro)) || {};
+  const itens = (d.itens||[]).filter(x=>x.codigo);
+
+  return <Modal open={open} onClose={onClose} title={"Detalhes — "+(roCode||"")} width={620}>
+    {loading && <div style={{padding:"20px 0",textAlign:"center",color:C.muted,fontSize:13}}>Carregando...</div>}
+    {error && <div style={{padding:"12px",background:C.danger+"15",border:"1px solid "+C.danger+"40",borderRadius:6,color:C.danger,fontSize:12}}>{error}</div>}
+    {ro && !loading && <div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12,fontSize:12}}>
+        <div><span style={{color:C.muted}}>Status:</span> <b>{ro.status||"—"}</b></div>
+        <div><span style={{color:C.muted}}>Tipo:</span> <b>{d.tipo||"—"}</b></div>
+        <div><span style={{color:C.muted}}>Local:</span> <b>{d.local||"—"}</b></div>
+        <div><span style={{color:C.muted}}>OP/Chamado:</span> <b>{d.opChamado||"—"}</b></div>
+      </div>
+      {d.descricao && <div style={{marginBottom:12}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:4}}>Descrição</div>
+        <div style={{fontSize:12,color:C.text,whiteSpace:"pre-wrap",padding:"8px 10px",background:C.surface,borderRadius:6,border:"1px solid "+C.border}}>{d.descricao}</div>
+      </div>}
+      {itens.length>0 && <div>
+        <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:4}}>Itens ({itens.length})</div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+            {["Código","Descrição","Lote/Série","Qtd","Disposição"].map(h=>(
+              <th key={h} style={{padding:"5px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {itens.map((it,i)=>{
+              const ls = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+              return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                <td style={{padding:"6px 8px",fontWeight:600,color:C.accent}}>{it.codigo}</td>
+                <td style={{padding:"6px 8px",color:C.text}}>{it.descricao||"—"}</td>
+                <td style={{padding:"6px 8px",color:C.muted}}>{ls||"—"}</td>
+                <td style={{padding:"6px 8px",color:C.text}}>{it.qtdNC||"—"}</td>
+                <td style={{padding:"6px 8px"}}>{(RO_DISP_TODAS[it.disposicao]||{}).short || "—"}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>}
+    </div>}
+    <div style={{display:"flex",justifyContent:"flex-end",marginTop:16}}>
+      <button style={Sg.btn()} onClick={onClose}>Fechar</button>
+    </div>
+  </Modal>;
+}
+
+// ─── VincularROModal — confirma importação de itens da RO na NC ───
+function VincularROModal({open, roCode, currentNCItens, alreadyLinkedROs, onClose, onConfirm, ncRecords, currentUser, C, Sg}){
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError]     = React.useState("");
+  const [ro, setRo]           = React.useState(null);
+
+  React.useEffect(()=>{
+    if(!open || !roCode){ setRo(null); setError(""); return; }
+    setLoading(true); setError(""); setRo(null);
+
+    // Validação rápida antes da chamada: já está vinculada nesta NC?
+    if((alreadyLinkedROs||[]).map(x=>String(x).toLowerCase()).includes(String(roCode).toLowerCase())){
+      setError("Esta RO já está vinculada nesta NC.");
+      setLoading(false);
+      return;
+    }
+
+    // Validação: RO já está vinculada em outra NC ativa?
+    const ativa = (ncRecords||[]).find(nc => {
+      if(nc.status === "cancelada" || nc.status === "encerrada") return false;
+      const ls = (nc.data?.linkedROs)||(nc.linkedROs)||[];
+      return ls.map(x=>String(x).toLowerCase()).includes(String(roCode).toLowerCase());
+    });
+    if(ativa){
+      setError("Esta RO já está vinculada à NC "+(ativa.code||ativa.id)+" (ativa). Bloqueado: uma RO só pode estar em uma NC ativa por vez.");
+      setLoading(false);
+      return;
+    }
+
+    // Buscar a RO no backend
+    apiGet('/api/records?module=ro&id=' + encodeURIComponent(roCode))
+      .then(r => {
+        if(!r){ setError("RO "+roCode+" não encontrada."); setLoading(false); return; }
+        setRo(r); setLoading(false);
+      })
+      .catch(e => { setError("RO "+roCode+" não encontrada."); setLoading(false); });
+  },[open, roCode]);
+
+  if(!open) return null;
+
+  const d = (ro && (ro.data || ro)) || {};
+  const itensRO = (d.itens||[]).filter(x=>x.codigo);
+
+  // Identifica itens já migrados (não devem ser importados de novo)
+  const itensImportaveis = itensRO.filter(it => it.disposicao !== "migrada_nc");
+  const itensJaMigrados = itensRO.length - itensImportaveis.length;
+
+  // Identifica duplicatas com a tabela atual da NC (mesmo codigo+lote+série)
+  const isDup = (it) => (currentNCItens||[]).some(cur => {
+    if((cur.codigo||"").toLowerCase() !== (it.codigo||"").toLowerCase()) return false;
+    if((cur.lote||"") !== (it.lote||"")) return false;
+    if((cur.num_serie||"") !== (it.numSerie||"")) return false;
+    return true;
+  });
+  const itensNovos = itensImportaveis.filter(it => !isDup(it));
+  const itensDuplicados = itensImportaveis.length - itensNovos.length;
+
+  const canConfirm = ro && itensNovos.length > 0;
+
+  return <Modal open={open} onClose={onClose} title={"Vincular "+(roCode||"")} width={640}>
+    {loading && <div style={{padding:"20px 0",textAlign:"center",color:C.muted,fontSize:13}}>Buscando RO...</div>}
+
+    {error && <div>
+      <div style={{padding:"12px",background:C.danger+"15",border:"1px solid "+C.danger+"40",borderRadius:6,color:C.danger,fontSize:12,marginBottom:14}}>{error}</div>
+      <div style={{display:"flex",justifyContent:"flex-end"}}>
+        <button style={Sg.btn()} onClick={onClose}>Fechar</button>
+      </div>
+    </div>}
+
+    {ro && !loading && <div>
+      <div style={{padding:"10px 12px",background:C.accent+"10",border:"1px solid "+C.accent+"30",borderRadius:6,marginBottom:12,fontSize:12,color:C.dim}}>
+        <div><b>{ro.code||roCode}</b> — Status: <b>{ro.status||"—"}</b> · Tipo: <b>{d.tipo||"—"}</b> · Local: <b>{d.local||"—"}</b></div>
+        {d.descricao && <div style={{marginTop:6,color:C.muted,fontSize:11,whiteSpace:"pre-wrap"}}>{d.descricao.substring(0,200)}{d.descricao.length>200?"...":""}</div>}
+      </div>
+
+      <div style={{fontSize:11,color:C.muted,marginBottom:8,fontWeight:600,letterSpacing:.4,textTransform:"uppercase"}}>
+        Itens que serão importados ({itensNovos.length})
+      </div>
+
+      {itensNovos.length===0 && <div style={{padding:"10px 12px",background:C.warning+"15",border:"1px solid "+C.warning+"40",borderRadius:6,color:C.warning,fontSize:12,marginBottom:12}}>
+        Nada para importar. {itensJaMigrados>0 && "(Todos os itens da RO já foram migrados pra outra NC.) "}{itensDuplicados>0 && "(Há itens duplicados na tabela atual.)"}
+      </div>}
+
+      {itensNovos.length>0 && <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10,fontSize:12}}>
+        <thead><tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
+          {["Código","Descrição","Lote/Série","Qtd"].map(h=>(
+            <th key={h} style={{padding:"5px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {itensNovos.map((it,i)=>{
+            const ls = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+            return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"6px 8px",fontWeight:600,color:C.accent}}>{it.codigo}</td>
+              <td style={{padding:"6px 8px",color:C.text}}>{it.descricao||"—"}</td>
+              <td style={{padding:"6px 8px",color:C.muted}}>{ls||"—"}</td>
+              <td style={{padding:"6px 8px",color:C.text}}>{it.qtdNC||"—"}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>}
+
+      {(itensJaMigrados>0 || itensDuplicados>0) && <div style={{fontSize:11,color:C.muted,marginBottom:10,fontStyle:"italic"}}>
+        {itensJaMigrados>0 && itensJaMigrados+" item(s) já migrado(s) pra outra NC — ignorado(s). "}
+        {itensDuplicados>0 && itensDuplicados+" item(s) já existem nesta NC — ignorado(s)."}
+      </div>}
+
+      <div style={{padding:"8px 12px",background:C.warning+"10",border:"1px solid "+C.warning+"30",borderRadius:6,color:C.dim,fontSize:11,marginBottom:14}}>
+        Ao confirmar, os itens acima serão importados e marcados na RO como <b>"Migrada para NC"</b>. Se outros itens da RO ainda tiverem disposição pendente, a RO continuará aberta.
+      </div>
+
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+        <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
+          onConfirm({ ro, itensNovos });
+        }}>Vincular e importar</button>
+      </div>
+    </div>}
+  </Modal>;
+}
+
 // ================================================================
 // MÓDULO NC — NÃO CONFORMIDADE
 // ================================================================
@@ -7017,34 +7200,51 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
 }
 
 // ── NewNC ─────────────────────────────────────────────────────────
-function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
+function NewNC({currentUser, allUsers, ncRecords, onSave, onCancel, linkedRO}){
   const {C}=useTheme(); const Sg=mkSg(C);
+
+  const canVincularRO = hasPerm(currentUser,'nc.vincular_ro');
 
   const [natureza, setNatureza]                 = useState(linkedRO ? "produto" : "");
   const [ondeIdent, setOndeIdent]               = useState(linkedRO?.data?.local || "");
   const [ondeIdentOutro, setOndeIdentOutro]     = useState("");
-  const [descricao, setDescricao]               = useState(linkedRO ? ("Originada da RO "+(linkedRO.code||linkedRO.id)+". "+(linkedRO.data?.descricao||"")) : "");
+  const [descricao, setDescricao]               = useState("");
   const [fornecedor, setFornecedor]             = useState("");
   const [nf, setNf]                             = useState("");
 
-  const [itensProduto, setItensProduto] = useState(
-    linkedRO
-      ? (linkedRO.data?.itens||[]).filter(x=>x.codigo).map(it=>({
-          origem: "RO "+(linkedRO.code||linkedRO.id),
-          codigo: it.codigo||"",
-          descricao: it.descricao||"",
-          lote: it.lote||"",
-          num_serie: it.numSerie||"",
-          qtd_nc: it.qtdNC||"",
-          pedido: it.pedido||"",
-        }))
-      : []
-  );
-
+  // itens: cada um traz origem (RO-XXX ou "Manual") e lote_serie (string única)
+  const [itensProduto, setItensProduto] = useState([]);
   const [itensProcesso, setItensProcesso] = useState([]);
 
-  const [roInput, setRoInput] = useState("");
-  const [linkedROs, setLinkedROs] = useState(linkedRO ? [linkedRO.code||linkedRO.id] : []);
+  // ROs vinculadas: array de { code, ro_snapshot_brief }
+  const [linkedROs, setLinkedROs] = useState([]);
+
+  // Quando vier de "Gerar NC" no RODetail, importa os itens do linkedRO automaticamente
+  // mas só uma vez (na montagem inicial)
+  React.useEffect(()=>{
+    if(linkedRO){
+      const code = linkedRO.code||linkedRO.id;
+      const itens = (linkedRO.data?.itens||[]).filter(x=>x.codigo && x.disposicao!=="migrada_nc");
+      const importados = itens.map(it=>{
+        const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+        return {
+          origem: code,
+          codigo: it.codigo||"",
+          descricao: it.descricao||"",
+          lote_serie: lote_serie,
+          qtd_nc: it.qtdNC||"",
+        };
+      });
+      setItensProduto(importados);
+      setLinkedROs([code]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  // Modais
+  const [vincularROModal, setVincularROModal] = useState(null);  // {roCode}
+  const [verROModal, setVerROModal]           = useState(null);  // {roCode}
+  const [roInput, setRoInput]                 = useState("");
 
   const [attachments, setAttachments] = useState([]);
 
@@ -7065,22 +7265,57 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
     </div>
   );
 
-  const addProd = () => setItensProduto(p=>[...p,{origem:"Manual",codigo:"",descricao:"",lote:"",num_serie:"",qtd_nc:"",pedido:""}]);
+  // Handlers itens produto
+  const addProd = () => setItensProduto(p=>[...p,{origem:"Manual",codigo:"",descricao:"",lote_serie:"",qtd_nc:""}]);
   const updProd = (i,k,v) => setItensProduto(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
-  const remProd = (i) => setItensProduto(p=>p.filter((_,j)=>j!==i));
+  const remProd = (i) => {
+    // se item veio de uma RO, ao remover precisamos avaliar se devemos remover a RO da lista de linkedROs
+    setItensProduto(p=>{
+      const removido = p[i];
+      const novoArr = p.filter((_,j)=>j!==i);
+      // Se origem era uma RO e não há mais itens daquela RO, remover dos linkedROs
+      if(removido && removido.origem && removido.origem!=="Manual"){
+        const aindaTemDaRO = novoArr.some(x=>x.origem===removido.origem);
+        if(!aindaTemDaRO){
+          setLinkedROs(prev=>prev.filter(c=>c!==removido.origem));
+        }
+      }
+      return novoArr;
+    });
+  };
 
+  // Handlers itens processo
   const addProc = () => setItensProcesso(p=>[...p,{origem:"Manual",processo:"",documento:"",area:""}]);
   const updProc = (i,k,v) => setItensProcesso(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
   const remProc = (i) => setItensProcesso(p=>p.filter((_,j)=>j!==i));
 
-  const addRO = () => {
+  // Tentar vincular RO: abre modal de confirmação
+  const tryVincularRO = () => {
     const v = roInput.trim();
     if(!v) return;
-    if(linkedROs.some(x=>String(x).toLowerCase()===v.toLowerCase())){ setRoInput(""); return; }
-    setLinkedROs(p=>[...p,v]); setRoInput("");
+    setVincularROModal({ roCode: v });
   };
-  const remRO = (code) => setLinkedROs(p=>p.filter(x=>x!==code));
 
+  // Confirmou no modal: importa itens e adiciona aos linkedROs
+  const confirmVincularRO = ({ ro, itensNovos }) => {
+    const code = ro.code || vincularROModal.roCode;
+    const importados = itensNovos.map(it=>{
+      const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+      return {
+        origem: code,
+        codigo: it.codigo||"",
+        descricao: it.descricao||"",
+        lote_serie: lote_serie,
+        qtd_nc: it.qtdNC||"",
+      };
+    });
+    setItensProduto(p=>[...p, ...importados]);
+    setLinkedROs(p=>p.includes(code) ? p : [...p, code]);
+    setVincularROModal(null);
+    setRoInput("");
+  };
+
+  // Validação
   const ondeFinal = ondeIdent==="Outro" ? ondeIdentOutro.trim() : ondeIdent;
   const itensProdValidos = itensProduto.filter(it=>it.codigo&&it.codigo.trim());
   const itensProcValidos = itensProcesso.filter(it=>it.processo&&it.processo.trim());
@@ -7098,6 +7333,7 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
       <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
     </div>
 
+    {/* Bloco 1 — Dados gerais */}
     <div style={{...Sg.card(),marginBottom:14}}>
       {stepHeader(1, "Dados gerais", "Natureza, onde foi identificado e o que aconteceu")}
 
@@ -7131,47 +7367,90 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
         <label style={Sg.lbl}>Descrição do problema *</label>
         <textarea style={{...Sg.input(),minHeight:80,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Descreva a não conformidade identificada..."/>
       </div>
-
-      {linkedRO&&<div style={{marginTop:10,padding:"7px 12px",background:C.accent+"10",borderRadius:6,border:"1px solid "+C.accent+"30",fontSize:12,color:C.dim}}>
-        Vínculo automático: <span style={{fontWeight:600,color:C.accent}}>{linkedRO.code||linkedRO.id}</span>
-      </div>}
     </div>
 
+    {/* Bloco 2 — Itens (Produto) */}
     {natureza==="produto" && <div style={{...Sg.card(),marginBottom:14}}>
-      {stepHeader(2, "Itens afetados *", "Produto(s), lote, nº de série e quantidade não conforme")}
-      {itensProduto.length>0 && <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
+      {stepHeader(2, "Itens afetados *", "Produtos da NC. Itens com origem RO mostram seta — clique para ver detalhes da RO.")}
+      {itensProduto.length>0 && <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10,tableLayout:"fixed"}}>
+        <colgroup>
+          <col style={{width:"95px"}}/>
+          <col style={{width:"140px"}}/>
+          <col/>
+          <col style={{width:"140px"}}/>
+          <col style={{width:"85px"}}/>
+          <col style={{width:"70px"}}/>
+        </colgroup>
         <thead>
           <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-            {["Código","Descrição","Lote","Nº Série","Qtd NC","Pedido",""].map(h=>(
+            {["Origem","Código","Descrição","Lote / Série","Qtd NC",""].map(h=>(
               <th key={h} style={{padding:"6px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {itensProduto.map((it,i)=>(
-            <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
-              <td style={{padding:"5px 6px",minWidth:140}}>
-                <ProdutoAutocomplete
-                  value={it.codigo}
-                  onChange={v=>updProd(i,"codigo",v)}
-                  onSelect={p=>{ updProd(i,"codigo",p.codigo||""); updProd(i,"descricao",p.descricao||p.nome||""); }}
-                  C={C} Sg={Sg}
-                  placeholder="Código..."/>
+          {itensProduto.map((it,i)=>{
+            const fromRO = it.origem && it.origem !== "Manual";
+            return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"5px 8px",fontSize:11}}>
+                {fromRO
+                  ? <span
+                      onClick={()=>setVerROModal({roCode: it.origem})}
+                      style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px",borderRadius:10,background:C.accent+"15",color:C.accent,fontWeight:600,cursor:"pointer",border:"1px solid "+C.accent+"30"}}
+                      title="Ver detalhes da RO">{it.origem} ↗</span>
+                  : <span style={{color:C.muted}}>Manual</span>
+                }
               </td>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.descricao} onChange={e=>updProd(i,"descricao",e.target.value)} placeholder="Descrição..."/></td>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:110}} value={it.lote} onChange={e=>updProd(i,"lote",e.target.value)} placeholder="Lote..."/></td>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:110}} value={it.num_serie} onChange={e=>updProd(i,"num_serie",e.target.value)} placeholder="S/N..."/></td>
-              <td style={{padding:"5px 6px"}}><input type="number" min="0" style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:80}} value={it.qtd_nc} onChange={e=>updProd(i,"qtd_nc",e.target.value)} placeholder="0"/></td>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:110}} value={it.pedido} onChange={e=>updProd(i,"pedido",e.target.value)} placeholder="Pedido..."/></td>
-              <td style={{padding:"5px 8px",textAlign:"center"}}><button style={{...Sg.btn(),fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.danger+"50"}} onClick={()=>remProd(i)}>remover</button></td>
-            </tr>
-          ))}
+              <td style={{padding:"5px 6px"}}>
+                {fromRO
+                  ? <input style={{...Sg.input(),padding:"4px 6px",fontSize:12,background:C.surface}} value={it.codigo} readOnly title="Importado da RO — não pode ser editado"/>
+                  : <ProdutoAutocomplete
+                      value={it.codigo}
+                      onChange={v=>updProd(i,"codigo",v)}
+                      onSelect={p=>{ updProd(i,"codigo",p.codigo||""); updProd(i,"descricao",p.descricao||p.nome||""); }}
+                      C={C} Sg={Sg}
+                      placeholder="Código..."/>
+                }
+              </td>
+              <td style={{padding:"5px 6px"}}>
+                <input
+                  style={{...Sg.input(),padding:"4px 6px",fontSize:12, ...(fromRO?{background:C.surface}:{})}}
+                  value={it.descricao}
+                  readOnly={fromRO}
+                  onChange={e=>updProd(i,"descricao",e.target.value)}
+                  placeholder="Descrição..."
+                  title={fromRO?"Importado da RO":""}/>
+              </td>
+              <td style={{padding:"5px 6px"}}>
+                <input
+                  style={{...Sg.input(),padding:"4px 6px",fontSize:12, ...(fromRO?{background:C.surface}:{})}}
+                  value={it.lote_serie}
+                  readOnly={fromRO}
+                  onChange={e=>updProd(i,"lote_serie",e.target.value)}
+                  placeholder="Lote ou S/N..."
+                  title={fromRO?"Importado da RO":""}/>
+              </td>
+              <td style={{padding:"5px 6px"}}>
+                <input type="number" min="0"
+                  style={{...Sg.input(),padding:"4px 6px",fontSize:12, ...(fromRO?{background:C.surface}:{})}}
+                  value={it.qtd_nc}
+                  readOnly={fromRO}
+                  onChange={e=>updProd(i,"qtd_nc",e.target.value)}
+                  placeholder="0"
+                  title={fromRO?"Importado da RO":""}/>
+              </td>
+              <td style={{padding:"5px 6px",textAlign:"center"}}>
+                <button style={{...Sg.btn(),fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.danger+"50"}} onClick={()=>remProd(i)}>remover</button>
+              </td>
+            </tr>;
+          })}
         </tbody>
       </table>}
-      <button style={{...Sg.btn(),fontSize:12}} onClick={addProd}>+ Adicionar item</button>
-      {itensProduto.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um item.</div>}
+      <button style={{...Sg.btn(),fontSize:12}} onClick={addProd}>+ Adicionar item manual</button>
+      {itensProduto.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um item, ou vincule uma RO logo abaixo.</div>}
     </div>}
 
+    {/* Bloco 2 — Itens (Processo) */}
     {natureza==="processo" && <div style={{...Sg.card(),marginBottom:14}}>
       {stepHeader(2, "Processo afetado *", "Processo, documento e área onde foi identificado")}
       {itensProcesso.length>0 && <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
@@ -7197,8 +7476,9 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
       {itensProcesso.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um registro.</div>}
     </div>}
 
+    {/* Bloco 3 — Informações adicionais */}
     {natureza && <div style={{...Sg.card(),marginBottom:14}}>
-      {stepHeader(3, "Informações adicionais", "Opcionais: fornecedor, NF, vínculos com RO e evidências")}
+      {stepHeader(3, "Informações adicionais", "Opcionais: fornecedor, NF e vínculo com ROs")}
 
       {natureza==="produto" && <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:12,marginBottom:12}}>
         <div>
@@ -7211,32 +7491,43 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
         </div>
       </div>}
 
-      <div style={{marginBottom:12}}>
-        <label style={Sg.lbl}>ROs vinculadas</label>
+      {natureza==="produto" && canVincularRO && <div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>Vincular RO (importa os itens dela)</label>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <input
-            style={{...Sg.input(),maxWidth:200}}
+            style={{...Sg.input(),maxWidth:240}}
             value={roInput}
             onChange={e=>setRoInput(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addRO(); } }}
-            placeholder="Ex: RO-001 (Enter)"/>
-          <button style={{...Sg.btn(),fontSize:12}} onClick={addRO}>+ adicionar</button>
+            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); tryVincularRO(); } }}
+            placeholder="Código da RO (Ex: RO-001/2026)"/>
+          <button style={{...Sg.btn(),fontSize:12}} onClick={tryVincularRO} disabled={!roInput.trim()}>+ buscar e vincular</button>
         </div>
         {linkedROs.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
           {linkedROs.map(code=>(
-            <span key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:12,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:12,color:C.accent,fontWeight:600}}>
-              {code}
-              <button onClick={()=>remRO(code)} style={{background:"none",border:"none",color:C.accent,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>
+            <span key={code}
+              onClick={()=>setVerROModal({roCode: code})}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:12,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:12,color:C.accent,fontWeight:600,cursor:"pointer"}}
+              title="Ver detalhes da RO">
+              {code} ↗
             </span>
           ))}
         </div>}
-      </div>
+        <div style={{fontSize:11,color:C.muted,marginTop:6,fontStyle:"italic"}}>
+          Para desvincular uma RO, remova todos os itens dela na tabela acima.
+        </div>
+      </div>}
+
+      {natureza==="produto" && !canVincularRO && linkedROs.length===0 && <div style={{padding:"7px 12px",background:C.surface,borderRadius:6,border:"1px dashed "+C.border,fontSize:11,color:C.muted}}>
+        Você não tem permissão para vincular ROs. A Qualidade poderá vincular ROs depois, no detalhe da NC.
+      </div>}
     </div>}
 
+    {/* Anexos */}
     {natureza && <div style={{...Sg.card(),marginBottom:14}}>
       <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura_nc" currentUser={currentUser} C={C}/>
     </div>}
 
+    {/* Footer */}
     <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
       <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
       <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
@@ -7245,7 +7536,12 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
 
         const itensFinal = natureza==="produto"
           ? itensProdValidos.map(it=>({
-              ...it,
+              origem: it.origem || "Manual",
+              codigo: it.codigo || "",
+              descricao: it.descricao || "",
+              lote_serie: it.lote_serie || "",
+              qtd_nc: it.qtd_nc || 0,
+              // tratativa (preenchida depois)
               disposicao: "",
               justificativa_disposicao: "",
               qtd_tratada: 0,
@@ -7259,7 +7555,10 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
               status: "pendente",
             }))
           : itensProcValidos.map(it=>({
-              ...it,
+              origem: it.origem || "Manual",
+              processo: it.processo || "",
+              documento: it.documento || "",
+              area: it.area || "",
               disposicao: "",
               justificativa_disposicao: "",
               responsavel_id: null,
@@ -7333,6 +7632,26 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
         onSave({...data, status:"aberta"});
       }}>Abrir NC</button>
     </div>
+
+    {/* Modais */}
+    {vincularROModal && <VincularROModal
+      open={true}
+      roCode={vincularROModal.roCode}
+      currentNCItens={itensProduto}
+      alreadyLinkedROs={linkedROs}
+      ncRecords={ncRecords}
+      currentUser={currentUser}
+      C={C} Sg={Sg}
+      onClose={()=>setVincularROModal(null)}
+      onConfirm={confirmVincularRO}
+    />}
+
+    {verROModal && <ROQuickViewModal
+      open={true}
+      roCode={verROModal.roCode}
+      C={C} Sg={Sg}
+      onClose={()=>setVerROModal(null)}
+    />}
   </div>;
 }
 
@@ -8261,6 +8580,7 @@ const ALL_PERMS_META = [
   ]},
   {section:"Não Conformidade (NC)", items:[
     {id:"nc.abrir",           label:"Abrir NC"},
+    {id:"nc.vincular_ro",     label:"Vincular ROs na NC"},
     {id:"nc.tratar_itens",    label:"Tratar itens (definir disposição)"},
     {id:"nc.aprovar_concessao",label:"Aprovar concessão"},
     {id:"nc.gerenciar_acoes", label:"Gerenciar ações do plano"},
@@ -9427,6 +9747,7 @@ function App() {
   const [users,    setUR] = useState([]);
   const [requests, setRR] = useState([]);
   const [roRecs,   setRO] = useState([]);
+  const [ncOriginRO, setNcOriginRO] = useState(null);
   const [ncRecs,   setNC_] = useState([]);
   const [matrix,   setMR] = useState(null);
   const [crits,    setCR] = useState(DEFAULT_CRITS);
@@ -9637,36 +9958,13 @@ const saveReq = async (r) => {
     }
   };
 
-  const generateNC = async ({titulo, descricao, roCode, itens, tipo, local, classificacao}) => {
-    const now = new Date().toISOString();
-    const nc = {
-      title: titulo,
-      status: 'aberta',
-      data: {
-        titulo, descricao, tipo, local, classificacao,
-        itens: itens||[],
-        linkedROs: [roCode],
-        origem: 'ro',
-      },
-      log: [{at:now, by:loggedIn.name, type:'criacao', event:'NC aberta', detail:'Originada de '+roCode}],
-      createdBy: loggedIn.id, createdByName: loggedIn.name, createdAt: now,
-      owner_id: loggedIn.id, owner_name: loggedIn.name,
-    };
-    const saved = await saveNC(nc);
-    if (saved) {
-      // Vincula NC na RO
-      const ro = roRecs.find(x => x.code === roCode || x.id === roCode);
-      if (ro) {
-        const updatedRO = {
-          ...ro,
-          data: {...(ro.data||{}), linkedNCs: [...((ro.data||{}).linkedNCs||[]), saved.code||saved.id]},
-          log: [...(ro.log||[]), {at:now, by:loggedIn.name, type:'nc_gerada', event:'NC gerada', detail:(saved.code||saved.id)}],
-        };
-        await saveRO(updatedRO);
-      }
-      addSL(loggedIn.name, 'criacao', 'NC criada a partir de RO', (saved.code||saved.id)+' ← '+roCode);
-      alert('NC '+(saved.code||saved.id)+' criada com sucesso!');
-    }
+  const generateNC = async ({roCode}) => {
+    // Caminho A: gerar NC a partir da RO. Agora navega para o NewNC com a RO carregada,
+    // unificando o fluxo de abertura (mesma tela, mesma lógica de migração de item).
+    const ro = roRecs.find(x => x.code === roCode || x.id === roCode);
+    if(!ro){ alert('RO não encontrada'); return; }
+    setNcOriginRO(ro);
+    setView('nc_new');
   };
 
   const saveRO = async (r) => {
@@ -10024,11 +10322,43 @@ const saveReq = async (r) => {
       {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC}/>}
       {view==='nc_list'   &&(hasPerm(loggedIn,'nc.abrir')||hasPerm(loggedIn,'nc.tratar_itens')||hasPerm(loggedIn,'nc.gerenciar_acoes')||hasPerm(loggedIn,'nc.analisar')||hasPerm(loggedIn,'nc.fechar')||hasPerm(loggedIn,'nc.ver_todas')||loggedIn?.role==='admin')&&<NCList ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('nc_detail');}} onNew={()=>setView('nc_new')}/>}
       {view==='nc_pendencias'&&<NCPendenciasInbox ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveNC} onNavNC={(id)=>{setSel(id);setView('nc_detail');}}/>}
-      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} onCancel={()=>setView('nc_list')} onSave={async(data)=>{
+      {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} ncRecords={ncRecs} linkedRO={ncOriginRO} onCancel={()=>{setNcOriginRO(null);setView('nc_list');}} onSave={async(data)=>{
         const now=new Date().toISOString();
         const r={title:(data.descricao||"").substring(0,80)||"Não Conformidade",status:data.status||"aberta",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveNC(r);
+        if(saved){
+          const ncCode = saved.code || saved.id;
+          // Para cada RO vinculada, marca os itens importados como migrada_nc
+          for(const roCode of (data.linkedROs||[])){
+            try{
+              const ro = await apiGet('/api/records?module=ro&id='+encodeURIComponent(roCode));
+              if(ro){
+                // Pega códigos dos itens da NC originados dessa RO específica
+                const itensDessaRO = (data.itens||[]).filter(it=>it.origem===roCode);
+                const codigosImportados = itensDessaRO.map(it=>(it.codigo||"").toLowerCase());
+
+                const roData = ro.data || ro;
+                const itensRO = (roData.itens||[]).map(it=>{
+                  if(codigosImportados.includes((it.codigo||"").toLowerCase())){
+                    return {...it, disposicao:"migrada_nc", migrada_para_nc: ncCode, migrada_em: now};
+                  }
+                  return it;
+                });
+                const linkedNCsRO = [...(((roData.linkedNCs)||[])), ncCode];
+                const logEntry = {at:now, by:loggedIn.name, type:'nc_vinculada', event:'Itens migrados para NC', detail:ncCode+' ('+itensDessaRO.length+' item(s))'};
+
+                const updatedRO = {
+                  ...ro,
+                  data: {...roData, itens:itensRO, linkedNCs:linkedNCsRO},
+                  log: [...((ro.log)||[]), logEntry],
+                };
+                await saveRO(updatedRO);
+              }
+            }catch(e){ console.error('Erro ao marcar RO '+roCode+':', e); }
+          }
+        }
         addSL(loggedIn.name,'criacao','Nova NC aberta',(saved&&(saved.code||saved.id))||"");
+        setNcOriginRO(null);
         setView('nc_list');
       }}/>}
       {view==='nc_detail'&&selId&&selectedNC&&<NCDetail ncRecord={selectedNC} currentUser={loggedIn} allUsers={users} onBack={()=>setView('nc_list')} onUpdate={saveNC}/>}
