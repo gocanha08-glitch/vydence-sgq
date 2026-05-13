@@ -6599,49 +6599,96 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
 // ================================================================
 
 const NC_STATUS_LABELS = {
-  em_analise: {label:"Em Análise",  color:"#D97706"},
-  fechada:    {label:"Fechada",     color:"#16A34A"},
-  cancelada:  {label:"Cancelada",   color:"#DC2626"},
+  aberta:                {label:"Aberta",                color:"#D97706"},
+  em_analise:            {label:"Em Análise",            color:"#CA8A04"},
+  em_tratativa:          {label:"Em Tratativa",          color:"#2563EB"},
+  aguardando_fornecedor: {label:"Aguard. Fornecedor",    color:"#7C3AED"},
+  aguardando_evidencia:  {label:"Aguard. Evidência",     color:"#9333EA"},
+  encerrada:             {label:"Encerrada",             color:"#16A34A"},
+  cancelada:             {label:"Cancelada",             color:"#DC2626"},
 };
 
-const NC_ORIGENS = ["Interna","Externa — Cliente","Externa — Fornecedor","Externa — Auditoria"];
+const NC_NATUREZAS = [
+  {value:"produto",  label:"Produto"},
+  {value:"processo", label:"Processo"},
+];
 
-// Disposições dos itens na NC
-const NC_DISP = {
-  retrabalho_interno:    {label:"Retrabalho interno",         short:"Retrab. Interno",  color:"info"},
-  retrabalho_fornecedor: {label:"Retrabalho com fornecedor",  short:"Retrab. Fornec.",  color:"warning"},
-  devolucao:             {label:"Devolução",                  short:"Devolução",         color:"warning"},
-  concessao_solicitada:  {label:"Concessão solicitada",       short:"Concessão",         color:"info"},
-  concessao_aprovada:    {label:"Concessão aprovada",         short:"Concessão ✓",       color:"success"},
-  concessao_rejeitada:   {label:"Concessão rejeitada",        short:"Rejeitada",         color:"danger"},
-  sucatamento:           {label:"Sucatamento",                short:"Sucatado",          color:"danger"},
+const NC_ONDE_IDENTIFICADO = ["Produção","Inspeção Recebimento","Inspeção Final","AT","Almoxarifado","P&D","Outro"];
+
+const NC_TIPO_DESVIO_PRODUTO  = ["Dimensional","Visual","Funcional","Documentacional","Outro"];
+const NC_TIPO_DESVIO_PROCESSO = ["Falha operacional","Falha de processo","Não cumprimento de procedimento","Documentacional","Outro"];
+
+const NC_ESCOPOS = ["Unitário","Lote","Sistêmico"];
+
+const NC_DISP_PRODUTO = {
+  corrigir:                {label:"Corrigir",                       short:"Corrigir",       color:"info"},
+  retrabalhar:             {label:"Retrabalhar",                    short:"Retrab.",        color:"info"},
+  substituir:              {label:"Substituir",                     short:"Substituir",     color:"info"},
+  devolver_fornecedor:     {label:"Devolver ao fornecedor",         short:"Devolver",       color:"warning"},
+  descartar:               {label:"Descartar",                      short:"Descartar",      color:"danger"},
+  concessao_aprovada:      {label:"Aprovar em concessão",           short:"Concessão",      color:"success"},
+  liberar_apos_avaliacao:  {label:"Liberar após avaliação",         short:"Liberar",        color:"success"},
+  corrigir_documentacao:   {label:"Solicitar/corrigir documentação",short:"Doc.",           color:"info"},
+  encaminhar_riacp:        {label:"Encaminhar para RIACP",          short:"→ RIACP",        color:"warning"},
+  outro:                   {label:"Outro",                          short:"Outro",          color:"info"},
 };
 
-// Estados terminais de item — NC só fecha quando todos estão terminais
-const NC_DISP_TERMINAIS = ["retrabalho_interno","retrabalho_fornecedor","devolucao","concessao_aprovada","sucatamento"];
+const NC_DISP_PROCESSO = {
+  corrigir_registro:       {label:"Corrigir registro/documento",    short:"Corrigir reg.",  color:"info"},
+  regularizar_atividade:   {label:"Regularizar atividade pendente", short:"Regularizar",    color:"info"},
+  complementar_evidencia:  {label:"Complementar evidência",         short:"Compl. evid.",   color:"info"},
+  reexecutar_verificar:    {label:"Reexecutar/verificar",           short:"Reexecutar",     color:"info"},
+  regularizar_controle:    {label:"Regularizar controle",           short:"Reg. controle",  color:"info"},
+  encaminhar_riacp:        {label:"Encaminhar para RIACP",          short:"→ RIACP",        color:"warning"},
+  outro:                   {label:"Outro",                          short:"Outro",          color:"info"},
+};
 
-// Status de ações do plano corretivo
+const NC_DISP_TERMINAIS_PRODUTO  = ["corrigir","retrabalhar","substituir","devolver_fornecedor","descartar","concessao_aprovada","liberar_apos_avaliacao","corrigir_documentacao","encaminhar_riacp"];
+const NC_DISP_TERMINAIS_PROCESSO = ["corrigir_registro","regularizar_atividade","complementar_evidencia","reexecutar_verificar","regularizar_controle","encaminhar_riacp"];
+
+const NC_ITEM_STATUS = {
+  pendente:     {label:"Pendente",     color:"#D97706"},
+  em_tratativa: {label:"Em tratativa", color:"#2563EB"},
+  tratado:      {label:"Tratado",      color:"#16A34A"},
+};
+
 const NC_ACAO_STATUS = {
-  pendente:    {label:"Pendente",    color:"#D97706"},
-  em_andamento:{label:"Em andamento",color:"#2563EB"},
-  concluida:   {label:"Concluída",   color:"#16A34A"},
-  justificada: {label:"Justificada", color:"#64748B"},
-  cancelada:   {label:"Cancelada",   color:"#DC2626"},
+  pendente:     {label:"Pendente",    color:"#D97706"},
+  em_andamento: {label:"Em andamento",color:"#2563EB"},
+  concluida:    {label:"Concluída",   color:"#16A34A"},
+  justificada:  {label:"Justificada", color:"#64748B"},
+  cancelada:    {label:"Cancelada",   color:"#DC2626"},
 };
 
 const NC_ACAO_STATUS_TERMINAIS = ["concluida","justificada","cancelada"];
+
+// Aliases de compatibilidade para NCDetail/NCPendenciasInbox antigos
+// (serão removidos nas Entregas 2 e 3 quando esses componentes forem reescritos)
+const NC_DISP = NC_DISP_PRODUTO;
+const NC_DISP_TERMINAIS = NC_DISP_TERMINAIS_PRODUTO;
+const NC_ORIGENS = ["Interna","Externa — Cliente","Externa — Fornecedor","Externa — Auditoria"];
+
+function ncDispMap(natureza){ return natureza==="processo" ? NC_DISP_PROCESSO : NC_DISP_PRODUTO; }
+function ncDispTerminais(natureza){ return natureza==="processo" ? NC_DISP_TERMINAIS_PROCESSO : NC_DISP_TERMINAIS_PRODUTO; }
+function ncTipoDesvioOptions(natureza){ return natureza==="processo" ? NC_TIPO_DESVIO_PROCESSO : NC_TIPO_DESVIO_PRODUTO; }
 
 function NCStatusBadge({status}){
   const s = NC_STATUS_LABELS[status]||{label:status,color:"#64748B"};
   return <Badge label={s.label} color={s.color}/>;
 }
 
-function NCDispBadge({disp}){
-  const d = NC_DISP[disp];
+function NCDispBadge({disp, natureza}){
+  const map = ncDispMap(natureza||"produto");
+  const d = map[disp];
   if(!d) return <span style={{color:"#64748B",fontSize:11}}>—</span>;
   const colors = {info:"#2563EB",warning:"#D97706",success:"#16A34A",danger:"#DC2626"};
   const c = colors[d.color]||"#64748B";
   return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:500,background:c+"15",color:c,border:"1px solid "+c+"30",whiteSpace:"nowrap"}}>{d.short}</span>;
+}
+
+function NCItemStatusBadge({status}){
+  const s = NC_ITEM_STATUS[status||"pendente"]||{label:status,color:"#64748B"};
+  return <Badge label={s.label} color={s.color}/>;
 }
 
 // ── TratarItemNCModal — qualidade define disposição do item ───────
@@ -6878,14 +6925,22 @@ function NCHistorico({nc, C}){
 // ── NCList ────────────────────────────────────────────────────────
 function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
   const {C}=useTheme(); const Sg=mkSg(C);
-  const [fText, setFText] = useState("");
+  const [fText, setFText]     = useState("");
   const [fStatus, setFStatus] = useState("");
+  const [fNat, setFNat]       = useState("");
   const canNew = hasPerm(currentUser,'nc.abrir');
+
   const vis = (ncRecords||[]).filter(r=>{
+    const d = r.data||{};
     const q = fText.toLowerCase();
-    const ok = !q||(r.code||r.id||"").toLowerCase().includes(q)||(r.title||"").toLowerCase().includes(q)||(r.data?.descricao||"").toLowerCase().includes(q);
-    const okS = !fStatus||r.status===fStatus;
-    return ok&&okS;
+    const okT = !q
+      || (r.code||r.id||"").toLowerCase().includes(q)
+      || (r.title||"").toLowerCase().includes(q)
+      || (d.descricao||"").toLowerCase().includes(q)
+      || (d.fornecedor||"").toLowerCase().includes(q);
+    const okS = !fStatus || r.status===fStatus;
+    const okN = !fNat    || d.natureza===fNat;
+    return okT && okS && okN;
   });
 
   return <div style={{padding:"18px 22px"}}>
@@ -6896,21 +6951,27 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
       </div>
       {canNew&&<button style={{...Sg.btn("primary"),padding:"8px 16px"}} onClick={onNew}>+ Nova NC</button>}
     </div>
+
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, descrição..." style={{...Sg.input(),maxWidth:280}}/>
-      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:180}}>
+      <input value={fText} onChange={e=>setFText(e.target.value)} placeholder="Buscar por código, descrição, fornecedor..." style={{...Sg.input(),maxWidth:300}}/>
+      <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...Sg.input(),maxWidth:200}}>
         <option value="">Todos os status</option>
         {Object.entries(NC_STATUS_LABELS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
       </select>
+      <select value={fNat} onChange={e=>setFNat(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
+        <option value="">Qualquer natureza</option>
+        {NC_NATUREZAS.map(n=><option key={n.value} value={n.value}>{n.label}</option>)}
+      </select>
       <span style={{fontSize:11,color:C.muted,alignSelf:"center"}}>{vis.length} resultado{vis.length!==1?"s":""}</span>
     </div>
+
     <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
       {vis.length===0
         ? <div style={{textAlign:"center",padding:36,color:C.muted}}>Nenhum registro encontrado.</div>
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-                {["Código","Origem","Descrição","Itens","Ações","Abertura","Status"].map(h=>(
+                {["Código","Natureza","Descrição","Itens","Ações","Origem","Abertura","Status"].map(h=>(
                   <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -6918,18 +6979,20 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
             <tbody>
               {vis.map((r,i)=>{
                 const d = r.data||{};
-                const itens = (d.itens||[]).filter(x=>x.codigo);
+                const itens = (d.itens||[]).filter(x=>x.codigo||x.processo);
                 const acoes = (d.acoes||[]);
                 const acoesAbertas = acoes.filter(a=>!NC_ACAO_STATUS_TERMINAIS.includes(a.status)).length;
+                const origem = (d.linkedROs||[]).length>0 ? (d.linkedROs||[]).join(" · ") : "Manual";
+                const natLabel = (NC_NATUREZAS.find(n=>n.value===d.natureza)||{}).label || "—";
                 return <tr key={r.id||i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer"}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surface}
                   onMouseLeave={e=>e.currentTarget.style.background=""}
                   onClick={()=>onOpen(r.id||r.code)}>
                   <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
-                  <td style={{padding:"9px 12px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{d.origem||"—"}</td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{natLabel}</td>
                   <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:280}}>
                     <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
-                    {d.linkedROs&&d.linkedROs.length>0&&<div style={{fontSize:11,color:C.accent,marginTop:2}}>{d.linkedROs.join(" · ")}</div>}
+                    {d.fornecedor&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>Fornec.: {d.fornecedor}</div>}
                   </td>
                   <td style={{padding:"9px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>
                     {itens.length>0?<span style={{background:C.accent+"20",color:C.accent,borderRadius:10,padding:"1px 8px",fontSize:11,fontWeight:600}}>{itens.length}</span>:"—"}
@@ -6937,10 +7000,11 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
                   <td style={{padding:"9px 12px",fontSize:12,color:C.muted,textAlign:"center"}}>
                     {acoes.length>0
                       ? <span style={{background:acoesAbertas>0?C.warning+"20":C.success+"20",color:acoesAbertas>0?C.warning:C.success,borderRadius:10,padding:"1px 8px",fontSize:11,fontWeight:600}}>
-                          {acoesAbertas>0?acoesAbertas+" abertas":acoes.length+" ✓"}
+                          {acoesAbertas>0?acoesAbertas+" pend.":acoes.length+" ✓"}
                         </span>
                       : "—"}
                   </td>
+                  <td style={{padding:"9px 12px",fontSize:11,color:origem==="Manual"?C.muted:C.accent,whiteSpace:"nowrap"}}>{origem}</td>
                   <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{fmt(r.createdAt)}</td>
                   <td style={{padding:"9px 12px"}}><NCStatusBadge status={r.status}/></td>
                 </tr>;
@@ -6955,31 +7019,75 @@ function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
 // ── NewNC ─────────────────────────────────────────────────────────
 function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
   const {C}=useTheme(); const Sg=mkSg(C);
-  const [descricao, setDescricao] = useState(linkedRO?("Originada da RO "+(linkedRO.code||linkedRO.id)+". "+(linkedRO.data?.descricao||"")):"");
-  const [origem, setOrigem] = useState("Interna");
-  const [responsavel, setResp] = useState(currentUser?.id||"");
-  const [prazo, setPrazo] = useState("");
-  const [itens, setItens] = useState(
-    linkedRO?(linkedRO.data?.itens||[]).filter(x=>x.codigo).map(it=>({...it,dispNC:"",justificativaDisposicao:"",aprovadorConcessaoId:null,aprovadorConcessaoNome:null,concessaoSolicitadaAt:null,sucatadoAt:null,retrabInternoAt:null,retrabFornecAt:null,devolucaoAt:null})):[]
+
+  const [natureza, setNatureza]                 = useState(linkedRO ? "produto" : "");
+  const [ondeIdent, setOndeIdent]               = useState(linkedRO?.data?.local || "");
+  const [ondeIdentOutro, setOndeIdentOutro]     = useState("");
+  const [descricao, setDescricao]               = useState(linkedRO ? ("Originada da RO "+(linkedRO.code||linkedRO.id)+". "+(linkedRO.data?.descricao||"")) : "");
+  const [fornecedor, setFornecedor]             = useState("");
+  const [nf, setNf]                             = useState("");
+
+  const [itensProduto, setItensProduto] = useState(
+    linkedRO
+      ? (linkedRO.data?.itens||[]).filter(x=>x.codigo).map(it=>({
+          origem: "RO "+(linkedRO.code||linkedRO.id),
+          codigo: it.codigo||"",
+          descricao: it.descricao||"",
+          lote: it.lote||"",
+          num_serie: it.numSerie||"",
+          qtd_nc: it.qtdNC||"",
+          pedido: it.pedido||"",
+        }))
+      : []
   );
+
+  const [itensProcesso, setItensProcesso] = useState([]);
+
+  const [roInput, setRoInput] = useState("");
+  const [linkedROs, setLinkedROs] = useState(linkedRO ? [linkedRO.code||linkedRO.id] : []);
+
   const [attachments, setAttachments] = useState([]);
 
-  const ativos = (allUsers||[]).filter(u=>u.active!==false);
-  const ok = descricao.trim() && origem && responsavel;
-
   const stepHeader = (n, title, desc, ativo=true) => (
-    <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:14}}>
-      <div style={{width:24,height:24,borderRadius:"50%",background:ativo?C.accent:C.surface,color:ativo?"#fff":C.muted,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0,border:ativo?"none":"1px solid "+C.border}}>{n}</div>
+    <div style={{display:"flex", alignItems:"flex-start", gap:10, marginBottom:14}}>
+      <div style={{
+        width:24, height:24, borderRadius:"50%",
+        background: ativo ? C.accent : C.surface,
+        color: ativo ? "#fff" : C.muted,
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize:12, fontWeight:600, flexShrink:0,
+        border: ativo ? "none" : "1px solid "+C.border
+      }}>{n}</div>
       <div>
-        <div style={{fontSize:14,fontWeight:600,color:ativo?C.text:C.muted}}>{title}</div>
-        {desc&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{desc}</div>}
+        <div style={{fontSize:14, fontWeight:600, color: ativo?C.text:C.muted}}>{title}</div>
+        {desc && <div style={{fontSize:11, color:C.muted, marginTop:2}}>{desc}</div>}
       </div>
     </div>
   );
 
-  const addItem = () => setItens(p=>[...p,{codigo:"",descricao:"",lote:"",qtdNC:"",dispNC:"",justificativaDisposicao:""}]);
-  const updItem = (i,k,v) => setItens(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
-  const remItem = (i) => setItens(p=>p.filter((_,j)=>j!==i));
+  const addProd = () => setItensProduto(p=>[...p,{origem:"Manual",codigo:"",descricao:"",lote:"",num_serie:"",qtd_nc:"",pedido:""}]);
+  const updProd = (i,k,v) => setItensProduto(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
+  const remProd = (i) => setItensProduto(p=>p.filter((_,j)=>j!==i));
+
+  const addProc = () => setItensProcesso(p=>[...p,{origem:"Manual",processo:"",documento:"",area:""}]);
+  const updProc = (i,k,v) => setItensProcesso(p=>{ const n=[...p]; n[i]={...n[i],[k]:v}; return n; });
+  const remProc = (i) => setItensProcesso(p=>p.filter((_,j)=>j!==i));
+
+  const addRO = () => {
+    const v = roInput.trim();
+    if(!v) return;
+    if(linkedROs.some(x=>String(x).toLowerCase()===v.toLowerCase())){ setRoInput(""); return; }
+    setLinkedROs(p=>[...p,v]); setRoInput("");
+  };
+  const remRO = (code) => setLinkedROs(p=>p.filter(x=>x!==code));
+
+  const ondeFinal = ondeIdent==="Outro" ? ondeIdentOutro.trim() : ondeIdent;
+  const itensProdValidos = itensProduto.filter(it=>it.codigo&&it.codigo.trim());
+  const itensProcValidos = itensProcesso.filter(it=>it.processo&&it.processo.trim());
+  const tabelaOK = natureza==="produto" ? itensProdValidos.length>0
+                  : natureza==="processo" ? itensProcValidos.length>0
+                  : false;
+  const ok = natureza && ondeFinal && descricao.trim() && tabelaOK;
 
   return <div style={{padding:"18px 22px",maxWidth:1100}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
@@ -6990,80 +7098,239 @@ function NewNC({currentUser, allUsers, onSave, onCancel, linkedRO}){
       <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
     </div>
 
-    {/* Bloco 1 — Dados gerais */}
     <div style={{...Sg.card(),marginBottom:14}}>
-      {stepHeader(1,"Dados gerais","Origem, responsável e prazo")}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+      {stepHeader(1, "Dados gerais", "Natureza, onde foi identificado e o que aconteceu")}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <div>
-          <label style={Sg.lbl}>Origem *</label>
-          <select style={Sg.input()} value={origem} onChange={e=>setOrigem(e.target.value)}>
-            {NC_ORIGENS.map(o=><option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={Sg.lbl}>Responsável principal *</label>
-          <select style={Sg.input()} value={responsavel} onChange={e=>setResp(e.target.value)}>
+          <label style={Sg.lbl}>Natureza *</label>
+          <select style={Sg.input()} value={natureza} onChange={e=>{
+            const v = e.target.value;
+            setNatureza(v);
+            if(v!=="produto"){ setFornecedor(""); setNf(""); }
+          }}>
             <option value="">Selecione...</option>
-            {ativos.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+            {NC_NATUREZAS.map(n=><option key={n.value} value={n.value}>{n.label}</option>)}
           </select>
         </div>
         <div>
-          <label style={Sg.lbl}>Prazo para conclusão</label>
-          <input type="date" style={Sg.input()} value={prazo} onChange={e=>setPrazo(e.target.value)}/>
+          <label style={Sg.lbl}>Onde foi identificado *</label>
+          <select style={Sg.input()} value={ondeIdent} onChange={e=>{setOndeIdent(e.target.value); if(e.target.value!=="Outro") setOndeIdentOutro("");}}>
+            <option value="">Selecione...</option>
+            {NC_ONDE_IDENTIFICADO.map(l=><option key={l} value={l}>{l}</option>)}
+          </select>
         </div>
       </div>
+
+      {ondeIdent==="Outro" && <div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>Especifique *</label>
+        <input style={Sg.input()} value={ondeIdentOutro} onChange={e=>setOndeIdentOutro(e.target.value)} placeholder="Onde foi identificado..."/>
+      </div>}
+
       <div>
         <label style={Sg.lbl}>Descrição do problema *</label>
-        <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Descreva a não conformidade identificada..."/>
+        <textarea style={{...Sg.input(),minHeight:80,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Descreva a não conformidade identificada..."/>
       </div>
+
       {linkedRO&&<div style={{marginTop:10,padding:"7px 12px",background:C.accent+"10",borderRadius:6,border:"1px solid "+C.accent+"30",fontSize:12,color:C.dim}}>
-        Vínculo com: <span style={{fontWeight:600,color:C.accent}}>{linkedRO.code||linkedRO.id}</span>
+        Vínculo automático: <span style={{fontWeight:600,color:C.accent}}>{linkedRO.code||linkedRO.id}</span>
       </div>}
     </div>
 
-    {/* Bloco 2 — Itens afetados */}
-    <div style={{...Sg.card(),marginBottom:14}}>
-      {stepHeader(2,"Itens afetados","Produtos ou lotes com não conformidade")}
-      {itens.length>0&&<table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
+    {natureza==="produto" && <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(2, "Itens afetados *", "Produto(s), lote, nº de série e quantidade não conforme")}
+      {itensProduto.length>0 && <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
         <thead>
           <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-            {["Código","Descrição","Lote","Qtd NC",""].map(h=>(
+            {["Código","Descrição","Lote","Nº Série","Qtd NC","Pedido",""].map(h=>(
               <th key={h} style={{padding:"6px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {itens.map((it,i)=>(
+          {itensProduto.map((it,i)=>(
             <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.codigo} onChange={e=>updItem(i,"codigo",e.target.value)} placeholder="Ex: PM-0047"/></td>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.descricao} onChange={e=>updItem(i,"descricao",e.target.value)} placeholder="Descrição..."/></td>
-              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:120}} value={it.lote} onChange={e=>updItem(i,"lote",e.target.value)} placeholder="Lote..."/></td>
-              <td style={{padding:"5px 6px"}}><input type="number" style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:80}} value={it.qtdNC} onChange={e=>updItem(i,"qtdNC",e.target.value)} placeholder="0"/></td>
-              <td style={{padding:"5px 8px",textAlign:"center"}}><button style={{...Sg.btn(),fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.danger+"50"}} onClick={()=>remItem(i)}>remover</button></td>
+              <td style={{padding:"5px 6px",minWidth:140}}>
+                <ProdutoAutocomplete
+                  value={it.codigo}
+                  onChange={v=>updProd(i,"codigo",v)}
+                  onSelect={p=>{ updProd(i,"codigo",p.codigo||""); updProd(i,"descricao",p.descricao||p.nome||""); }}
+                  C={C} Sg={Sg}
+                  placeholder="Código..."/>
+              </td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.descricao} onChange={e=>updProd(i,"descricao",e.target.value)} placeholder="Descrição..."/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:110}} value={it.lote} onChange={e=>updProd(i,"lote",e.target.value)} placeholder="Lote..."/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:110}} value={it.num_serie} onChange={e=>updProd(i,"num_serie",e.target.value)} placeholder="S/N..."/></td>
+              <td style={{padding:"5px 6px"}}><input type="number" min="0" style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:80}} value={it.qtd_nc} onChange={e=>updProd(i,"qtd_nc",e.target.value)} placeholder="0"/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12,maxWidth:110}} value={it.pedido} onChange={e=>updProd(i,"pedido",e.target.value)} placeholder="Pedido..."/></td>
+              <td style={{padding:"5px 8px",textAlign:"center"}}><button style={{...Sg.btn(),fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.danger+"50"}} onClick={()=>remProd(i)}>remover</button></td>
             </tr>
           ))}
         </tbody>
       </table>}
-      <button style={{...Sg.btn(),fontSize:12}} onClick={addItem}>+ Adicionar item</button>
-    </div>
+      <button style={{...Sg.btn(),fontSize:12}} onClick={addProd}>+ Adicionar item</button>
+      {itensProduto.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um item.</div>}
+    </div>}
 
-    {/* Anexos */}
-    <div style={{...Sg.card(),marginBottom:14}}>
+    {natureza==="processo" && <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(2, "Processo afetado *", "Processo, documento e área onde foi identificado")}
+      {itensProcesso.length>0 && <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
+        <thead>
+          <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+            {["Processo","Documento","Área",""].map(h=>(
+              <th key={h} style={{padding:"6px 8px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {itensProcesso.map((it,i)=>(
+            <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.processo} onChange={e=>updProc(i,"processo",e.target.value)} placeholder="Ex: Compras, Expedição..."/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.documento} onChange={e=>updProc(i,"documento",e.target.value)} placeholder="POP/IT/Procedimento..."/></td>
+              <td style={{padding:"5px 6px"}}><input style={{...Sg.input(),padding:"4px 6px",fontSize:12}} value={it.area} onChange={e=>updProc(i,"area",e.target.value)} placeholder="Área..."/></td>
+              <td style={{padding:"5px 8px",textAlign:"center"}}><button style={{...Sg.btn(),fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.danger+"50"}} onClick={()=>remProc(i)}>remover</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>}
+      <button style={{...Sg.btn(),fontSize:12}} onClick={addProc}>+ Adicionar processo</button>
+      {itensProcesso.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um registro.</div>}
+    </div>}
+
+    {natureza && <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(3, "Informações adicionais", "Opcionais: fornecedor, NF, vínculos com RO e evidências")}
+
+      {natureza==="produto" && <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:12,marginBottom:12}}>
+        <div>
+          <label style={Sg.lbl}>Fornecedor</label>
+          <input style={Sg.input()} value={fornecedor} onChange={e=>setFornecedor(e.target.value)} placeholder="Nome do fornecedor..."/>
+        </div>
+        <div>
+          <label style={Sg.lbl}>NF / Invoice</label>
+          <input style={Sg.input()} value={nf} onChange={e=>setNf(e.target.value)} placeholder="Número da NF/Invoice..." disabled={!fornecedor.trim()}/>
+        </div>
+      </div>}
+
+      <div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>ROs vinculadas</label>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <input
+            style={{...Sg.input(),maxWidth:200}}
+            value={roInput}
+            onChange={e=>setRoInput(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addRO(); } }}
+            placeholder="Ex: RO-001 (Enter)"/>
+          <button style={{...Sg.btn(),fontSize:12}} onClick={addRO}>+ adicionar</button>
+        </div>
+        {linkedROs.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
+          {linkedROs.map(code=>(
+            <span key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:12,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:12,color:C.accent,fontWeight:600}}>
+              {code}
+              <button onClick={()=>remRO(code)} style={{background:"none",border:"none",color:C.accent,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>
+            </span>
+          ))}
+        </div>}
+      </div>
+    </div>}
+
+    {natureza && <div style={{...Sg.card(),marginBottom:14}}>
       <AttachmentsPanel attachments={attachments} onAdd={a=>setAttachments(p=>[...p,a])} onRemove={a=>setAttachments(p=>p.filter(x=>x.id!==a.id))} readOnly={false} stage="abertura_nc" currentUser={currentUser} C={C}/>
-    </div>
+    </div>}
 
     <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
       <button style={Sg.btn()} onClick={onCancel}>Cancelar</button>
       <button style={{...Sg.btn("primary"),opacity:ok?1:.4,padding:"8px 20px"}} disabled={!ok} onClick={()=>{
         const now = new Date().toISOString();
-        const resp = ativos.find(u=>String(u.id)===String(responsavel));
-        const itensReais = itens.filter(it=>it.codigo);
-        onSave({
-          descricao, origem, responsavelId: resp?.id, responsavelNome: resp?.name,
-          prazo, itens: itensReais, linkedROs: linkedRO?[linkedRO.code||linkedRO.id]:[],
-          acoes:[], comunicacoes:[], attachments, analiseFinal:null,
-          historico:[{type:"abertura",at:now,by:currentUser?.name,byId:currentUser?.id,event:"NC aberta",detail:"Origem: "+origem+(linkedRO?" · Vinculada a "+(linkedRO.code||linkedRO.id):"")+(itensReais.length>0?" · "+itensReais.length+" item(s)":"")}]
-        });
+        const userLabel = currentUser?.name || currentUser?.email || "—";
+
+        const itensFinal = natureza==="produto"
+          ? itensProdValidos.map(it=>({
+              ...it,
+              disposicao: "",
+              justificativa_disposicao: "",
+              qtd_tratada: 0,
+              responsavel_id: null,
+              responsavel_nome: null,
+              data_planejada: null,
+              data_conclusao: null,
+              concluido_por_id: null,
+              concluido_por_nome: null,
+              anexos: [],
+              status: "pendente",
+            }))
+          : itensProcValidos.map(it=>({
+              ...it,
+              disposicao: "",
+              justificativa_disposicao: "",
+              responsavel_id: null,
+              responsavel_nome: null,
+              data_planejada: null,
+              data_conclusao: null,
+              concluido_por_id: null,
+              concluido_por_nome: null,
+              anexos: [],
+              status: "pendente",
+            }));
+
+        const partes = [];
+        partes.push("Natureza: "+(natureza==="produto"?"Produto":"Processo"));
+        partes.push("Onde: "+ondeFinal);
+        if(natureza==="produto" && fornecedor) partes.push("Fornecedor: "+fornecedor+(nf?" (NF "+nf+")":""));
+        if(linkedROs.length>0) partes.push("Vinculada a: "+linkedROs.join(", "));
+        if(itensFinal.length>0) partes.push(itensFinal.length+" item(s)/registro(s)");
+
+        const data = {
+          natureza,
+          onde_identificado: ondeFinal,
+          descricao,
+          fornecedor: natureza==="produto" ? fornecedor : "",
+          nf: natureza==="produto" ? nf : "",
+          linkedROs,
+          itens: itensFinal,
+
+          classificacao: {
+            tipo_desvio: null,
+            escopo: null,
+            envolve_fornecedor: false,
+            fornecedor_nome: null,
+            observacao: null,
+            classificado_em: null,
+            classificado_por_id: null,
+            classificado_por_nome: null,
+          },
+
+          segregacao: {
+            local: null,
+            quantidade: null,
+            realizada_em: null,
+            realizada_por_id: null,
+            realizada_por_nome: null,
+            observacao: null,
+          },
+
+          acoes: [],
+
+          encerramento: {
+            tratativa_concluida: false,
+            evidencia_ok: false,
+            produto_liberado: false,
+            necessita_riacp: false,
+            riacp_codigo: null,
+            assinatura: null,
+          },
+
+          attachments,
+          historico: [{
+            type:"abertura",
+            at: now,
+            by: userLabel,
+            byId: currentUser?.id,
+            event: "NC aberta",
+            detail: partes.join(" · ")
+          }],
+        };
+
+        onSave({...data, status:"aberta"});
       }}>Abrir NC</button>
     </div>
   </div>;
@@ -9759,7 +10026,7 @@ const saveReq = async (r) => {
       {view==='nc_pendencias'&&<NCPendenciasInbox ncRecords={ncRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveNC} onNavNC={(id)=>{setSel(id);setView('nc_detail');}}/>}
       {view==='nc_new'    &&hasPerm(loggedIn,'nc.abrir')&&<NewNC currentUser={loggedIn} allUsers={users} onCancel={()=>setView('nc_list')} onSave={async(data)=>{
         const now=new Date().toISOString();
-        const r={title:data.descricao.substring(0,80)||"Não Conformidade",status:"em_analise",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
+        const r={title:(data.descricao||"").substring(0,80)||"Não Conformidade",status:data.status||"aberta",data,createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
         const saved=await saveNC(r);
         addSL(loggedIn.name,'criacao','Nova NC aberta',(saved&&(saved.code||saved.id))||"");
         setView('nc_list');
