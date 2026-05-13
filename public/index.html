@@ -6692,9 +6692,15 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
     return curLs === itLs;
   });
 
+  // Helpers de leitura — RO pode ter data aninhado (ro.data.itens) ou achatado (ro.itens)
+  const roItens     = (ro) => (ro && (ro.data?.itens || ro.itens)) || [];
+  const roTipo      = (ro) => (ro && (ro.data?.tipo || ro.tipo)) || "";
+  const roLocal     = (ro) => (ro && (ro.data?.local || ro.local)) || "";
+  const roDescricao = (ro) => (ro && (ro.data?.descricao || ro.descricao || ro.title)) || "";
+
   // Conta quantos itens da RO ainda dão pra importar nesta NC
   const itensImportaveis = (ro) => {
-    const itens = (ro?.itens || []).filter(itemPodeMigrar).filter(it => !isDup(it));
+    const itens = roItens(ro).filter(itemPodeMigrar).filter(it => !isDup(it));
     return itens;
   };
 
@@ -6714,10 +6720,10 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
       const q = busca.toLowerCase().trim();
       if(!q) return true;
       const code = (ro.code||ro.id||"").toLowerCase();
-      const desc = (ro.descricao||ro.title||"").toLowerCase();
-      const local= (ro.local||"").toLowerCase();
-      const tipo = (ro.tipo||"").toLowerCase();
-      const itensMatch = (ro.itens||[]).some(it =>
+      const desc = roDescricao(ro).toLowerCase();
+      const local= roLocal(ro).toLowerCase();
+      const tipo = roTipo(ro).toLowerCase();
+      const itensMatch = roItens(ro).some(it =>
         (it.codigo||"").toLowerCase().includes(q) ||
         (it.descricao||"").toLowerCase().includes(q)
       );
@@ -6787,10 +6793,10 @@ function SelecionarROsModal({open, roRecs, ncRecords, currentNCItens, alreadyLin
                 <td style={{padding:"7px 8px"}}><ROStatusBadge status={ro.status}/></td>
                 <td style={{padding:"7px 8px",color:C.text}}>
                   <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:340}}>
-                    {ro.descricao || ro.title || "—"}
+                    {roDescricao(ro) || "—"}
                   </div>
                   <div style={{fontSize:10,color:C.muted,marginTop:2}}>
-                    {ro.tipo || "—"}{ro.local?" · "+ro.local:""}
+                    {roTipo(ro) || "—"}{roLocal(ro)?" · "+roLocal(ro):""}
                     {bloqueio && <span style={{color:C.danger,marginLeft:8}}> • Já em {bloqueio.code||bloqueio.id} (ativa)</span>}
                   </div>
                 </td>
