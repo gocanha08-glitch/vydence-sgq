@@ -5437,6 +5437,69 @@ function PecasSolicitadasTable({pecas, onChange, readOnly, currentUser, onAddHis
 // Tela dedicada onde quem tem ro.aprovar_concessao vê só os pedidos
 // que foram enviados pra ele. Aprovar/rejeitar abre os modais
 // AprovarConcessaoModal/MotiveModal já existentes.
+// ── ReatribuirAprovadorModal ─────────────────────────────────────
+function ReatribuirAprovadorModal({open, pendencia, allUsers, onClose, onConfirm, C, Sg}){
+  const [novoId, setNovoId]   = useState("");
+  const [motivo, setMotivo]   = useState("");
+
+  React.useEffect(()=>{
+    if(open){ setNovoId(""); setMotivo(""); }
+  },[open]);
+
+  if(!open || !pendencia) return null;
+
+  // Quais usuários podem ser o novo aprovador? Depende do tipo da pendência.
+  const permAlvo = pendencia.tipo === "correcao" ? "ro.aprovar_correcao" : "ro.aprovar_concessao";
+  const candidatos = (allUsers||[]).filter(u =>
+    u.active !== false &&
+    hasPerm(u, permAlvo) &&
+    String(u.id) !== String(pendencia.aguardandoId)  // tira o atual
+  );
+
+  const podeConfirmar = novoId && motivo.trim().length >= 3;
+  const novoAprovadorNome = (candidatos.find(u=>String(u.id)===String(novoId))||{}).name || "";
+
+  const labelTipo = pendencia.tipo === "correcao" ? "Correção imediata" : "Concessão";
+
+  return <Modal open={open} onClose={onClose} title="Reatribuir aprovador" width={560}>
+    <div style={{marginBottom:12, padding:"10px 12px", background:C.surface, border:"1px solid "+C.border, borderRadius:6, fontSize:12, color:C.dim}}>
+      <div><b>Tipo:</b> {labelTipo}</div>
+      <div><b>RO:</b> {pendencia.ro.code||pendencia.ro.id}</div>
+      {pendencia.item && <div><b>Item:</b> {pendencia.item.codigo}{pendencia.item.descricao?" — "+pendencia.item.descricao:""}</div>}
+      <div style={{marginTop:6}}><b>Aprovador atual:</b> {pendencia.aguardando}</div>
+    </div>
+
+    <div style={{marginBottom:12}}>
+      <label style={Sg.lbl}>Novo aprovador *</label>
+      <select style={Sg.input()} value={novoId} onChange={e=>setNovoId(e.target.value)}>
+        <option value="">Selecione...</option>
+        {candidatos.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+      </select>
+      {candidatos.length===0 && <div style={{fontSize:11, color:C.warning, marginTop:6}}>Nenhum outro usuário com permissão "{labelTipo === "Correção imediata" ? "Aprovar correção imediata" : "Aprovar concessão"}" disponível.</div>}
+    </div>
+
+    <div style={{marginBottom:16}}>
+      <label style={Sg.lbl}>Motivo da reatribuição *</label>
+      <textarea
+        style={{...Sg.input(), minHeight:72, resize:"vertical"}}
+        value={motivo}
+        onChange={e=>setMotivo(e.target.value)}
+        placeholder="Ex: aprovador original em férias até DD/MM, redistribuição de carga, etc."/>
+      <div style={{fontSize:11, color:C.muted, marginTop:4}}>Mínimo 3 caracteres. O motivo fica registrado no histórico da RO.</div>
+    </div>
+
+    <div style={{display:"flex", justifyContent:"flex-end", gap:8}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button
+        style={{...Sg.btn("primary"), opacity: podeConfirmar?1:.4}}
+        disabled={!podeConfirmar}
+        onClick={()=>onConfirm({novoAprovadorId: novoId, novoAprovadorNome, motivo: motivo.trim()})}>
+        Continuar para assinatura
+      </button>
+    </div>
+  </Modal>;
+}
+
 function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [acaoAlvo, setAcaoAlvo] = useState(null);
@@ -5448,6 +5511,8 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
   const canAprovarConc = hasPerm(currentUser,'ro.aprovar_concessao');
   const canAprovarCorr = hasPerm(currentUser,'ro.aprovar_correcao');
   const canFechar = hasPerm(currentUser,'ro.fechar');
+  const canReatribuir = hasPerm(currentUser,'ro.reatribuir_aprovador');
+  const [reatribuirAlvo, setReatribuirAlvo] = useState(null);
 
   // Coleta TODAS as pendências da fila (para gestor) ou só as minhas
   const todasPendencias = [];
@@ -5545,6 +5610,19 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
         detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": concessão REJEITADA.\nMotivo: "+motivo;
       }
       linha.sublotes = sublotes;
+    } else if(tipo==="reatribuir"){
+      // Reatribuir aprovador — muda quem é responsável pela pendência
+      const { tipoOriginal, novoAprovadorId, novoAprovadorNome, aprovadorAnteriorNome } = pendingApply;
+      if(tipoOriginal==="correcao"){
+        linha.aprovadorCorrecaoId = novoAprovadorId;
+      } else if(subloteIdx!=null && linha.sublotes){
+        const sublotes = [...(linha.sublotes||[])];
+        sublotes[subloteIdx] = {...sublotes[subloteIdx], concessaoAprovadorId: novoAprovadorId};
+        linha.sublotes = sublotes;
+      } else {
+        linha.concessaoAprovadorId = novoAprovadorId;
+      }
+      detalhe = "Item "+(linha.codigo||"#"+(idx+1))+": aprovador reatribuído de "+(aprovadorAnteriorNome||"—")+" para "+novoAprovadorNome+".\nMotivo: "+(motivo||"—");
     } else {
       if(decisao==="aprovar"){
         linha.disposicao = "concessao_aprovada"; linha.status = "concluida";
@@ -5777,10 +5855,9 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
                 const r = p.ro;
                 const it = p.item;
                 const d = r.data||{};
-                return <tr key={i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer"}}
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surface}
-                  onMouseLeave={e=>e.currentTarget.style.background=""}
-                  onClick={()=>abrirRO(r)}>
+                  onMouseLeave={e=>e.currentTarget.style.background=""}>
                   <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
                   <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:260}}>
                     {it
@@ -5799,27 +5876,38 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
                     {dataAbertura(p.at)}
                   </td>
                   <td style={{padding:"9px 12px",textAlign:"right",whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
-                    {p.isMinha && (p.tipo==="correcao" || p.tipo==="concessao")
-                      ? <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                          <button
-                            style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.danger,borderRadius:6,background:"transparent",color:C.danger,cursor:"pointer",fontFamily:"inherit"}}
-                            onClick={()=>setAcaoAlvo({...p, step:"rejeitar"})}>
-                            Rejeitar
-                          </button>
-                          <button
-                            style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}}
-                            onClick={()=>{
-                              setPendingApply({ro:p.ro, idx:p.idx, subloteIdx:p.subloteIdx, tipo:p.tipo, decisao:"aprovar"});
-                              setSigModal({
-                                title: p.tipo==="correcao"?"Assinar — Aprovação de correção":"Assinar — Aprovação de concessão",
-                                confirmLabel:"Assinar e aprovar", confirmStyle:"success"
-                              });
-                            }}>
-                            Aprovar
-                          </button>
-                        </div>
-                      : <span style={{fontSize:11,color:C.accent,fontWeight:600,cursor:"pointer"}} onClick={()=>abrirRO(p.ro)}>abrir →</span>
-                    }
+                    <div style={{display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}}>
+                      {p.isMinha && (p.tipo==="correcao" || p.tipo==="concessao") && <>
+                        <button
+                          style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.danger,borderRadius:6,background:"transparent",color:C.danger,cursor:"pointer",fontFamily:"inherit"}}
+                          onClick={()=>setAcaoAlvo({...p, step:"rejeitar"})}>
+                          Rejeitar
+                        </button>
+                        <button
+                          style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}}
+                          onClick={()=>{
+                            setPendingApply({ro:p.ro, idx:p.idx, subloteIdx:p.subloteIdx, tipo:p.tipo, decisao:"aprovar"});
+                            setSigModal({
+                              title: p.tipo==="correcao"?"Assinar — Aprovação de correção":"Assinar — Aprovação de concessão",
+                              confirmLabel:"Assinar e aprovar", confirmStyle:"success"
+                            });
+                          }}>
+                          Aprovar
+                        </button>
+                      </>}
+                      {canReatribuir && (p.tipo==="correcao" || p.tipo==="concessao") && <button
+                        title="Reatribuir aprovador"
+                        style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.border,borderRadius:6,background:"transparent",color:C.dim,cursor:"pointer",fontFamily:"inherit"}}
+                        onClick={()=>setReatribuirAlvo(p)}>
+                        ↷ Reatribuir
+                      </button>}
+                      <button
+                        type="button"
+                        style={{fontSize:11,padding:"4px 8px",border:"none",background:"transparent",color:C.accent,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}
+                        onClick={()=>abrirRO(p.ro)}>
+                        abrir →
+                      </button>
+                    </div>
                   </td>
                 </tr>;
               })}
@@ -5827,6 +5915,31 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
           </table>
       }
     </div>
+
+    {/* Modal de reatribuição de aprovador */}
+    {reatribuirAlvo && <ReatribuirAprovadorModal
+      open={true}
+      pendencia={reatribuirAlvo}
+      allUsers={allUsers}
+      onClose={()=>setReatribuirAlvo(null)}
+      onConfirm={({novoAprovadorId, novoAprovadorNome, motivo})=>{
+        const tipoOriginal = reatribuirAlvo.tipo;
+        setPendingApply({
+          ro: reatribuirAlvo.ro,
+          idx: reatribuirAlvo.idx,
+          subloteIdx: reatribuirAlvo.subloteIdx,
+          tipo: "reatribuir",
+          tipoOriginal,
+          novoAprovadorId,
+          novoAprovadorNome,
+          aprovadorAnteriorNome: reatribuirAlvo.aguardando,
+          motivo,
+        });
+        setReatribuirAlvo(null);
+        setSigModal({title:"Assinar — Reatribuição de aprovador", confirmLabel:"Assinar e reatribuir", confirmStyle:"primary"});
+      }}
+      C={C} Sg={Sg}
+    />}
 
     {/* Modal de motivo da rejeição */}
     {acaoAlvo!==null && acaoAlvo.step==="rejeitar" && <MotiveModal
@@ -9034,6 +9147,7 @@ const ALL_PERMS_META = [
     {id:"ro.tratar_segregado",   label:"Tratar item segregado (qualidade)"},
     {id:"ro.aprovar_concessao",  label:"Aprovar concessão de RO"},
     {id:"ro.aprovar_correcao",   label:"Aprovar correção imediata de RO"},
+    {id:"ro.reatribuir_aprovador", label:"Reatribuir aprovador de RO"},
     {id:"ro.aprovar",            label:"Aprovar RO"},
     {id:"ro.fechar",             label:"Fechar RO"},
     {id:"ro.ver_todas",          label:"Ver todas as ações pendentes (gestor)"},
