@@ -4939,6 +4939,54 @@ function AprovarConcessaoModal({open, item, subloteIdx, onClose, onAprovar, onRe
   </Modal>;
 }
 
+
+// ── AprovarCorrecaoModal — espelhado em AprovarConcessaoModal ────
+function AprovarCorrecaoModal({open, item, onClose, onAprovar, onRejeitar, C, Sg}){
+  if(!open) return null;
+  const acao         = item?.correcaoAcao || item?.acaoCorretiva || "—";
+  const solicitadoPor= item?.tratadoBy || item?.dispDefinedBy || "—";
+  const solicitadoEm = item?.dispDefinedAt || item?.tratadoAt;
+  const qtd          = item?.qtdNC;
+  return <Modal open={open} onClose={onClose} title="" width={580}>
+    <div style={{margin:-16}}>
+      <div style={{padding:"18px 22px 14px"}}>
+        <div style={{fontSize:16, fontWeight:600, color:C.text}}>Aprovar correção imediata</div>
+        <div style={{fontSize:12, color:C.muted, marginTop:3}}>
+          Solicitada por {solicitadoPor}
+          {solicitadoEm?" em "+fmt(solicitadoEm):""}
+          {qtd?" · "+qtd+" unidades":""}
+        </div>
+      </div>
+      <ItemInfoStrip item={item} C={C}/>
+      <div style={{padding:"20px 22px"}}>
+        <div style={{fontSize:13, fontWeight:600, color:C.text, marginBottom:8}}>Ação corretiva proposta</div>
+        <div style={{
+          background:C.surface, padding:"14px 16px", fontSize:13, color:C.text,
+          lineHeight:1.6, borderLeft:"3px solid "+C.accent, borderRadius:"0 8px 8px 0",
+          whiteSpace:"pre-wrap"
+        }}>
+          {acao}
+        </div>
+        <div style={{fontSize:11, color:C.muted, marginTop:14, paddingTop:14, borderTop:"1px solid "+C.border}}>
+          Ao rejeitar, será aberto outro popup pedindo o motivo. Aprovar vai direto pra assinatura.
+        </div>
+      </div>
+      <div style={{padding:"12px 22px", borderTop:"1px solid "+C.border, display:"flex", justifyContent:"space-between", gap:8}}>
+        <button
+          style={{padding:"7px 16px", fontSize:12, fontWeight:500, borderRadius:7, cursor:"pointer", fontFamily:"inherit", border:"1px solid "+C.danger, background:"transparent", color:C.danger}}
+          onClick={onRejeitar}>
+          Rejeitar correção
+        </button>
+        <button
+          style={{...Sg.btn("primary"), fontSize:12, padding:"7px 18px"}}
+          onClick={onAprovar}>
+          Aprovar correção
+        </button>
+      </div>
+    </div>
+  </Modal>;
+}
+
 // ── Linha de item editável ───────────────────────────────────────
 function ItemRow({item, idx, onChange, onCommit, onRemove, onOpenDisp, C, Sg}){
   const cellMid = {padding:"8px 6px", verticalAlign:"middle"};
@@ -5107,7 +5155,7 @@ function buildDispLinhas(item){
   return linhas;
 }
 
-function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar, C, Sg}){
+function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar, onAprovarCorrecao, canAprovarCorrecao, currentUser, C, Sg}){
   const cell = {padding:"7px 8px", fontSize:12, verticalAlign:"top"};
   const hasSublotes = item.sublotes && item.sublotes.length > 0;
   const segregadoPendente = item.disposicao==="segregar" && !hasSublotes;
@@ -5116,6 +5164,8 @@ function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar,
     (!hasSublotes && (item.disposicao==="segregar" || item.disposicao==="concessao_rejeitada")));
   const showAprovar = canAprovar && hasSublotes && item.sublotes.some(s=>s.tipo==="concessao_solicitada");
   const showAprovarLegado = canAprovar && !hasSublotes && item.disposicao==="concessao_solicitada";
+  const showAprovarCorrecao = canAprovarCorrecao && !hasSublotes && item.disposicao==="correcao" && item.status==="pendente_aprovacao"
+                              && currentUser && String(item.aprovadorCorrecaoId)===String(currentUser.id);
 
   const dispLinhas = buildDispLinhas(item);
 
@@ -5160,6 +5210,11 @@ function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar,
             style={{fontSize:11, padding:"3px 10px", background:C.warning, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
             Decidir →
           </button>}
+          {di===0 && showAprovarCorrecao && onAprovarCorrecao && <button
+            onClick={()=>onAprovarCorrecao(idx)}
+            style={{fontSize:11, padding:"3px 10px", background:C.warning, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
+            Decidir →
+          </button>}
         </td>
       </tr>
     ))}
@@ -5167,7 +5222,7 @@ function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar,
 }
 
 // ── Tabela de itens dinâmica ─────────────────────────────────────
-function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTratar, canTratar, onAprovar, canAprovar, C, Sg, allUsers}){
+function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTratar, canTratar, onAprovar, canAprovar, onAprovarCorrecao, canAprovarCorrecao, C, Sg, allUsers}){
   const [dispModalIdx, setDispModalIdx] = useState(null);
   // Rastreia quais itens já foram "anunciados" (têm código real) pra não duplicar
   const announcedRef = React.useRef(new Set());
@@ -5287,7 +5342,7 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTra
           {itens.length===0 && <tr><td colSpan={6} style={{padding:"12px 8px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhum item adicionado</td></tr>}
           {itens.map((item,i)=>(
             readOnly
-              ? <ItemRowReadOnly key={i} item={item} idx={i} onTratar={onTratar} canTratar={canTratar} onAprovar={onAprovar} canAprovar={canAprovar && (currentUser && String(item.concessaoAprovadorId)===String(currentUser.id))} C={C} Sg={Sg}/>
+              ? <ItemRowReadOnly key={i} item={item} idx={i} onTratar={onTratar} canTratar={canTratar} onAprovar={onAprovar} canAprovar={canAprovar && (currentUser && String(item.concessaoAprovadorId)===String(currentUser.id))} onAprovarCorrecao={onAprovarCorrecao} canAprovarCorrecao={canAprovarCorrecao} currentUser={currentUser} C={C} Sg={Sg}/>
               : <ItemRow key={i} item={item} idx={i}
                   onChange={v=>updItem(i,v)}
                   onCommit={(field, oldVal, newVal)=>commitField(i, field, oldVal, newVal)}
@@ -5500,7 +5555,7 @@ function ReatribuirAprovadorModal({open, pendencia, allUsers, onClose, onConfirm
   </Modal>;
 }
 
-function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
+function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirPendencia}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [acaoAlvo, setAcaoAlvo] = useState(null);
   const [pendingApply, setPendingApply] = useState(null);
@@ -5855,9 +5910,10 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
                 const r = p.ro;
                 const it = p.item;
                 const d = r.data||{};
-                return <tr key={i} style={{borderBottom:"1px solid "+C.border}}
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer"}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surface}
-                  onMouseLeave={e=>e.currentTarget.style.background=""}>
+                  onMouseLeave={e=>e.currentTarget.style.background=""}
+                  onClick={()=>{ if(typeof onAbrirPendencia==="function") onAbrirPendencia(p); }}>
                   <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
                   <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:260}}>
                     {it
@@ -5876,38 +5932,15 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
                     {dataAbertura(p.at)}
                   </td>
                   <td style={{padding:"9px 12px",textAlign:"right",whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
-                    <div style={{display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}}>
-                      {p.isMinha && (p.tipo==="correcao" || p.tipo==="concessao") && <>
-                        <button
-                          style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.danger,borderRadius:6,background:"transparent",color:C.danger,cursor:"pointer",fontFamily:"inherit"}}
-                          onClick={()=>setAcaoAlvo({...p, step:"rejeitar"})}>
-                          Rejeitar
+                    {canReatribuir && (p.tipo==="correcao" || p.tipo==="concessao")
+                      ? <button
+                          title="Reatribuir aprovador"
+                          style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.border,borderRadius:6,background:"transparent",color:C.dim,cursor:"pointer",fontFamily:"inherit"}}
+                          onClick={()=>setReatribuirAlvo(p)}>
+                          ↷ Reatribuir
                         </button>
-                        <button
-                          style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}}
-                          onClick={()=>{
-                            setPendingApply({ro:p.ro, idx:p.idx, subloteIdx:p.subloteIdx, tipo:p.tipo, decisao:"aprovar"});
-                            setSigModal({
-                              title: p.tipo==="correcao"?"Assinar — Aprovação de correção":"Assinar — Aprovação de concessão",
-                              confirmLabel:"Assinar e aprovar", confirmStyle:"success"
-                            });
-                          }}>
-                          Aprovar
-                        </button>
-                      </>}
-                      {canReatribuir && (p.tipo==="correcao" || p.tipo==="concessao") && <button
-                        title="Reatribuir aprovador"
-                        style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.border,borderRadius:6,background:"transparent",color:C.dim,cursor:"pointer",fontFamily:"inherit"}}
-                        onClick={()=>setReatribuirAlvo(p)}>
-                        ↷ Reatribuir
-                      </button>}
-                      <button
-                        type="button"
-                        style={{fontSize:11,padding:"4px 8px",border:"none",background:"transparent",color:C.accent,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}
-                        onClick={()=>abrirRO(p.ro)}>
-                        abrir →
-                      </button>
-                    </div>
+                      : null
+                    }
                   </td>
                 </tr>;
               })}
@@ -6288,7 +6321,7 @@ function ROHistorico({r, C}){
   </div>;
 }
 
-function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC, onMigracaoIniciada}){
+function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerateNC, onMigracaoIniciada, focusAction, onFocusActionConsumed}){
   const {C}=useTheme();const Sg=mkSg(C);
   const [sigModal,setSigModal]=useState(null);
   const [ncModal,setNcModal]=useState(false);
@@ -6307,6 +6340,20 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   const [tratarItemIdx, setTratarItemIdx] = useState(null);
   // aprovacaoState: { idx, step: 'decidir' | 'rejeitar' }
   const [aprovacaoState, setAprovacaoState] = useState(null);
+  // correcaoState: { idx, step: 'decidir' | 'rejeitar' }
+  const [correcaoState, setCorrecaoState] = useState(null);
+
+  // Auto-abre modal quando vem de "Ações pendentes" com focusAction
+  React.useEffect(()=>{
+    if(!focusAction) return;
+    const {tipo, itemIdx, subloteIdx} = focusAction;
+    if(tipo === "tratar")    setTratarItemIdx(itemIdx);
+    if(tipo === "correcao")  setCorrecaoState({idx:itemIdx, step:"decidir"});
+    if(tipo === "concessao") setAprovacaoState({idx:itemIdx, subloteIdx, step:"decidir"});
+    if(tipo === "fechar")    setValidarModal(true);
+    if(typeof onFocusActionConsumed === "function") onFocusActionConsumed();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusAction?.tipo, focusAction?.itemIdx, focusAction?.subloteIdx]);
   // pendingApply: dados aguardando confirmação por assinatura
   const [pendingApply, setPendingApply] = useState(null);
   const actionMenuRef = React.useRef(null);
@@ -6319,7 +6366,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   }, [actionMenuOpen]);
 
   // Bloqueia auto-refresh enquanto qualquer modal estiver aberto
-  const anyModalOpen = !!(tratarItemIdx!==null || aprovacaoState!==null || sigModal || motiveModal || ncModal || editingItens || validarModal);
+  const anyModalOpen = !!(tratarItemIdx!==null || aprovacaoState!==null || correcaoState!==null || sigModal || motiveModal || ncModal || editingItens || validarModal);
   React.useEffect(()=>{
     window.__sgqModalOpen = anyModalOpen;
     return () => { window.__sgqModalOpen = false; };
@@ -6554,6 +6601,21 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       histType = "decisao_aprovador";
       detalhe = "Item "+codigo+": concessão de "+sublotes[si].qtd+"x REJEITADA por "+userName+".\nMotivo: "+pendingApply.motivo;
     }
+    else if(pendingApply.type==="correcao_aprovar"){
+      linha.status = "concluida";
+      linha.correcaoAprovadaAt = now;
+      linha.correcaoAprovadaBy = userName;
+      histType = "decisao_aprovador";
+      detalhe = "Item " + codigo + ": correção APROVADA por " + userName + ".";
+    }
+    else if(pendingApply.type==="correcao_rejeitar"){
+      linha.status = "correcao_rejeitada";
+      linha.correcaoRejeitadaAt = now;
+      linha.correcaoRejeitadaBy = userName;
+      linha.correcaoRejeitadaMotivo = pendingApply.motivo;
+      histType = "decisao_aprovador";
+      detalhe = "Item " + codigo + ": correção REJEITADA por " + userName + ".\nMotivo: " + pendingApply.motivo;
+    }
     // legado (ROs antigas com modelo antigo)
     else if(pendingApply.type==="aprovacao_aprovar"){
       linha.disposicao = "concessao_aprovada";
@@ -6749,6 +6811,8 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
         canTratar={hasPerm(currentUser,'ro.tratar_segregado') && !editingItens && !["cancelada","fechada"].includes(status)}
         onAprovar={(idx, si)=>setAprovacaoState({idx, subloteIdx:si, step:"decidir"})}
         canAprovar={hasPerm(currentUser,'ro.aprovar_concessao') && !editingItens && !["cancelada","fechada"].includes(status)}
+        onAprovarCorrecao={(idx)=>setCorrecaoState({idx, step:"decidir"})}
+        canAprovarCorrecao={hasPerm(currentUser,'ro.aprovar_correcao') && !editingItens && !["cancelada","fechada"].includes(status)}
         C={C} Sg={Sg} allUsers={allUsers}/>
     </div>}
 
@@ -6828,6 +6892,36 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       onRejeitar={()=>{
         setAprovacaoState({...aprovacaoState, step:"rejeitar"});
       }}
+      C={C} Sg={Sg}
+    />}
+
+    {/* Aprovar correção — etapa 1: ler proposta e decidir */}
+    {correcaoState!==null && correcaoState.step==="decidir" && d.itens && d.itens[correcaoState.idx] && <AprovarCorrecaoModal
+      open={true}
+      item={d.itens[correcaoState.idx]}
+      onClose={()=>setCorrecaoState(null)}
+      onAprovar={()=>{
+        setPendingApply({type:"correcao_aprovar", idx:correcaoState.idx});
+        setCorrecaoState(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Aprovação de correção", confirmLabel:"Assinar e aprovar", confirmStyle:"success"});
+      }}
+      onRejeitar={()=>setCorrecaoState({...correcaoState, step:"rejeitar"})}
+      C={C} Sg={Sg}
+    />}
+
+    {/* Aprovar correção — etapa 2: motivo de rejeição */}
+    {correcaoState!==null && correcaoState.step==="rejeitar" && <MotiveModal
+      open={true}
+      onClose={()=>setCorrecaoState({...correcaoState, step:"decidir"})}
+      onConfirm={(motivo)=>{
+        setPendingApply({type:"correcao_rejeitar", idx:correcaoState.idx, motivo: motivo||""});
+        setCorrecaoState(null);
+        setSigModal({action:"apply_pending", title:"Assinar — Rejeição de correção", confirmLabel:"Assinar e rejeitar", confirmStyle:"danger"});
+      }}
+      title="Motivo da rejeição"
+      description="Registre o motivo. O responsável receberá essa informação para corrigir."
+      confirmLabel="Continuar para assinatura"
+      confirmStyle="danger"
       C={C} Sg={Sg}
     />}
 
@@ -10325,6 +10419,8 @@ function App() {
   const [requests, setRR] = useState([]);
   const [roRecs,   setRO] = useState([]);
   const [ncOriginRO, setNcOriginRO] = useState(null);
+  // Quando usuário clica em uma pendência em "Ações pendentes", abre RO com modal direto
+  const [roFocusAction, setRoFocusAction] = useState(null); // {tipo, itemIdx, subloteIdx}
   // pendingMigracao: quando RODetail dispara migração via TratarItemModal, marca o item específico
   const [pendingMigracao, setPendingMigracao] = useState(null); // {roCode, itemIdx}
   const [ncRecs,   setNC_] = useState([]);
@@ -10991,7 +11087,16 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
-      {view==='ro_aprovacoes' && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO} onNavRO={(id)=>{setSel(id);setView('ro_detail');}}/>}
+      {view==='ro_aprovacoes' && <ROAprovacoesInbox
+        roRecords={roRecs}
+        currentUser={loggedIn}
+        allUsers={users}
+        onUpdate={saveRO}
+        onAbrirPendencia={(p)=>{
+          setRoFocusAction({tipo:p.tipo, itemIdx:p.idx, subloteIdx:p.subloteIdx});
+          setSel(p.ro.id||p.ro.code);
+          setView('ro_detail');
+        }}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
         const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"em_analise",data:{...f,itens:itens||[],attachments:atts||[],historico:[{type:"abertura",at:now,by:loggedIn.name,byId:loggedIn.id,detail:"Ocorrência aberta pelo operador."}]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
@@ -10999,7 +11104,7 @@ const saveReq = async (r) => {
         addSL(loggedIn.name,'criacao','Nova RO aberta',(saved&&(saved.code||saved.id))||"");
         setView('ro_list');
       }}/>}
-      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC} onMigracaoIniciada={(ro, itemIdx)=>{
+      {view==='ro_detail'&&selId&&selectedRO&&<RODetail roRecord={selectedRO} currentUser={loggedIn} allUsers={users} onBack={()=>setView('ro_list')} onUpdate={saveRO} onGenerateNC={generateNC} focusAction={roFocusAction} onFocusActionConsumed={()=>setRoFocusAction(null)} onMigracaoIniciada={(ro, itemIdx)=>{
         setNcOriginRO(ro);
         setPendingMigracao({roCode: ro.code||ro.id, itemIdx});
         setView('nc_new');
