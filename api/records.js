@@ -94,7 +94,7 @@ module.exports = async (req, res) => {
       `;
       if (!rec) return res.status(404).json({ error: 'Nao encontrado' });
 
-      if (mod === "sa") {
+      if (mod === 'sa') {
         return res.json({
           ...( rec.data || {} ),
           _db_id: rec.id,
@@ -103,9 +103,6 @@ module.exports = async (req, res) => {
         });
       }
 
-      // RO/NC/RIACP — mesma forma que GET lista (espalha rec.data no nivel raiz)
-      // O frontend lê ro.data.tipo, ro.data.itens etc. — esses campos vivem em rec.data.data
-      // porque o save grava o objeto inteiro {title, status, data:{...}, log} no JSONB.
       return res.json({
         ...( rec.data || {} ),
         _db_id: rec.id,
