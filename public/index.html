@@ -5659,7 +5659,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirP
     if(dd.tipo==="Processo"){
       // Aguardando análise da qualidade
       if(dd.acaoStatus==="aguardando_analise"){
-        todasPendenciasFull.push({
+        todasPendencias.push({
           ro:r, tipo:"processo_analise",
           aguardando:"Qualidade", aguardandoId:null,
           isMinha: hasPerm(currentUser,"ro.tratar_segregado"),
@@ -5669,7 +5669,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirP
       // Correção imediata aguardando aprovação
       if(dd.acaoTomada==="correcao" && dd.acaoStatus==="pendente_aprovacao"){
         const aprov = (allUsers||[]).find(u=>String(u.id)===String(dd.acaoAprovadorId));
-        todasPendenciasFull.push({
+        todasPendencias.push({
           ro:r, tipo:"processo_correcao",
           aguardando: aprov?.name||"—", aguardandoId: dd.acaoAprovadorId,
           isMinha: String(dd.acaoAprovadorId)===String(currentUser?.id),
@@ -5811,6 +5811,28 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirP
   (roRecords||[]).forEach(r=>{
     if(["cancelada","fechada"].includes(r.status)) return;
     const itens = r.data?.itens||[];
+    const dd = r.data || {};
+
+    // RO de Processo: pendências
+    if(dd.tipo==="Processo"){
+      if(dd.acaoStatus==="aguardando_analise"){
+        todasPendenciasFull.push({
+          ro:r, tipo:"processo_analise",
+          aguardando:"Qualidade", aguardandoId:null,
+          isMinha: hasPerm(currentUser,"ro.tratar_segregado"),
+          at: dd.acaoEncaminhadaAt || r.createdAt,
+        });
+      }
+      if(dd.acaoTomada==="correcao" && dd.acaoStatus==="pendente_aprovacao"){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(dd.acaoAprovadorId));
+        todasPendenciasFull.push({
+          ro:r, tipo:"processo_correcao",
+          aguardando: aprov?.name||"—", aguardandoId: dd.acaoAprovadorId,
+          isMinha: String(dd.acaoAprovadorId)===String(currentUser?.id),
+          at: dd.acaoSolicitadaAt || r.createdAt,
+        });
+      }
+    }
 
     // RO pronta para fechar
     const prontaParaFechar = r.status==="em_analise" && itens.length>0 && itens.every(it=>{
