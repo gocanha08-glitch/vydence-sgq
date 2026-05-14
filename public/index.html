@@ -5200,7 +5200,7 @@ function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar,
     {dispLinhas.map((dl, di)=>(
       <tr key={di} style={{borderBottom: di===dispLinhas.length-1?"1px solid "+C.border:"0.5px dashed "+C.border+"66"}}>
         <td style={{...cell, fontWeight:600, color:C.accent, wordBreak:"break-word"}}>{item.codigo||"—"}</td>
-        <td style={{...cell, color:C.text, wordBreak:"break-word", lineHeight:1.35}}>{item.descricao||"—"}</td>
+        <td style={{...cell, color:C.text, wordBreak:"break-word", lineHeight:1.35, fontSize:11}}>{item.descricao||"—"}</td>
         <td style={{...cell, color:C.muted, wordBreak:"break-word"}}>{item.lote||"—"}</td>
         <td style={{...cell, textAlign:"center"}}>{dl.qtd||"—"}</td>
         <td style={{...cell}}>
