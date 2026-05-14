@@ -5199,29 +5199,29 @@ function ItemRowReadOnly({item, idx, onTratar, canTratar, onAprovar, canAprovar,
   return <React.Fragment>
     {dispLinhas.map((dl, di)=>(
       <tr key={di} style={{borderBottom: di===dispLinhas.length-1?"1px solid "+C.border:"0.5px dashed "+C.border+"66"}}>
-        <td style={{...cell, fontWeight:600, color:C.accent, width:110}}>{item.codigo||"—"}</td>
-        <td style={{...cell, color:C.text, maxWidth:180}}>{item.descricao||"—"}</td>
-        <td style={{...cell, color:C.muted, width:90, whiteSpace:"nowrap"}}>{item.lote||"—"}</td>
-        <td style={{...cell, width:40, textAlign:"center"}}>{dl.qtd||"—"}</td>
-        <td style={{...cell, width:130}}>
-          <span style={{fontSize:11, padding:"2px 7px", borderRadius:6, background:dl.tipoBg, color:dl.tipoCol, fontWeight:500, whiteSpace:"nowrap"}}>
+        <td style={{...cell, fontWeight:600, color:C.accent, wordBreak:"break-word"}}>{item.codigo||"—"}</td>
+        <td style={{...cell, color:C.text, wordBreak:"break-word", lineHeight:1.35}}>{item.descricao||"—"}</td>
+        <td style={{...cell, color:C.muted, wordBreak:"break-word"}}>{item.lote||"—"}</td>
+        <td style={{...cell, textAlign:"center"}}>{dl.qtd||"—"}</td>
+        <td style={{...cell}}>
+          <span style={{display:"inline-block", fontSize:11, padding:"2px 7px", borderRadius:6, background:dl.tipoBg, color:dl.tipoCol, fontWeight:500, whiteSpace:"normal", lineHeight:1.3}}>
             {dl.tipoLabel}
           </span>
-          {dl.rejeitado && dl.motivoRejeicao && <div style={{fontSize:10, color:C.danger, marginTop:3}}>Rejeitado: {dl.motivoRejeicao}</div>}
+          {dl.rejeitado && dl.motivoRejeicao && <div style={{fontSize:10, color:C.danger, marginTop:3, wordBreak:"break-word"}}>Rejeitado: {dl.motivoRejeicao}</div>}
         </td>
-        <td style={{...cell, color:C.muted, maxWidth:200, fontSize:11}}>{dl.analise}</td>
-        <td style={{...cell, width:110}}>
-          {dl.solicitadoPor && <div style={{fontSize:11, color:C.text}}>{dl.solicitadoPor}</div>}
-          {dl.solicitadoEm && <div style={{fontSize:10, color:C.muted}}>{fmtShort(dl.solicitadoEm)}</div>}
+        <td style={{...cell, color:C.muted, fontSize:11, wordBreak:"break-word", lineHeight:1.4}}>{dl.analise}</td>
+        <td style={{...cell, wordBreak:"break-word"}}>
+          {dl.solicitadoPor && <div style={{fontSize:11, color:C.text, lineHeight:1.3}}>{dl.solicitadoPor}</div>}
+          {dl.solicitadoEm && <div style={{fontSize:10, color:C.muted, marginTop:2}}>{fmtShort(dl.solicitadoEm)}</div>}
           {!dl.solicitadoPor && <span style={{color:C.muted}}>—</span>}
         </td>
-        <td style={{...cell, width:110}}>
-          {dl.aprovadoPor && <div style={{fontSize:11, color:C.text}}>{dl.aprovadoPor}</div>}
-          {dl.aprovadoEm && <div style={{fontSize:10, color:C.muted}}>{fmtShort(dl.aprovadoEm)}</div>}
+        <td style={{...cell, wordBreak:"break-word"}}>
+          {dl.aprovadoPor && <div style={{fontSize:11, color:C.text, lineHeight:1.3}}>{dl.aprovadoPor}</div>}
+          {dl.aprovadoEm && <div style={{fontSize:10, color:C.muted, marginTop:2}}>{fmtShort(dl.aprovadoEm)}</div>}
           {dl.pendente && !dl.aprovadoPor && <span style={{fontSize:10, color:C.warning, fontStyle:"italic"}}>aguardando</span>}
           {!dl.pendente && !dl.aprovadoPor && <span style={{color:C.muted}}>—</span>}
         </td>
-        <td style={{...cell, width:80, textAlign:"right"}}>
+        <td style={{...cell, textAlign:"right"}}>
           {di===0 && showTratar && onTratar && <button
             onClick={()=>onTratar(idx)}
             style={{fontSize:11, padding:"3px 10px", background:C.accent, color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
@@ -5348,12 +5348,24 @@ function ItensTable({itens, onChange, readOnly, currentUser, onAddHistory, onTra
     <div>
       <table style={{width:"100%", borderCollapse:"collapse", fontSize:12, tableLayout:"fixed"}}>
         <colgroup>
-          <col style={{width:140}}/>
-          <col/>
-          <col style={{width:110}}/>
-          <col style={{width:60}}/>
-          <col style={{width:240}}/>
-          <col style={{width:32}}/>
+          {readOnly ? <>
+            <col style={{width:90}}/>   {/* Código */}
+            <col/>                      {/* Descrição (flex) */}
+            <col style={{width:70}}/>   {/* Lote */}
+            <col style={{width:50}}/>   {/* Qtd */}
+            <col style={{width:140}}/>  {/* Disposição */}
+            <col style={{width:200}}/>  {/* Análise (a maior junto com descrição) */}
+            <col style={{width:120}}/>  {/* Solicitado por */}
+            <col style={{width:120}}/>  {/* Aprovado por */}
+            <col style={{width:90}}/>   {/* Ação (botão Decidir) */}
+          </> : <>
+            <col style={{width:140}}/>
+            <col/>
+            <col style={{width:110}}/>
+            <col style={{width:60}}/>
+            <col style={{width:240}}/>
+            <col style={{width:32}}/>
+          </>}
         </colgroup>
         <thead>
           <tr style={{background:C.surface, borderBottom:"1px solid "+C.border}}>
