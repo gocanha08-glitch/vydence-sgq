@@ -6136,7 +6136,7 @@ function ROList({roRecords, currentUser, allUsers, onOpen, onNew}){
 // ── NewRO ────────────────────────────────────────────────────────
 function NewRO({currentUser, allUsers, onSave, onCancel}){
   const {C}=useTheme();const Sg=mkSg(C);
-  const [f,setF]=useState({tipo:"",local:"",opChamado:"",descricao:"",classificacao:"",disposicao:""});
+  const [f,setF]=useState({tipo:"",local:"",ident_tipo:"",ident_valor:"",ident_outro:"",descricao:"",classificacao:"",disposicao:""});
   const [itens,setItens]=useState([]);
   const [pecasSolicitadas,setPecasSolicitadas]=useState([]);
   const [attachments,setAttachments]=useState([]);
@@ -6191,7 +6191,28 @@ function NewRO({currentUser, allUsers, onSave, onCancel}){
         </div>
       </div>
 
-      <div style={{marginBottom:12}}><label style={Sg.lbl}>Nº OP / Chamado</label><input style={Sg.input()} value={f.opChamado} onChange={e=>set("opChamado",e.target.value)} placeholder="Ex: OP-12345"/></div>
+      <div style={{display:"grid",gridTemplateColumns:"180px 1fr",gap:8,marginBottom:12}}>
+        <div>
+          <label style={Sg.lbl}>Tipo de identificador</label>
+          <select style={Sg.input()} value={f.ident_tipo||""} onChange={e=>{
+            const v=e.target.value;
+            set("ident_tipo",v);
+            if(v!=="Outro") set("ident_outro","");
+          }}>
+            <option value="">—</option>
+            {DEFAULT_RO_IDENTIFICADORES.map(t=><option key={t} value={t}>{t}</option>)}
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div>
+          <label style={Sg.lbl}>{f.ident_tipo==="Outro" ? "Identificador" : "Número / código"}</label>
+          <input style={Sg.input()} value={f.ident_valor||""} onChange={e=>set("ident_valor",e.target.value)} placeholder={f.ident_tipo ? "Valor do "+f.ident_tipo : "Opcional"}/>
+        </div>
+      </div>
+      {f.ident_tipo==="Outro" && <div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>Especifique o tipo</label>
+        <input style={Sg.input()} value={f.ident_outro||""} onChange={e=>set("ident_outro",e.target.value)} placeholder="Ex: Auditoria, Não conformidade externa, etc."/>
+      </div>}
 
       <div style={{marginBottom: f.tipo?12:0}}><label style={Sg.lbl}>Descrição da Ocorrência *</label><textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={f.descricao} onChange={e=>set("descricao",e.target.value)} placeholder="Descreva o que foi identificado..."/></div>
 
@@ -6823,7 +6844,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div><span style={Sg.lbl}>Tipo</span><div style={{fontSize:13,color:C.text}}>{d.tipo||"—"}</div></div>
         <div><span style={Sg.lbl}>Local</span><div style={{fontSize:13,color:C.text}}>{d.local||"—"}</div></div>
-        <div><span style={Sg.lbl}>Nº OP / Chamado</span><div style={{fontSize:13,color:C.text}}>{d.opChamado||"—"}</div></div>
+        <div><span style={Sg.lbl}>Identificador</span><div style={{fontSize:13,color:C.text}}>{formatIdentificador(d)}</div></div>
         <div><span style={Sg.lbl}>Classificação</span><div style={{fontSize:13,color:C.text}}>{d.classificacao||"—"}</div></div>
         <div><span style={Sg.lbl}>Aberto por</span><div style={{fontSize:13,color:C.text}}>{r.owner_name||r.createdByName||"—"}</div></div>
       </div>
@@ -7094,7 +7115,7 @@ function ROQuickViewModal({open, roCode, onClose, C, Sg}){
         <div><span style={{color:C.muted}}>Status:</span> <b>{ro.status||"—"}</b></div>
         <div><span style={{color:C.muted}}>Tipo:</span> <b>{d.tipo||"—"}</b></div>
         <div><span style={{color:C.muted}}>Local:</span> <b>{d.local||"—"}</b></div>
-        <div><span style={{color:C.muted}}>OP/Chamado:</span> <b>{d.opChamado||"—"}</b></div>
+        <div><span style={{color:C.muted}}>Identificador:</span> <b>{formatIdentificador(d)}</b></div>
       </div>
       {d.descricao && <div style={{marginBottom:12}}>
         <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:4}}>Descrição</div>
