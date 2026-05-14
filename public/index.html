@@ -5839,7 +5839,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirP
 
   // Helper: label do tipo
   const tipoLabel = (t) => ({
-    segregacao: "Segregação",
+    segregacao: "Aguardando tratamento",
     correcao:   "Correção imediata",
     concessao:  "Concessão",
     fechar:     "Validar e fechar",
@@ -5877,7 +5877,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirP
         <label style={Sg.lbl}>Tipo</label>
         <select style={Sg.input()} value={fTipo} onChange={e=>setFTipo(e.target.value)}>
           <option value="todos">Todos</option>
-          <option value="segregacao">Segregação</option>
+          <option value="segregacao">Aguardando tratamento</option>
           <option value="correcao">Correção imediata</option>
           <option value="concessao">Concessão</option>
           <option value="fechar">Validar e fechar</option>
@@ -6347,7 +6347,7 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
   React.useEffect(()=>{
     if(!focusAction) return;
     const {tipo, itemIdx, subloteIdx} = focusAction;
-    if(tipo === "tratar")    setTratarItemIdx(itemIdx);
+    if(tipo === "segregacao" || tipo === "tratar") setTratarItemIdx(itemIdx);
     if(tipo === "correcao")  setCorrecaoState({idx:itemIdx, step:"decidir"});
     if(tipo === "concessao") setAprovacaoState({idx:itemIdx, subloteIdx, step:"decidir"});
     if(tipo === "fechar")    setValidarModal(true);
