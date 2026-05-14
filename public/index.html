@@ -4216,6 +4216,31 @@ function NewRequest({currentUser,onSave,onCancel}){
 // ================================================================
 
 const RO_TIPOS = ["Produto","Processo"];
+
+// Lista de tipos de identificador para RO (editar aqui se precisar)
+const DEFAULT_RO_IDENTIFICADORES = [
+  "OP",
+  "Chamado",
+  "NF / Invoice",
+  "Pedido",
+  "Lote",
+  "Documento",
+  "Equipamento",
+  "Contrato",
+];
+
+// Formata o identificador pra exibição. Aceita modelo novo {ident_tipo, ident_valor, ident_outro}
+// ou modelo antigo {opChamado}.
+function formatIdentificador(d){
+  if(!d) return "—";
+  if(d.ident_valor){
+    const tipo = d.ident_tipo === "Outro" ? (d.ident_outro || "Outro") : (d.ident_tipo || "");
+    return tipo ? tipo + ": " + d.ident_valor : d.ident_valor;
+  }
+  // Modelo antigo: opChamado solto sem tipo
+  if(d.opChamado) return "OP/Chamado: " + d.opChamado;
+  return "—";
+}
 const RO_LOCAIS = ["Produção","Inspeção Recebimento","Inspeção Final","AT","Almoxarifado","P&D"];
 const RO_DISPOSICOES = {
   Produto: ["Correção Imediata","Segregado","Sucatado","Liberado Condicional"],
