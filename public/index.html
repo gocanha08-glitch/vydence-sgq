@@ -6539,18 +6539,15 @@ function GerarNCModal({ro, currentUser, C, Sg, onClose, onConfirm}){
 function AnalisarROProcessoModal({open, ro, currentUser, allUsers, onClose, onCorrecao, onMigrarNC, C, Sg}){
   const [decisao, setDecisao]               = React.useState("");  // "correcao" | "nc"
   const [acaoDescricao, setAcaoDescricao]   = React.useState("");
-  const [acaoAprovadorId, setAcaoAprovadorId] = React.useState("");
   const [acaoAnexos, setAcaoAnexos]         = React.useState([]);
 
   React.useEffect(()=>{
-    if(open){ setDecisao(""); setAcaoDescricao(""); setAcaoAprovadorId(""); setAcaoAnexos([]); }
+    if(open){ setDecisao(""); setAcaoDescricao(""); setAcaoAnexos([]); }
   }, [open]);
 
   if(!open || !ro) return null;
   const d = ro.data||{};
-  const aprovadoresCorr = (allUsers||[]).filter(u=>u.active!==false && hasPerm(u,"ro.aprovar_correcao"));
-  const aprov = aprovadoresCorr.find(u=>String(u.id)===String(acaoAprovadorId));
-  const podeConfirmar = decisao==="correcao" && acaoDescricao.trim().length>=3 && acaoAprovadorId;
+  const podeConfirmar = decisao==="correcao" && acaoDescricao.trim().length>=3;
 
   return <Modal open={open} onClose={onClose} title={"Analisar "+(ro.code||ro.id)} width={640}>
     <div style={{marginBottom:14, padding:"10px 12px", background:C.surface, borderRadius:6, fontSize:12, color:C.dim}}>
@@ -6574,7 +6571,7 @@ function AnalisarROProcessoModal({open, ro, currentUser, allUsers, onClose, onCo
           transition:"all 0.15s",
         }}>
         <div style={{fontSize:12, fontWeight:600, color: decisao==="correcao"?C.accent:C.text}}>Aplicar correção retroativa</div>
-        <div style={{fontSize:10, color:C.muted, marginTop:3, lineHeight:1.4}}>Eu (qualidade) decido a correção. Vai pra aprovação.</div>
+        <div style={{fontSize:10, color:C.muted, marginTop:3, lineHeight:1.4}}>Eu (qualidade) defino e aplico. RO fecha imediatamente após a assinatura.</div>
       </div>
       <div
         onClick={()=>setDecisao("nc")}
@@ -6591,16 +6588,16 @@ function AnalisarROProcessoModal({open, ro, currentUser, allUsers, onClose, onCo
 
     {decisao==="correcao" && <div>
       <div style={{marginBottom:12}}>
-        <label style={Sg.lbl}>O que será feito *</label>
+        <label style={Sg.lbl}>O que foi feito *</label>
         <textarea
           style={{...Sg.input(), minHeight:80, resize:"vertical"}}
           value={acaoDescricao}
           onChange={e=>setAcaoDescricao(e.target.value)}
-          placeholder="Descreva a correção a ser executada..."
+          placeholder="Descreva a correção aplicada..."
         />
       </div>
 
-      <div style={{marginBottom:12}}>
+      <div>
         <label style={Sg.lbl}>Evidências (opcional)</label>
         <AttachmentsPanel
           attachments={acaoAnexos}
@@ -6611,14 +6608,6 @@ function AnalisarROProcessoModal({open, ro, currentUser, allUsers, onClose, onCo
           currentUser={currentUser}
           C={C}/>
       </div>
-
-      <div>
-        <label style={Sg.lbl}>Aprovador *</label>
-        <select style={Sg.input()} value={acaoAprovadorId} onChange={e=>setAcaoAprovadorId(e.target.value)}>
-          <option value="">Selecione...</option>
-          {aprovadoresCorr.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-      </div>
     </div>}
 
     <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:18, paddingTop:14, borderTop:"1px solid "+C.border}}>
@@ -6627,8 +6616,8 @@ function AnalisarROProcessoModal({open, ro, currentUser, allUsers, onClose, onCo
       {decisao==="correcao" && <button
         style={{...Sg.btn("primary"), opacity:podeConfirmar?1:.4}}
         disabled={!podeConfirmar}
-        onClick={()=>onCorrecao({acaoDescricao: acaoDescricao.trim(), acaoAprovadorId, acaoAprovadorNome: aprov?.name||"", acaoAnexos})}>
-        Enviar para aprovação →
+        onClick={()=>onCorrecao({acaoDescricao: acaoDescricao.trim(), acaoAnexos})}>
+        Aplicar e fechar →
       </button>}
     </div>
   </Modal>;
@@ -7005,27 +6994,29 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       return;
     }
     else if(pendingApply.type==="processo_analise_correcao"){
-      // Qualidade decidiu aplicar correção retroativa após análise
+      // Qualidade aplica correção retroativa e fecha direto (ela mesma é a autoridade)
       const now2 = new Date().toISOString();
-      const { acaoDescricao, acaoAprovadorId, acaoAprovadorNome, acaoAnexos } = pendingApply;
+      const { acaoDescricao, acaoAnexos } = pendingApply;
       const dataNova = {
         ...d,
         acaoTomada: "correcao",
         acaoDescricao,
-        acaoAprovadorId,
-        acaoAprovadorNome,
         acaoAnexos: acaoAnexos||[],
-        acaoStatus: "pendente_aprovacao",
+        acaoStatus: "concluida",
         acaoSolicitadaAt: now2,
         acaoSolicitadaBy: userName,
-        acaoAnaliseResumo: "Análise concluída por " + userName + ". Correção retroativa criada e enviada para aprovação de " + (acaoAprovadorNome||"—") + ".",
+        acaoAprovadorId: currentUser?.id,
+        acaoAprovadorNome: userName,
+        acaoAprovadaAt: now2,
+        acaoAprovadaBy: userName,
+        acaoAnaliseResumo: "Análise e correção aplicadas por " + userName + ".",
         acaoAnalisadaAt: now2,
         acaoAnalisadaBy: userName,
       };
-      const detalhe = "Análise da qualidade concluída: correção retroativa criada e enviada para aprovação de " + (acaoAprovadorNome||"—") + ".";
+      const detalhe = "Análise da qualidade concluída: correção retroativa aplicada por " + userName + " (autoridade própria, sem aprovação separada).";
       const novoHist = {type:"analise_qualidade", at:now2, by:userName, byId:currentUser?.id, detail:detalhe+"\n(assinado eletronicamente)"};
       const histTotal = [...(d.historico||[]), novoHist];
-      await onUpdate({...r, data:{...dataNova, historico:histTotal}});
+      await onUpdate({...r, status:"fechada", data:{...dataNova, historico:histTotal}});
       setPendingApply(null);
       setSigModal(null);
       return;
@@ -7465,13 +7456,13 @@ function RODetail({roRecord, currentUser, allUsers, onBack, onUpdate, onGenerate
       currentUser={currentUser}
       allUsers={allUsers}
       onClose={()=>setProcessoAnalisarModal(false)}
-      onCorrecao={({acaoDescricao, acaoAprovadorId, acaoAprovadorNome, acaoAnexos})=>{
+      onCorrecao={({acaoDescricao, acaoAnexos})=>{
         setPendingApply({
           type:"processo_analise_correcao",
-          acaoDescricao, acaoAprovadorId, acaoAprovadorNome, acaoAnexos,
+          acaoDescricao, acaoAnexos,
         });
         setProcessoAnalisarModal(false);
-        setSigModal({action:"apply_pending", title:"Assinar — Análise da qualidade", confirmLabel:"Assinar e enviar para aprovação", confirmStyle:"primary"});
+        setSigModal({action:"apply_pending", title:"Assinar — Correção retroativa", confirmLabel:"Assinar e fechar", confirmStyle:"success"});
       }}
       onMigrarNC={()=>{
         setProcessoAnalisarModal(false);
@@ -8402,7 +8393,11 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
 
   const canVincularRO = hasPerm(currentUser,'nc.vincular_ro');
 
-  const [natureza, setNatureza]                 = useState(linkedRO ? "produto" : "");
+  const [natureza, setNatureza]                 = useState(
+    linkedRO
+      ? (linkedRO.data?.tipo === "Processo" || linkedRO.tipo === "Processo" ? "processo" : "produto")
+      : ""
+  );
   const [ondeIdent, setOndeIdent]               = useState(linkedRO?.data?.local || "");
   const [ondeIdentOutro, setOndeIdentOutro]     = useState("");
   const [descricao, setDescricao]               = useState("");
