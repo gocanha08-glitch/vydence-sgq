@@ -8400,9 +8400,18 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
   );
   const [ondeIdent, setOndeIdent]               = useState(linkedRO?.data?.local || "");
   const [ondeIdentOutro, setOndeIdentOutro]     = useState("");
-  const [descricao, setDescricao]               = useState("");
+  // Identificação estruturada (tipo + valor) — mesmo padrão da RO
+  const [identTipo, setIdentTipo]               = useState(linkedRO?.data?.ident_tipo || "");
+  const [identValor, setIdentValor]             = useState(linkedRO?.data?.ident_valor || "");
+  const [identOutro, setIdentOutro]             = useState(linkedRO?.data?.ident_outro || "");
+  const [descricao, setDescricao]               = useState(
+    // Pré-preenche descrição quando NC nasce de RO direta (não via migração de item)
+    (linkedRO && !pendingMigracao) ? (linkedRO?.data?.descricao || "") : ""
+  );
   const [fornecedor, setFornecedor]             = useState("");
-  const [nf, setNf]                             = useState("");
+  // Equipamento — contexto opcional (igual ao Excel atual)
+  const [equipamento, setEquipamento]           = useState("");
+  const [nf, setNf]                             = useState(""); // legado: mantido p/ compatibilidade, não exposto na UI
 
   // itens: cada um traz origem (RO-XXX ou "Manual") e lote_serie (string única)
   const [itensProduto, setItensProduto] = useState([]);
@@ -8552,7 +8561,7 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
           <select style={Sg.input()} value={natureza} onChange={e=>{
             const v = e.target.value;
             setNatureza(v);
-            if(v!=="produto"){ setFornecedor(""); setNf(""); }
+            if(v!=="produto"){ setFornecedor(""); setNf(""); setEquipamento(""); }
           }}>
             <option value="">Selecione...</option>
             {NC_NATUREZAS.map(n=><option key={n.value} value={n.value}>{n.label}</option>)}
@@ -8570,6 +8579,30 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
       {ondeIdent==="Outro" && <div style={{marginBottom:12}}>
         <label style={Sg.lbl}>Especifique *</label>
         <input style={Sg.input()} value={ondeIdentOutro} onChange={e=>setOndeIdentOutro(e.target.value)} placeholder="Onde foi identificado..."/>
+      </div>}
+
+      {/* Identificação estruturada — tipo + valor (mesmo padrão da RO) */}
+      <div style={{display:"grid",gridTemplateColumns:"180px 1fr",gap:8,marginBottom:12}}>
+        <div>
+          <label style={Sg.lbl}>Tipo de identificação</label>
+          <select style={Sg.input()} value={identTipo} onChange={e=>{
+            const v=e.target.value;
+            setIdentTipo(v);
+            if(v!=="Outro") setIdentOutro("");
+          }}>
+            <option value="">—</option>
+            {DEFAULT_RO_IDENTIFICADORES.map(t=><option key={t} value={t}>{t}</option>)}
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div>
+          <label style={Sg.lbl}>{identTipo==="Outro" ? "Identificador" : "Número / código"}</label>
+          <input style={Sg.input()} value={identValor} onChange={e=>setIdentValor(e.target.value)} placeholder={identTipo ? "Valor do "+identTipo : "Opcional"}/>
+        </div>
+      </div>
+      {identTipo==="Outro" && <div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>Especifique o tipo</label>
+        <input style={Sg.input()} value={identOutro} onChange={e=>setIdentOutro(e.target.value)} placeholder="Ex: Auditoria, Não conformidade externa, etc."/>
       </div>}
 
       <div>
@@ -8655,8 +8688,24 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
           })}
         </tbody>
       </table>}
-      <button style={{...Sg.btn(),fontSize:12}} onClick={addProd}>+ Adicionar item manual</button>
-      {itensProduto.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um item, ou vincule uma RO logo abaixo.</div>}
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <button style={{...Sg.btn(),fontSize:12}} onClick={addProd}>+ Adicionar item manual</button>
+        {canVincularRO && <button style={{...Sg.btn(),fontSize:12}} onClick={()=>setSelecROModal(true)}>+ Adicionar a partir de RO</button>}
+        {linkedROs.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:6,marginLeft:6}}>
+          {linkedROs.map(code=>(
+            <span key={code}
+              onClick={()=>setVerROModal({roCode: code})}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"2px 8px",borderRadius:10,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:11,color:C.accent,fontWeight:600,cursor:"pointer"}}
+              title="Ver detalhes da RO">
+              {code} ↗
+            </span>
+          ))}
+        </div>}
+      </div>
+      {itensProduto.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um item (manualmente ou via RO).</div>}
+      {!canVincularRO && linkedROs.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:6,fontStyle:"italic"}}>
+        Você não tem permissão para vincular ROs. A Qualidade poderá vincular depois.
+      </div>}
     </div>}
 
     {/* Bloco 2 — Itens (Processo) */}
@@ -8685,44 +8734,22 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
       {itensProcesso.length===0 && <div style={{fontSize:11,color:C.muted,marginTop:8}}>Adicione pelo menos um registro.</div>}
     </div>}
 
-    {/* Bloco 3 — Informações adicionais */}
-    {natureza && <div style={{...Sg.card(),marginBottom:14}}>
-      {stepHeader(3, "Informações adicionais", "Opcionais: fornecedor, NF e vínculo com ROs")}
+    {/* Bloco 3 — Contexto (opcional) */}
+    {natureza==="produto" && <div style={{...Sg.card(),marginBottom:14}}>
+      {stepHeader(3, "Contexto", "Opcional · preencha o que se aplicar")}
 
-      {natureza==="produto" && <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:12,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div>
           <label style={Sg.lbl}>Fornecedor</label>
-          <input style={Sg.input()} value={fornecedor} onChange={e=>setFornecedor(e.target.value)} placeholder="Nome do fornecedor..."/>
+          <input style={Sg.input()} value={fornecedor} onChange={e=>setFornecedor(e.target.value)} placeholder="Nome do fornecedor (quando peça é externa)"/>
+          <div style={{fontSize:11,color:C.muted,marginTop:4,fontStyle:"italic"}}>Aplicável quando a peça veio de fornecedor externo.</div>
         </div>
         <div>
-          <label style={Sg.lbl}>NF / Invoice</label>
-          <input style={Sg.input()} value={nf} onChange={e=>setNf(e.target.value)} placeholder="Número da NF/Invoice..." disabled={!fornecedor.trim()}/>
+          <label style={Sg.lbl}>Equipamento</label>
+          <input style={Sg.input()} value={equipamento} onChange={e=>setEquipamento(e.target.value)} placeholder="Ex: Etherea MX, Siberian Fit..."/>
+          <div style={{fontSize:11,color:C.muted,marginTop:4,fontStyle:"italic"}}>Aplicável quando o problema está vinculado a um produto/equipamento.</div>
         </div>
-      </div>}
-
-      {natureza==="produto" && canVincularRO && <div style={{marginBottom:12}}>
-        <label style={Sg.lbl}>Vincular ROs (importa os itens delas)</label>
-        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <button style={{...Sg.btn(),fontSize:12}} onClick={()=>setSelecROModal(true)}>+ Selecionar ROs</button>
-          {linkedROs.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {linkedROs.map(code=>(
-              <span key={code}
-                onClick={()=>setVerROModal({roCode: code})}
-                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:12,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:12,color:C.accent,fontWeight:600,cursor:"pointer"}}
-                title="Ver detalhes da RO">
-                {code} ↗
-              </span>
-            ))}
-          </div>}
-        </div>
-        <div style={{fontSize:11,color:C.muted,marginTop:6,fontStyle:"italic"}}>
-          Busca por código, descrição ou item. Para desvincular, remova todos os itens da RO na tabela acima.
-        </div>
-      </div>}
-
-      {natureza==="produto" && !canVincularRO && linkedROs.length===0 && <div style={{padding:"7px 12px",background:C.surface,borderRadius:6,border:"1px dashed "+C.border,fontSize:11,color:C.muted}}>
-        Você não tem permissão para vincular ROs. A Qualidade poderá vincular ROs depois, no detalhe da NC.
-      </div>}
+      </div>
     </div>}
 
     {/* Anexos */}
@@ -8777,16 +8804,26 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
         const partes = [];
         partes.push("Natureza: "+(natureza==="produto"?"Produto":"Processo"));
         partes.push("Onde: "+ondeFinal);
-        if(natureza==="produto" && fornecedor) partes.push("Fornecedor: "+fornecedor+(nf?" (NF "+nf+")":""));
+        if(identValor){
+          const tipoLabel = identTipo==="Outro" ? (identOutro||"Outro") : (identTipo||"Identificação");
+          partes.push(tipoLabel+": "+identValor);
+        }
+        if(natureza==="produto" && fornecedor) partes.push("Fornecedor: "+fornecedor);
+        if(natureza==="produto" && equipamento) partes.push("Equipamento: "+equipamento);
         if(linkedROs.length>0) partes.push("Vinculada a: "+linkedROs.join(", "));
         if(itensFinal.length>0) partes.push(itensFinal.length+" item(s)/registro(s)");
 
         const data = {
           natureza,
           onde_identificado: ondeFinal,
+          // Identificação estruturada (mesmo padrão da RO)
+          ident_tipo: identTipo || "",
+          ident_valor: identValor || "",
+          ident_outro: identTipo==="Outro" ? (identOutro||"") : "",
           descricao,
           fornecedor: natureza==="produto" ? fornecedor : "",
-          nf: natureza==="produto" ? nf : "",
+          equipamento: natureza==="produto" ? equipamento : "",
+          nf: natureza==="produto" ? nf : "", // legado — mantido por compatibilidade
           linkedROs,
           itens: itensFinal,
 
