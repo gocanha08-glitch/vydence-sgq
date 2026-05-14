@@ -3185,10 +3185,17 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
   const roParaAnalisar = canTratarSeg ? (roRecs||[]).filter(r=>{
     if(["cancelada","fechada"].includes(r.status)) return false;
     const itens = r.data?.itens || [];
-    return itens.some(it =>
-      (it.disposicao==="segregar" && it.status!=="concluida") ||
-      it.disposicao==="concessao_rejeitada"
-    );
+    return itens.some(it => {
+      // Segregar sem sublotes = aguardando primeira tratativa
+      if(it.disposicao==="segregar" && it.status!=="concluida" && (!it.sublotes||it.sublotes.length===0)) return true;
+      // Segregar com sublotes = aguardando se algum sublote ainda está em "segregar" ou rejeitado
+      if(it.disposicao==="segregar" && it.sublotes && it.sublotes.length>0){
+        return it.sublotes.some(s => s.tipo==="segregar" || s.tipo==="concessao_rejeitada" || (s.tipo==="migrada_nc" && !s.nc_code));
+      }
+      // Modelo legado: concessão rejeitada
+      if(it.disposicao==="concessao_rejeitada") return true;
+      return false;
+    });
   }) : [];
 
   const canAprovarCorr = hasPerm(currentUser,'ro.aprovar_correcao');
@@ -5139,6 +5146,25 @@ function buildDispLinhas(item){
     return linhas;
   }
 
+  // Caso especial: disposicao direta "migrada_nc" (sem sublote)
+  if(disp==="migrada_nc"){
+    linhas.push({
+      tipo:"migrada_nc",
+      tipoLabel: item.migrada_para_nc ? "Migrado para "+item.migrada_para_nc : "Migrado para NC",
+      tipoBg: "#EEE8FB", tipoCol: "#3D1F8C",
+      qtd: item.qtdNC,
+      analise: item.migrada_para_nc
+        ? "Migrado para "+item.migrada_para_nc
+        : "Aguardando criação da NC",
+      solicitadoPor: item.migradaBy || item.tratadoBy || null,
+      solicitadoEm: item.migradaAt || item.tratadoAt || null,
+      aprovadoPor: item.migradaAprovadaBy || item.migradaBy || item.tratadoBy || null,
+      aprovadoEm:  item.migradaAprovadaAt || item.migrada_em || item.migradaAt || item.tratadoAt || null,
+      pendente: !item.migrada_para_nc,
+    });
+    return linhas;
+  }
+
   // Modelo legado ou sem tratamento
   linhas.push({
     tipo: disp||"pendente",
@@ -5731,8 +5757,11 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate, onAbrirP
     }
 
     itens.forEach((it, idx)=>{
-      // Item segregado aguardando qualidade
-      if(it.disposicao==="segregar" && it.status!=="concluida" && (!it.sublotes||it.sublotes.length===0)){
+      // Item segregado aguardando qualidade — só conta se realmente está em estado pendente
+      const segregadoSemSublotes = it.disposicao==="segregar" && it.status!=="concluida" && (!it.sublotes||it.sublotes.length===0);
+      const segregadoComPendencia = it.disposicao==="segregar" && it.sublotes && it.sublotes.length>0
+        && it.sublotes.some(s => s.tipo==="segregar" || s.tipo==="concessao_rejeitada");
+      if(segregadoSemSublotes || segregadoComPendencia){
         todasPendenciasFull.push({
           ro:r, idx, item:it, tipo:"segregacao",
           aguardando:"Qualidade", aguardandoId:null,
@@ -11188,8 +11217,17 @@ const saveReq = async (r) => {
                     return {...it, sublotes: novosSublotes};
                   }
 
-                  // Fallback (modelo legacy): marca disposicao direto
-                  return {...it, disposicao:"migrada_nc", migrada_para_nc: ncCode, migrada_em: now};
+                  // Fallback (modelo legacy): marca disposicao direto + preenche quem fez
+                  return {
+                    ...it,
+                    disposicao:"migrada_nc",
+                    migrada_para_nc: ncCode,
+                    migrada_em: now,
+                    migradaBy: it.migradaBy || it.tratadoBy || loggedIn.name,
+                    migradaAt: it.migradaAt || it.tratadoAt || now,
+                    migradaAprovadaBy: loggedIn.name,
+                    migradaAprovadaAt: now,
+                  };
                 });
                 const linkedNCsRO = [...(((roData.linkedNCs)||[])), ncCode];
 
