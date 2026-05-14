@@ -5693,15 +5693,15 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
   const totalMinhas = todasPendenciasFull.filter(p=>p.isMinha).length;
 
   // Helper: "aberta há"
-  const abertaHaTxt = (at) => {
+  // Mostra a data de abertura no formato DD/MM/AAAA (apenas dia, sem hora/minuto)
+  const dataAbertura = (at) => {
     if(!at) return "—";
     const d = new Date(at);
     if(isNaN(d.getTime())) return "—";
-    const diff = (Date.now() - d.getTime()) / 1000; // segundos
-    if(diff < 60) return "agora";
-    if(diff < 3600) return Math.floor(diff/60) + "min";
-    if(diff < 86400) return Math.floor(diff/3600) + "h";
-    return Math.floor(diff/86400) + "d";
+    const dd = String(d.getDate()).padStart(2,"0");
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const yyyy = d.getFullYear();
+    return dd+"/"+mm+"/"+yyyy;
   };
 
   // Helper: label do tipo
@@ -5767,7 +5767,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
-                {["RO","Item","Tipo","Com quem","Aberta há",""].map(h=>(
+                {["RO","Item","Tipo","Com quem","Aberta em",""].map(h=>(
                   <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -5796,7 +5796,7 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
                     {p.aguardando}{p.isMinha?" (você)":""}
                   </td>
                   <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}} title={p.at?fmt(p.at):""}>
-                    {abertaHaTxt(p.at)}
+                    {dataAbertura(p.at)}
                   </td>
                   <td style={{padding:"9px 12px",textAlign:"right",whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
                     {p.isMinha && (p.tipo==="correcao" || p.tipo==="concessao")
