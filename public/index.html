@@ -4634,7 +4634,7 @@ function TratarItemModal({open, item, allUsers, currentUser, aprovadorGlobal, on
     {val:"sucatamento",          label:"Sucatamento",  bg:"#FCEBEB", col:"#501313"},
     {val:"migrada_nc",           label:"Mover para NC",bg:"#EEE8FB", col:"#3D1F8C"},
   ];
-  const [linhas, setLinhas] = useState([{tipo:"concessao_solicitada", qtd:"", extra:""}]);
+  const [linhas, setLinhas] = useState([{tipo:"", qtd:"", extra:""}]);
   const [aprovador, setAprovador] = useState(aprovadorGlobal||"");
 
   React.useEffect(()=>{
@@ -4643,7 +4643,7 @@ function TratarItemModal({open, item, allUsers, currentUser, aprovadorGlobal, on
       if(prev && prev.length > 0){
         setLinhas(prev.map(s=>({tipo:s.tipo, qtd:String(s.qtd||""), extra:s.extra||""})));
       } else {
-        setLinhas([{tipo:"concessao_solicitada", qtd:"", extra:""}]);
+        setLinhas([{tipo:"", qtd:"", extra:""}]);
       }
       setAprovador(aprovadorGlobal||"");
     }
@@ -4662,12 +4662,11 @@ function TratarItemModal({open, item, allUsers, currentUser, aprovadorGlobal, on
     return hasPerm(u,"ro.aprovar_concessao");
   });
 
-  const usadas = linhas.map(l=>l.tipo);
+  const usadas = linhas.map(l=>l.tipo).filter(Boolean);
   const disponiveis = OPTS.filter(o=>!usadas.includes(o.val));
 
   const addLinha = () => {
-    if(disponiveis.length===0) return;
-    setLinhas(prev=>[...prev, {tipo:disponiveis[0].val, qtd:"", extra:""}]);
+    setLinhas(prev=>[...prev, {tipo:"", qtd:"", extra:""}]);
   };
 
   const remLinha = (i) => {
@@ -4688,8 +4687,9 @@ function TratarItemModal({open, item, allUsers, currentUser, aprovadorGlobal, on
     return "Observação (opcional)";
   };
 
-  const canConfirm = totalOk && (!temConcessao || aprovador);
-  const linhasValidas = linhas.filter(l=>parseInt(l.qtd)>0);
+  const todasComTipo = linhas.every(l=>!!l.tipo);
+  const canConfirm = totalOk && todasComTipo && (!temConcessao || aprovador);
+  const linhasValidas = linhas.filter(l=>l.tipo && parseInt(l.qtd)>0);
 
   return <Modal open={open} onClose={onClose} title="" width={600}>
     <div style={{margin:-16}}>
@@ -4710,7 +4710,8 @@ function TratarItemModal({open, item, allUsers, currentUser, aprovadorGlobal, on
             <select
               value={l.tipo}
               onChange={e=>updLinha(i,"tipo",e.target.value)}
-              style={{...Sg.input(), fontSize:12, height:34}}>
+              style={{...Sg.input(), fontSize:12, height:34, color: l.tipo ? C.text : C.muted}}>
+              <option value="" disabled>Selecione...</option>
               {optsDisponiveis.map(o=>(
                 <option key={o.val} value={o.val}>{o.label}</option>
               ))}
