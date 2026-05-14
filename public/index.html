@@ -3191,27 +3191,36 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
     );
   }) : [];
 
-  // ROs com pelo menos uma linha aguardando MINHA aprovação (concessão ou correção)
   const canAprovarCorr = hasPerm(currentUser,'ro.aprovar_correcao');
-  const roParaAprovar = (canAprovarConc||canAprovarCorr) ? (roRecs||[]).filter(r=>{
+
+  // ROs com correção imediata aguardando MINHA aprovação
+  const roParaAprovarCorrecao = canAprovarCorr ? (roRecs||[]).filter(r=>{
+    if(["cancelada","fechada"].includes(r.status)) return false;
+    const itens = r.data?.itens || [];
+    return itens.some(it =>
+      it.disposicao==="correcao" && it.status==="pendente_aprovacao" &&
+      String(it.aprovadorCorrecaoId)===String(currentUser.id)
+    );
+  }) : [];
+
+  // ROs com concessão aguardando MINHA aprovação
+  const roParaAprovarConcessao = canAprovarConc ? (roRecs||[]).filter(r=>{
     if(["cancelada","fechada"].includes(r.status)) return false;
     const itens = r.data?.itens || [];
     return itens.some(it => {
-      // Correção imediata aguardando minha aprovação
-      if(canAprovarCorr && it.disposicao==="correcao" && it.status==="pendente_aprovacao" &&
-         String(it.aprovadorCorrecaoId)===String(currentUser.id)) return true;
-      // Modelo novo: sublotes de concessão
-      if(canAprovarConc && it.sublotes && it.sublotes.length > 0){
+      if(it.sublotes && it.sublotes.length > 0){
         return it.sublotes.some(s =>
           s.tipo==="concessao_solicitada" &&
           String(s.concessaoAprovadorId)===String(currentUser.id)
         );
       }
-      // Modelo legado concessão
-      return canAprovarConc && it.disposicao==="concessao_solicitada" &&
+      return it.disposicao==="concessao_solicitada" &&
         String(it.concessaoAprovadorId)===String(currentUser.id);
     });
   }) : [];
+
+  // Compat: lista combinada (pra contagem do pendRO)
+  const roParaAprovar = [...new Set([...roParaAprovarCorrecao, ...roParaAprovarConcessao])];
 
   const roParaConcluir = canCloseRO ? (roRecs||[]).filter(r=>r.status==='aguardando_conclusao') : [];
 
@@ -3233,7 +3242,7 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
     });
   }) : [];
 
-  const pendRO = roParaAnalisar.length + roParaAprovar.length + roParaConcluir.length + roParaValidar.length;
+  const pendRO = roParaAnalisar.length + roParaAprovarCorrecao.length + roParaAprovarConcessao.length + roParaConcluir.length + roParaValidar.length;
 
   // ── Pendências NC ────────────────────────────────────────────────
   const canNC = hasPerm(currentUser,'nc.abrir')||hasPerm(currentUser,'nc.tratar_itens')||hasPerm(currentUser,'nc.gerenciar_acoes')||hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
@@ -3389,33 +3398,57 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
           })}
         </div>
       </div>}
-      {roParaAprovar.length>0&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>CONCESSÕES A APROVAR ({roParaAprovar.length})</div>
+      {roParaAprovarCorrecao.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>CORREÇÕES IMEDIATAS A APROVAR ({roParaAprovarCorrecao.length})</div>
         <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
           <div style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
             {["Código","Descrição","Itens","Pendência"].map(hh=>(
               <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
             ))}
           </div>
-          {roParaAprovar.map((r,i)=>{
+          {roParaAprovarCorrecao.map((r,i)=>{
             const d=r.data||{};
-            // Conta sublotes de concessão pendentes pra este usuário
-            let concCount = 0;
+            let n=0;
             (d.itens||[]).forEach(it=>{
-              if(it.sublotes && it.sublotes.length>0){
-                concCount += it.sublotes.filter(s=>s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(currentUser.id)).length;
-              } else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(currentUser.id)){
-                concCount++;
-              }
+              if(it.disposicao==="correcao" && it.status==="pendente_aprovacao" && String(it.aprovadorCorrecaoId)===String(currentUser.id)) n++;
             });
-            const conc = {length: concCount};
             return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
               style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
               onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
               onMouseLeave={e=>e.currentTarget.style.background=""}>
               <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
               <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
-              <div style={{fontSize:11,color:C.dim}}>{conc.length} item{conc.length!==1?"s":""}</div>
+              <div style={{fontSize:11,color:C.dim}}>{n} item{n!==1?"s":""}</div>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.accent+"18",color:C.accent}}>Aprovar</span>
+            </div>;
+          })}
+        </div>
+      </div>}
+      {roParaAprovarConcessao.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>CONCESSÕES A APROVAR ({roParaAprovarConcessao.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["Código","Descrição","Itens","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {roParaAprovarConcessao.map((r,i)=>{
+            const d=r.data||{};
+            let n=0;
+            (d.itens||[]).forEach(it=>{
+              if(it.sublotes && it.sublotes.length>0){
+                n += it.sublotes.filter(s=>s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(currentUser.id)).length;
+              } else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(currentUser.id)){
+                n++;
+              }
+            });
+            return <div key={i} onClick={()=>onNavRO(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 110px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+              <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+              <div style={{fontSize:11,color:C.dim}}>{n} item{n!==1?"s":""}</div>
               <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.accent+"18",color:C.accent}}>Aprovar</span>
             </div>;
           })}
@@ -5537,97 +5570,265 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
     fechar:    {label:"Pronta para fechar", bg:"#EAF3DE", col:"#27500A"},
   };
 
-  return <div style={{padding:"18px 22px", maxWidth:1100}}>
-    <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16}}>
+  // Lista TODOS os tipos de pendência: segregação também
+  const todasPendenciasFull = [];
+  (roRecords||[]).forEach(r=>{
+    if(["cancelada","fechada"].includes(r.status)) return;
+    const itens = r.data?.itens||[];
+
+    // RO pronta para fechar
+    const prontaParaFechar = r.status==="em_analise" && itens.length>0 && itens.every(it=>{
+      if(!it.disposicao) return false;
+      if(it.disposicao==="correcao") return it.status==="concluida"||it.status==="correcao_aprovada";
+      if(it.disposicao==="segregar"){
+        if(it.sublotes && it.sublotes.length>0)
+          return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo) && (s.tipo!=="migrada_nc"||s.nc_code));
+        return false;
+      }
+      return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
+    });
+    if(prontaParaFechar){
+      todasPendenciasFull.push({
+        ro:r, tipo:"fechar", aguardando:"Qualidade", aguardandoId:null,
+        desc:"RO pronta para validação final e fechamento",
+        isMinha: canFechar,
+        at: r.createdAt,
+      });
+    }
+
+    itens.forEach((it, idx)=>{
+      // Item segregado aguardando qualidade
+      if(it.disposicao==="segregar" && it.status!=="concluida" && (!it.sublotes||it.sublotes.length===0)){
+        todasPendenciasFull.push({
+          ro:r, idx, item:it, tipo:"segregacao",
+          aguardando:"Qualidade", aguardandoId:null,
+          isMinha: hasPerm(currentUser,"ro.tratar_segregado"),
+          at: it.dispDefinedAt || r.createdAt,
+        });
+      }
+      // Correção imediata aguardando aprovação
+      if(it.disposicao==="correcao" && it.status==="pendente_aprovacao"){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorCorrecaoId));
+        todasPendenciasFull.push({
+          ro:r, idx, subloteIdx:null, item:it, sublote:null, tipo:"correcao",
+          aguardando: aprov?.name||"—", aguardandoId: it.aprovadorCorrecaoId,
+          isMinha: String(it.aprovadorCorrecaoId)===String(currentUser?.id),
+          at: it.dispDefinedAt || r.createdAt,
+        });
+      }
+      // Sublotes de concessão
+      if(it.sublotes && it.sublotes.length>0){
+        it.sublotes.forEach((s,si)=>{
+          if(s.tipo==="concessao_solicitada"){
+            const aprov = (allUsers||[]).find(u=>String(u.id)===String(s.concessaoAprovadorId));
+            todasPendenciasFull.push({
+              ro:r, idx, subloteIdx:si, item:it, sublote:s, tipo:"concessao",
+              aguardando: aprov?.name||"—", aguardandoId: s.concessaoAprovadorId,
+              isMinha: String(s.concessaoAprovadorId)===String(currentUser?.id),
+              at: s.concessaoSolicitadaAt || it.tratadoAt || r.createdAt,
+            });
+          }
+        });
+      }
+      // Legado concessão
+      else if(it.disposicao==="concessao_solicitada"){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.concessaoAprovadorId));
+        todasPendenciasFull.push({
+          ro:r, idx, subloteIdx:null, item:it, sublote:null, tipo:"concessao",
+          aguardando: aprov?.name||"—", aguardandoId: it.concessaoAprovadorId,
+          isMinha: String(it.concessaoAprovadorId)===String(currentUser?.id),
+          at: it.concessaoSolicitadaAt || r.createdAt,
+        });
+      }
+    });
+  });
+
+  // Filtros
+  const [fPessoa, setFPessoa] = useState("todas"); // "todas" | "minhas" | userId
+  const [fTipo,   setFTipo]   = useState("todos"); // "todos" | "segregacao" | "concessao" | "correcao" | "fechar"
+  const [fDataDe,  setFDataDe]  = useState("");
+  const [fDataAte, setFDataAte] = useState("");
+
+  // Pessoas com pendência (dropdown)
+  const pessoasComPendencia = (() => {
+    const map = {};
+    todasPendenciasFull.forEach(p=>{
+      if(p.tipo==="segregacao" || p.tipo==="fechar"){
+        // Quem pode tratar/fechar: agrupa como "Qualidade"
+        map["__qualidade"] = "Qualidade (qualquer)";
+      } else if(p.aguardandoId){
+        const u = (allUsers||[]).find(x=>String(x.id)===String(p.aguardandoId));
+        if(u) map[p.aguardandoId] = u.name;
+      }
+    });
+    return Object.entries(map).map(([id,name])=>({id, name}));
+  })();
+
+  // Aplica filtros
+  const lista = todasPendenciasFull.filter(p=>{
+    // Pessoa
+    if(fPessoa === "minhas" && !p.isMinha) return false;
+    if(fPessoa !== "todas" && fPessoa !== "minhas"){
+      if(fPessoa === "__qualidade"){
+        if(p.tipo !== "segregacao" && p.tipo !== "fechar") return false;
+      } else {
+        if(String(p.aguardandoId) !== String(fPessoa)) return false;
+      }
+    }
+    // Tipo
+    if(fTipo !== "todos" && p.tipo !== fTipo) return false;
+    // Data
+    if(fDataDe && p.at && p.at.substring(0,10) < fDataDe) return false;
+    if(fDataAte && p.at && p.at.substring(0,10) > fDataAte) return false;
+    return true;
+  });
+
+  // Ordena mais antigas no topo
+  lista.sort((a,b)=>{
+    const ta = a.at || "9999";
+    const tb = b.at || "9999";
+    return ta.localeCompare(tb);
+  });
+
+  const totalMinhas = todasPendenciasFull.filter(p=>p.isMinha).length;
+
+  // Helper: "aberta há"
+  const abertaHaTxt = (at) => {
+    if(!at) return "—";
+    const d = new Date(at);
+    if(isNaN(d.getTime())) return "—";
+    const diff = (Date.now() - d.getTime()) / 1000; // segundos
+    if(diff < 60) return "agora";
+    if(diff < 3600) return Math.floor(diff/60) + "min";
+    if(diff < 86400) return Math.floor(diff/3600) + "h";
+    return Math.floor(diff/86400) + "d";
+  };
+
+  // Helper: label do tipo
+  const tipoLabel = (t) => ({
+    segregacao: "Segregação",
+    correcao:   "Correção imediata",
+    concessao:  "Concessão",
+    fechar:     "Validar e fechar",
+  })[t] || t;
+
+  // Helper: abre RO no detalhe
+  const abrirRO = (ro) => {
+    // ROAprovacoesInbox não tem onNav direto; usa workaround com window.location ou prop
+    // Vou usar onUpdate hack ou disparar evento. Simples: redireciona via sessionStorage flag + reload? Não.
+    // Melhor: adicionar prop onNavRO opcional.
+    if(typeof onNavRO === "function") onNavRO(ro.id||ro.code);
+  };
+
+  return <div style={{padding:"18px 22px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
       <div>
-        <div style={{fontSize:18, fontWeight:600, color:C.text}}>Ações pendentes</div>
-        <div style={{fontSize:12, color:C.muted, marginTop:3}}>
-          {listaVisivel.length===0 ? (verTudo&&isGestor?"Nenhuma pendência em aberto.":"Nenhuma pendência aguardando você.") :
-           listaVisivel.length===1 ? "1 pendência" : listaVisivel.length+" pendências"}
-          {!verTudo && isGestor && todasPendencias.length > minhasPendencias.length &&
-            <span style={{color:C.accent}}> · {todasPendencias.length - minhasPendencias.length} de outras pessoas</span>}
-        </div>
+        <h1 style={{margin:0,fontSize:17,color:C.text,fontWeight:700}}>Ações pendentes</h1>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{lista.length} pendência{lista.length!==1?"s":""}{totalMinhas>0?<> · <b style={{color:C.accent}}>{totalMinhas} sua{totalMinhas!==1?"s":""}</b></>:null}</div>
       </div>
-      {isGestor && <div style={{display:"flex", gap:6}}>
-        <button
-          style={{...Sg.btn(verTudo?"primary":""), fontSize:12, padding:"6px 14px"}}
-          onClick={()=>setVerTudo(false)}>
-          Minhas ({minhasPendencias.length})
-        </button>
-        <button
-          style={{...Sg.btn(!verTudo?"":"primary"), fontSize:12, padding:"6px 14px"}}
-          onClick={()=>setVerTudo(true)}>
-          Todas ({todasPendencias.length})
-        </button>
-      </div>}
     </div>
 
-    {listaVisivel.length===0 ? (
-      <div style={{...Sg.card(), padding:"40px 20px", textAlign:"center", color:C.muted, fontSize:13}}>
-        {verTudo && isGestor ? "Nenhuma pendência em aberto nas ROs." : "Quando alguém pedir aprovação para você, aparece aqui."}
+    {/* Filtros */}
+    <div style={{...Sg.card({marginBottom:14}),display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr 1fr",gap:10}}>
+      <div>
+        <label style={Sg.lbl}>Pessoa</label>
+        <select style={Sg.input()} value={fPessoa} onChange={e=>setFPessoa(e.target.value)}>
+          <option value="todas">Todas</option>
+          <option value="minhas">Minhas</option>
+          <optgroup label="Pessoas com pendência">
+            {pessoasComPendencia.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </optgroup>
+        </select>
       </div>
-    ) : (
-      <table style={{width:"100%", borderCollapse:"collapse", fontSize:13}}>
-        <thead>
-          <tr style={{borderBottom:"1px solid "+C.border}}>
-            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>RO</th>
-            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Item</th>
-            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Tipo</th>
-            <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Detalhe</th>
-            {verTudo && isGestor && <th style={{padding:"7px 10px", textAlign:"left", fontWeight:600, color:C.muted, fontSize:11}}>Aguardando</th>}
-            <th style={{padding:"7px 10px"}}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {listaVisivel.map((p,i)=>{
-            const meta = TIPO_META[p.tipo]||{label:p.tipo, bg:"#eee", col:"#555"};
-            const podeAgir = p.isMinha && p.tipo!=="fechar";
-            const detalhe = p.tipo==="correcao" ? (p.item?.acaoCorrecao||"—") :
-                            p.tipo==="concessao" ? (p.sublote?.extra||p.item?.concessaoJustificativa||"—") :
-                            p.desc||"";
-            return <tr key={i} style={{borderBottom:"1px solid "+C.border+"44", background: p.isMinha?"":"transparent"}}>
-              <td style={{padding:"10px 10px", fontWeight:600, color:C.accent, whiteSpace:"nowrap"}}>
-                {p.ro.code||p.ro.id}
-              </td>
-              <td style={{padding:"10px 10px", color:C.text}}>
-                {p.item ? <><strong>{p.item.codigo||"—"}</strong><div style={{fontSize:11,color:C.muted}}>{(p.item.descricao||"").substring(0,40)}</div></> : <span style={{fontSize:12,color:C.muted}}>—</span>}
-              </td>
-              <td style={{padding:"10px 10px"}}>
-                <span style={{fontSize:11, padding:"2px 8px", borderRadius:6, background:meta.bg, color:meta.col, fontWeight:500, whiteSpace:"nowrap"}}>{meta.label}</span>
-              </td>
-              <td style={{padding:"10px 10px", color:C.muted, fontSize:12, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-                {detalhe}
-              </td>
-              {verTudo && isGestor && <td style={{padding:"10px 10px", fontSize:12, color: p.isMinha?C.accent:C.text, fontWeight: p.isMinha?600:400}}>
-                {p.isMinha?"Você":p.aguardando}
-              </td>}
-              <td style={{padding:"10px 10px", textAlign:"right", whiteSpace:"nowrap"}}>
-                {podeAgir ? <div style={{display:"flex", gap:6, justifyContent:"flex-end"}}>
-                  <button
-                    style={{fontSize:11, padding:"4px 12px", border:"1px solid "+C.danger, borderRadius:6, background:"transparent", color:C.danger, cursor:"pointer", fontFamily:"inherit"}}
-                    onClick={()=>setAcaoAlvo({...p, step:"rejeitar"})}>
-                    Rejeitar
-                  </button>
-                  <button
-                    style={{...Sg.btn("primary"), fontSize:11, padding:"4px 12px"}}
-                    onClick={()=>{
-                      setPendingApply({ro:p.ro, idx:p.idx, subloteIdx:p.subloteIdx, tipo:p.tipo, decisao:"aprovar"});
-                      setSigModal({
-                        title: p.tipo==="correcao"?"Assinar — Aprovação de correção":"Assinar — Aprovação de concessão",
-                        confirmLabel:"Assinar e aprovar", confirmStyle:"success"
-                      });
-                    }}>
-                    Aprovar
-                  </button>
-                </div> : p.tipo==="fechar" && p.isMinha ? <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>Ver RO para fechar</span>
-                : <span style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>aguardando</span>}
-              </td>
-            </tr>;
-          })}
-        </tbody>
-      </table>
-    )}
+      <div>
+        <label style={Sg.lbl}>Tipo</label>
+        <select style={Sg.input()} value={fTipo} onChange={e=>setFTipo(e.target.value)}>
+          <option value="todos">Todos</option>
+          <option value="segregacao">Segregação</option>
+          <option value="correcao">Correção imediata</option>
+          <option value="concessao">Concessão</option>
+          <option value="fechar">Validar e fechar</option>
+        </select>
+      </div>
+      <div>
+        <label style={Sg.lbl}>Aberta a partir de</label>
+        <input type="date" style={Sg.input()} value={fDataDe} onChange={e=>setFDataDe(e.target.value)}/>
+      </div>
+      <div>
+        <label style={Sg.lbl}>até</label>
+        <input type="date" style={Sg.input()} value={fDataAte} onChange={e=>setFDataAte(e.target.value)}/>
+      </div>
+    </div>
 
+    {/* Tabela */}
+    <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+      {lista.length===0
+        ? <div style={{textAlign:"center",padding:36,color:C.muted,fontSize:12}}>Nenhuma pendência encontrada com esses filtros.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid "+C.border,background:C.surface}}>
+                {["RO","Item","Tipo","Com quem","Aberta há",""].map(h=>(
+                  <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((p,i)=>{
+                const r = p.ro;
+                const it = p.item;
+                const d = r.data||{};
+                return <tr key={i} style={{borderBottom:"1px solid "+C.border,cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+                  onMouseLeave={e=>e.currentTarget.style.background=""}
+                  onClick={()=>abrirRO(r)}>
+                  <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:C.accent,whiteSpace:"nowrap"}}>{r.code||r.id}</td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.text,maxWidth:260}}>
+                    {it
+                      ? <>
+                          <div style={{fontWeight:600}}>{it.codigo||"—"}</div>
+                          <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.descricao||"—"}</div>
+                        </>
+                      : <span style={{fontStyle:"italic",color:C.muted}}>RO inteira</span>
+                    }
+                  </td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:C.text,whiteSpace:"nowrap"}}>{tipoLabel(p.tipo)}</td>
+                  <td style={{padding:"9px 12px",fontSize:12,color:p.isMinha?C.accent:C.muted,whiteSpace:"nowrap",fontWeight:p.isMinha?600:400}}>
+                    {p.aguardando}{p.isMinha?" (você)":""}
+                  </td>
+                  <td style={{padding:"9px 12px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}} title={p.at?fmt(p.at):""}>
+                    {abertaHaTxt(p.at)}
+                  </td>
+                  <td style={{padding:"9px 12px",textAlign:"right",whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
+                    {p.isMinha && (p.tipo==="correcao" || p.tipo==="concessao")
+                      ? <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+                          <button
+                            style={{fontSize:11,padding:"4px 10px",border:"1px solid "+C.danger,borderRadius:6,background:"transparent",color:C.danger,cursor:"pointer",fontFamily:"inherit"}}
+                            onClick={()=>setAcaoAlvo({...p, step:"rejeitar"})}>
+                            Rejeitar
+                          </button>
+                          <button
+                            style={{...Sg.btn("primary"),fontSize:11,padding:"4px 10px"}}
+                            onClick={()=>{
+                              setPendingApply({ro:p.ro, idx:p.idx, subloteIdx:p.subloteIdx, tipo:p.tipo, decisao:"aprovar"});
+                              setSigModal({
+                                title: p.tipo==="correcao"?"Assinar — Aprovação de correção":"Assinar — Aprovação de concessão",
+                                confirmLabel:"Assinar e aprovar", confirmStyle:"success"
+                              });
+                            }}>
+                            Aprovar
+                          </button>
+                        </div>
+                      : <span style={{fontSize:11,color:C.accent,fontWeight:600,cursor:"pointer"}} onClick={()=>abrirRO(p.ro)}>abrir →</span>
+                    }
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+      }
+    </div>
+
+    {/* Modal de motivo da rejeição */}
     {acaoAlvo!==null && acaoAlvo.step==="rejeitar" && <MotiveModal
       open={true}
       onClose={()=>setAcaoAlvo(null)}
@@ -5642,17 +5843,13 @@ function ROAprovacoesInbox({roRecords, currentUser, allUsers, onUpdate}){
       confirmStyle="danger"
       C={C} Sg={Sg}
     />}
-
     {sigModal && <SignatureModal
       open={true}
-      onClose={()=>{setSigModal(null); setPendingApply(null);}}
-      onConfirm={async(sig)=>{ await applyDecisao(sig); }}
       title={sigModal.title}
-      description="Confirme sua senha para registrar a decisão."
       confirmLabel={sigModal.confirmLabel}
       confirmStyle={sigModal.confirmStyle}
-      saId={pendingApply?.ro?.id||pendingApply?.ro?.code||""}
-      action="aprovacao_concessao"
+      onClose={()=>{setSigModal(null); setPendingApply(null);}}
+      onConfirm={applyDecisao}
       C={C} Sg={Sg}
     />}
   </div>;
@@ -7313,53 +7510,6 @@ function ConcluirAcaoNCModal({open, acao, onClose, onConfirm, C, Sg}){
 }
 
 // ── NCHistorico ───────────────────────────────────────────────────
-function NCHistorico({nc, C}){
-  const [open, setOpen] = useState(true);
-  const Sg = mkSg(C);
-  const d = nc?.data || nc || {};
-  const novo = d.historico || [];
-  const velho = (nc?.log || []).map(e=>({
-    at: e.at,
-    by: e.by || "—",
-    detail: (e.event||"") + (e.detail?": "+e.detail:""),
-  }));
-  const todos = [...novo, ...velho]
-    .filter(e=>e.at)
-    .sort((a,b)=> (b.at||"").localeCompare(a.at||""));
-
-  return <div style={{...Sg.card({padding:0, overflow:"hidden"})}}>
-    <div
-      onClick={()=>setOpen(o=>!o)}
-      style={{display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", padding:"12px 14px", borderBottom: open?"1px solid "+C.border:"none"}}>
-      <span style={{fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
-        Histórico {todos.length>0 && <span style={{color:C.dim, fontWeight:400}}>({todos.length})</span>}
-      </span>
-      <span style={{fontSize:11, color:C.muted}}>{open?"− minimizar":"+ expandir"}</span>
-    </div>
-    {open && (todos.length===0
-      ? <div style={{padding:"20px 14px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma alteração registrada.</div>
-      : <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
-          <thead>
-            <tr style={{background:C.surface}}>
-              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:140}}>Data</th>
-              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:160}}>Usuário</th>
-              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>O que foi feito</th>
-            </tr>
-          </thead>
-          <tbody>
-            {todos.map((h,i)=>(
-              <tr key={i} style={{borderTop:"1px solid "+C.border}}>
-                <td style={{padding:"10px 14px", color:C.muted, fontSize:11, verticalAlign:"top", whiteSpace:"nowrap"}}>{fmt(h.at)}</td>
-                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top"}}>{h.by||"—"}</td>
-                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top", whiteSpace:"pre-wrap"}}>{h.detail||"—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>)
-    }
-  </div>;
-}
-
 // ── NCList ────────────────────────────────────────────────────────
 function NCList({ncRecords, currentUser, allUsers, onOpen, onNew}){
   const {C}=useTheme(); const Sg=mkSg(C);
@@ -7917,6 +8067,54 @@ function NewNC({currentUser, allUsers, ncRecords, roRecords, onSave, onCancel, l
       C={C} Sg={Sg}
       onClose={()=>setVerROModal(null)}
     />}
+  </div>;
+}
+
+// ── NCHistorico — histórico unificado da NC (igual ao da RO) ─────
+function NCHistorico({nc, C}){
+  const [open, setOpen] = useState(true);
+  const Sg = mkSg(C);
+  const d = nc?.data || nc || {};
+  const novo = d.historico || [];
+  const velho = (nc?.log || []).map(e=>({
+    at: e.at,
+    by: e.by || "—",
+    detail: (e.event||"") + (e.detail?": "+e.detail:""),
+  }));
+  const todos = [...novo, ...velho]
+    .filter(e=>e.at)
+    .sort((a,b)=> (b.at||"").localeCompare(a.at||""));
+
+  return <div style={{...Sg.card({padding:0, overflow:"hidden"})}}>
+    <div
+      onClick={()=>setOpen(o=>!o)}
+      style={{display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", padding:"12px 14px", borderBottom: open?"1px solid "+C.border:"none"}}>
+      <span style={{fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>
+        Histórico {todos.length>0 && <span style={{color:C.dim, fontWeight:400}}>({todos.length})</span>}
+      </span>
+      <span style={{fontSize:11, color:C.muted}}>{open?"− minimizar":"+ expandir"}</span>
+    </div>
+    {open && (todos.length===0
+      ? <div style={{padding:"20px 14px", color:C.muted, fontSize:12, textAlign:"center"}}>Nenhuma alteração registrada.</div>
+      : <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+          <thead>
+            <tr style={{background:C.surface}}>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:140}}>Data</th>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase", width:160}}>Usuário</th>
+              <th style={{padding:"8px 14px", textAlign:"left", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.4, textTransform:"uppercase"}}>O que foi feito</th>
+            </tr>
+          </thead>
+          <tbody>
+            {todos.map((h,i)=>(
+              <tr key={i} style={{borderTop:"1px solid "+C.border}}>
+                <td style={{padding:"10px 14px", color:C.muted, fontSize:11, verticalAlign:"top", whiteSpace:"nowrap"}}>{fmt(h.at)}</td>
+                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top"}}>{h.by||"—"}</td>
+                <td style={{padding:"10px 14px", color:C.text, fontSize:12, verticalAlign:"top", whiteSpace:"pre-wrap"}}>{h.detail||"—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>)
+    }
   </div>;
 }
 
@@ -10507,31 +10705,41 @@ const saveReq = async (r) => {
 
   const pendCM = (pendEv+pendAcs)||0;
   // Contador de pendências aguardando o usuário atual
+  // Conta TODAS as pendências de RO do sistema (não só minhas)
+  // - itens segregados aguardando qualidade
+  // - correções imediatas aguardando aprovação
+  // - concessões aguardando aprovação
+  // - ROs com tudo tratado prontas pra fechar
   const pendAprov = (()=>{
     let n=0;
     (roRecs||[]).forEach(r=>{
       if(["cancelada","fechada"].includes(r.status)) return;
       const itens = r.data?.itens||[];
-      // RO pronta para fechar — conta pra quem pode fechar
-      if(hasPerm(loggedIn,'ro.fechar') && r.status==="em_analise" && itens.length>0 && itens.every(it=>{
-        if(it.disposicao==="correcao") return it.status==="concluida";
+      // RO pronta para fechar
+      if(r.status==="em_analise" && itens.length>0 && itens.every(it=>{
+        if(!it.disposicao) return false;
+        if(it.disposicao==="correcao") return it.status==="concluida"||it.status==="correcao_aprovada";
         if(it.disposicao==="segregar"){
-          if(it.sublotes && it.sublotes.length>0) return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo));
+          if(it.sublotes && it.sublotes.length>0) return it.sublotes.every(s=>["sucatamento","concessao_aprovada","migrada_nc"].includes(s.tipo) && (s.tipo!=="migrada_nc"||s.nc_code));
           return false;
         }
         return ["sucatamento","concessao_aprovada","migrada_nc"].includes(it.disposicao);
       })){ n++; return; }
       itens.forEach(it=>{
+        // Segregado aguardando qualidade
+        if(it.disposicao==="segregar" && it.status!=="concluida" && (!it.sublotes||it.sublotes.length===0)) n++;
         // Correção imediata aguardando aprovação
-        if(it.disposicao==="correcao" && it.status==="pendente_aprovacao" && String(it.aprovadorCorrecaoId)===String(loggedIn?.id)) { n++; return; }
-        // Sublotes de concessão
+        if(it.disposicao==="correcao" && it.status==="pendente_aprovacao") n++;
+        // Sublotes
         if(it.sublotes && it.sublotes.length > 0){
           it.sublotes.forEach(s=>{
-            if(s.tipo==="concessao_solicitada" && String(s.concessaoAprovadorId)===String(loggedIn?.id)) n++;
+            if(s.tipo==="concessao_solicitada") n++;
+            if(s.tipo==="concessao_rejeitada") n++; // precisa redecidir
           });
         }
         // Modelo legado concessão
-        else if(it.disposicao==="concessao_solicitada" && String(it.concessaoAprovadorId)===String(loggedIn?.id)) n++;
+        else if(it.disposicao==="concessao_solicitada") n++;
+        else if(it.disposicao==="concessao_rejeitada") n++;
       });
     });
     return n;
@@ -10669,7 +10877,7 @@ const saveReq = async (r) => {
       {view==='acoes'     &&<ActionsPage requests={requests} currentUser={loggedIn} allUsers={users} crits={crits} onNav={nav}/>}
       {view==='indicators'&&<IndicatorsPage requests={requests} allUsers={users} crits={crits}/>}
       {view==='ro_list'   &&<ROList roRecords={roRecs} currentUser={loggedIn} allUsers={users} onOpen={(id)=>{setSel(id);setView('ro_detail');}} onNew={()=>setView('ro_new')}/>}
-      {view==='ro_aprovacoes' && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO}/>}
+      {view==='ro_aprovacoes' && <ROAprovacoesInbox roRecords={roRecs} currentUser={loggedIn} allUsers={users} onUpdate={saveRO} onNavRO={(id)=>{setSel(id);setView('ro_detail');}}/>}
       {view==='ro_new'    &&hasPerm(loggedIn,'ro.abrir')&&<NewRO currentUser={loggedIn} allUsers={users} onCancel={()=>setView('ro_list')} onSave={async(f,itens,atts)=>{
         const now=new Date().toISOString();
         const r={title:f.descricao.substring(0,60)||"Ocorrência",status:"em_analise",data:{...f,itens:itens||[],attachments:atts||[],historico:[{type:"abertura",at:now,by:loggedIn.name,byId:loggedIn.id,detail:"Ocorrência aberta pelo operador."}]},log:[],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now,owner_id:loggedIn.id,owner_name:loggedIn.name};
