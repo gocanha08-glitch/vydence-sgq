@@ -8013,36 +8013,28 @@ const NC_NATUREZAS = [
 
 const NC_ONDE_IDENTIFICADO = ["Produção","Inspeção Recebimento","Inspeção Final","AT","Almoxarifado","P&D","Outro"];
 
-const NC_TIPO_DESVIO_PRODUTO  = ["Dimensional","Visual","Funcional","Documentacional","Outro"];
-const NC_TIPO_DESVIO_PROCESSO = ["Falha operacional","Falha de processo","Não cumprimento de procedimento","Documentacional","Outro"];
+const NC_TIPO_DESVIO_PRODUTO  = ["Visual","Montagem","Funcional","N/A"];
+const NC_TIPO_DESVIO_PROCESSO = ["Falha Operacional","Falha de Processo","N/A"];
 
 const NC_ESCOPOS = ["Unitário","Lote","Sistêmico"];
 
 const NC_DISP_PRODUTO = {
-  corrigir:                {label:"Corrigir",                       short:"Corrigir",       color:"info"},
-  retrabalhar:             {label:"Retrabalhar",                    short:"Retrab.",        color:"info"},
-  substituir:              {label:"Substituir",                     short:"Substituir",     color:"info"},
+  retrabalho_externo:      {label:"Retrabalho Externo",             short:"Retrab. Ext.",   color:"info"},
+  retrabalho_interno:      {label:"Retrabalho Interno",             short:"Retrab. Int.",   color:"info"},
+  sucata:                  {label:"Sucata",                         short:"Sucata",         color:"danger"},
   devolver_fornecedor:     {label:"Devolver ao fornecedor",         short:"Devolver",       color:"warning"},
-  descartar:               {label:"Descartar",                      short:"Descartar",      color:"danger"},
-  concessao_aprovada:      {label:"Aprovar em concessão",           short:"Concessão",      color:"success"},
-  liberar_apos_avaliacao:  {label:"Liberar após avaliação",         short:"Liberar",        color:"success"},
-  corrigir_documentacao:   {label:"Solicitar/corrigir documentação",short:"Doc.",           color:"info"},
-  encaminhar_riacp:        {label:"Encaminhar para RIACP",          short:"→ RIACP",        color:"warning"},
-  outro:                   {label:"Outro",                          short:"Outro",          color:"info"},
+  concessao_solicitada:    {label:"Concessão (aguardando)",         short:"Concessão",      color:"warning"},
+  concessao_aprovada:      {label:"Concessão aprovada",             short:"Conc. OK",       color:"success"},
+  concessao_rejeitada:     {label:"Concessão rejeitada",            short:"Conc. NÃO",      color:"danger"},
 };
 
 const NC_DISP_PROCESSO = {
-  corrigir_registro:       {label:"Corrigir registro/documento",    short:"Corrigir reg.",  color:"info"},
-  regularizar_atividade:   {label:"Regularizar atividade pendente", short:"Regularizar",    color:"info"},
-  complementar_evidencia:  {label:"Complementar evidência",         short:"Compl. evid.",   color:"info"},
-  reexecutar_verificar:    {label:"Reexecutar/verificar",           short:"Reexecutar",     color:"info"},
-  regularizar_controle:    {label:"Regularizar controle",           short:"Reg. controle",  color:"info"},
   encaminhar_riacp:        {label:"Encaminhar para RIACP",          short:"→ RIACP",        color:"warning"},
-  outro:                   {label:"Outro",                          short:"Outro",          color:"info"},
+  outro:                   {label:"Outro (descrever em ação)",      short:"Outro",          color:"info"},
 };
 
-const NC_DISP_TERMINAIS_PRODUTO  = ["corrigir","retrabalhar","substituir","devolver_fornecedor","descartar","concessao_aprovada","liberar_apos_avaliacao","corrigir_documentacao","encaminhar_riacp"];
-const NC_DISP_TERMINAIS_PROCESSO = ["corrigir_registro","regularizar_atividade","complementar_evidencia","reexecutar_verificar","regularizar_controle","encaminhar_riacp"];
+const NC_DISP_TERMINAIS_PRODUTO  = ["retrabalho_externo","retrabalho_interno","sucata","devolver_fornecedor","concessao_aprovada"];
+const NC_DISP_TERMINAIS_PROCESSO = ["encaminhar_riacp","outro"];
 
 const NC_ITEM_STATUS = {
   pendente:     {label:"Pendente",     color:"#D97706"},
@@ -8090,7 +8082,7 @@ function NCItemStatusBadge({status}){
 }
 
 // ── TratarItemNCModal — qualidade define disposição do item ───────
-function TratarItemNCModal({open, item, itemIdx, allUsers, currentUser, onClose, onConfirm, C, Sg}){
+function TratarItemNCModal({open, item, itemIdx, natureza, allUsers, currentUser, onClose, onConfirm, C, Sg}){
   const [disp, setDisp] = useState("");
   const [justificativa, setJust] = useState("");
   const [aprovadorId, setAprovadorId] = useState("");
@@ -8101,19 +8093,21 @@ function TratarItemNCModal({open, item, itemIdx, allUsers, currentUser, onClose,
 
   if(!open||!item) return null;
 
+  const dispMap = ncDispMap(natureza);
   const needsAprovador = disp==="concessao_solicitada";
-  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && String(u.id)!==String(currentUser?.id));
+  // Filtra aprovadores: quem tem permissão nc.aprovar_concessao e não é o próprio usuário
+  const aprovadores = (allUsers||[]).filter(u=>u.active!==false && String(u.id)!==String(currentUser?.id) && (u.role==='admin' || hasPerm(u,'nc.aprovar_concessao')));
   const canConfirm = disp && (!needsAprovador || aprovadorId) && justificativa.trim();
 
-  return <Modal open={open} onClose={onClose} title={"Definir disposição — "+item.codigo} width={560}>
+  return <Modal open={open} onClose={onClose} title={"Definir disposição — "+(item.codigo||"item")} width={560}>
     <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>
-      <b>{item.codigo}</b>{item.descricao?" — "+item.descricao:""}{item.lote?" · Lote: "+item.lote:""}{item.qtdNC?" · Qtd NC: "+item.qtdNC:""}
+      <b>{item.codigo||"—"}</b>{item.descricao?" — "+item.descricao:""}{item.lote_serie?" · Lote: "+item.lote_serie:""}{item.qtd_nc?" · Qtd NC: "+item.qtd_nc:""}
     </div>
     <div style={{marginBottom:12}}>
       <label style={Sg.lbl}>Disposição *</label>
       <select style={Sg.input()} value={disp} onChange={e=>setDisp(e.target.value)}>
         <option value="">Selecione...</option>
-        {Object.entries(NC_DISP).filter(([k])=>!["concessao_aprovada","concessao_rejeitada"].includes(k)).map(([k,v])=>(
+        {Object.entries(dispMap).filter(([k])=>!["concessao_aprovada","concessao_rejeitada"].includes(k)).map(([k,v])=>(
           <option key={k} value={k}>{v.label}</option>
         ))}
       </select>
@@ -8124,6 +8118,7 @@ function TratarItemNCModal({open, item, itemIdx, allUsers, currentUser, onClose,
         <option value="">Selecione o aprovador...</option>
         {aprovadores.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
       </select>
+      {aprovadores.length===0 && <div style={{fontSize:11,color:C.warning,marginTop:4}}>Nenhum usuário com permissão "nc.aprovar_concessao" cadastrado.</div>}
     </div>}
     <div style={{marginBottom:16}}>
       <label style={Sg.lbl}>Justificativa / Observação *</label>
@@ -8288,6 +8283,48 @@ function ConcluirAcaoNCModal({open, acao, onClose, onConfirm, C, Sg}){
     <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
       <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
       <button style={{...Sg.btn("primary"),opacity:evidencia.trim()?1:.4}} disabled={!evidencia.trim()} onClick={()=>onConfirm({tipo,evidencia})}>Registrar</button>
+    </div>
+  </Modal>;
+}
+
+// ── ClassificarNCModal — Qualidade define tipo de desvio ─────────
+function ClassificarNCModal({open, nc, currentUser, onClose, onConfirm, C, Sg}){
+  const d = (nc && nc.data) || {};
+  const classAtual = d.classificacao || {};
+  const [tipoDesvio, setTipoDesvio] = useState("");
+  const [observacao, setObservacao] = useState("");
+
+  useEffect(()=>{
+    if(open){
+      setTipoDesvio(classAtual.tipo_desvio || "");
+      setObservacao(classAtual.observacao || "");
+    }
+  },[open, classAtual.tipo_desvio, classAtual.observacao]);
+
+  if(!open) return null;
+
+  const opcoes = ncTipoDesvioOptions(d.natureza);
+  const canConfirm = !!tipoDesvio;
+  const isEditando = !!classAtual.tipo_desvio;
+
+  return <Modal open={open} onClose={onClose} title={isEditando?"Editar classificação":"Classificar NC"} width={520}>
+    <div style={{fontSize:12,color:C.muted,marginBottom:12}}>
+      Defina o tipo de desvio. Esta classificação será registrada no histórico com sua identificação.
+    </div>
+    <div style={{marginBottom:12}}>
+      <label style={Sg.lbl}>Tipo de desvio *</label>
+      <select style={Sg.input()} value={tipoDesvio} onChange={e=>setTipoDesvio(e.target.value)}>
+        <option value="">Selecione...</option>
+        {opcoes.map(o=><option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+    <div style={{marginBottom:16}}>
+      <label style={Sg.lbl}>Observação <span style={{fontWeight:400,color:C.muted,fontStyle:"italic"}}>(opcional)</span></label>
+      <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={observacao} onChange={e=>setObservacao(e.target.value)} placeholder="Detalhes sobre a classificação..."/>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
+      <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>onConfirm({tipo_desvio:tipoDesvio, observacao})}>{isEditando?"Salvar":"Classificar"}</button>
     </div>
   </Modal>;
 }
@@ -8943,7 +8980,7 @@ function NCHistorico({nc, C}){
 }
 
 // ── NCDetail ──────────────────────────────────────────────────────
-function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
+function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack, onUpdate}){
   const {C}=useTheme(); const Sg=mkSg(C);
   const [tratarIdx, setTratarIdx] = useState(null);
   const [aprovConcessaoIdx, setAprovConcessaoIdx] = useState(null);
@@ -8952,12 +8989,17 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
   const [fecharModal, setFecharModal] = useState(false);
   const [cancelarModal, setCancelarModal] = useState(false);
   const [cancelarMotivo, setCancelarMotivo] = useState("");
+  const [classificarModal, setClassificarModal] = useState(false);
+  const [selecROModal, setSelecROModal] = useState(false);
+  const [verROModal, setVerROModal] = useState(null);
+  const [addItemModal, setAddItemModal] = useState(false);
+  const [novoItemForm, setNovoItemForm] = useState({codigo:"", descricao:"", lote_serie:"", qtd_nc:""});
   const [abaAtiva, setAbaAtiva] = useState("comunicacoes");
   const [novaComunicacao, setNovaComunicacao] = useState({tipo:"",resumo:""});
   const [addingComun, setAddingComun] = useState(false);
   const [sigModal, setSigModal] = useState(null);
 
-  useEffect(()=>{ window.__sgqModalOpen = !!(tratarIdx!==null||aprovConcessaoIdx!==null||novaAcaoModal||concluirAcaoIdx!==null||fecharModal||cancelarModal||sigModal); return ()=>{window.__sgqModalOpen=false;}; },[tratarIdx,aprovConcessaoIdx,novaAcaoModal,concluirAcaoIdx,fecharModal,cancelarModal,sigModal]);
+  useEffect(()=>{ window.__sgqModalOpen = !!(tratarIdx!==null||aprovConcessaoIdx!==null||novaAcaoModal||concluirAcaoIdx!==null||fecharModal||cancelarModal||classificarModal||selecROModal||verROModal||addItemModal||sigModal); return ()=>{window.__sgqModalOpen=false;}; },[tratarIdx,aprovConcessaoIdx,novaAcaoModal,concluirAcaoIdx,fecharModal,cancelarModal,classificarModal,selecROModal,verROModal,addItemModal,sigModal]);
 
   if(!ncRecord) return null;
 
@@ -8997,6 +9039,97 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
   const addHistorico = (ev) => {
     const now = new Date().toISOString();
     return [...(d.historico||[]), {at:now, by:currentUser?.name, byId:currentUser?.id, ...ev}];
+  };
+
+  // Qualidade classifica a NC (tipo de desvio)
+  const handleClassificar = async ({tipo_desvio, observacao}) => {
+    const now = new Date().toISOString();
+    const classAtual = d.classificacao || {};
+    const isPrimeira = !classAtual.tipo_desvio;
+    const novaClass = {
+      ...classAtual,
+      tipo_desvio,
+      observacao: observacao || "",
+      classificado_em: now,
+      classificado_por_id: currentUser?.id,
+      classificado_por_nome: currentUser?.name,
+    };
+    const hist = addHistorico({
+      type:"classificacao",
+      event: isPrimeira ? "NC classificada" : "Classificação atualizada",
+      detail: "Tipo de desvio: "+tipo_desvio+(observacao?" — "+observacao:""),
+    });
+    // Ao classificar pela primeira vez, status passa de "aberta" para "em_analise"
+    const novoStatus = (status==="aberta" && isPrimeira) ? "em_analise" : status;
+    await save({status:novoStatus, data:{...d, classificacao:novaClass, historico:hist}});
+    setClassificarModal(false);
+  };
+
+  // Adicionar item manual à NC (depois de aberta)
+  const handleAddItemManual = async () => {
+    const f = novoItemForm;
+    if(!f.codigo.trim() || !f.qtd_nc) return;
+    const novoItem = {
+      origem: "Manual",
+      codigo: f.codigo.trim(),
+      descricao: f.descricao.trim(),
+      lote_serie: f.lote_serie.trim(),
+      qtd_nc: parseInt(f.qtd_nc) || f.qtd_nc,
+      disposicao: "",
+      justificativa_disposicao: "",
+      qtd_tratada: 0,
+      responsavel_id: null,
+      responsavel_nome: null,
+      data_planejada: null,
+      data_conclusao: null,
+      concluido_por_id: null,
+      concluido_por_nome: null,
+      anexos: [],
+      status: "pendente",
+    };
+    const novosItens = [...itens, novoItem];
+    const hist = addHistorico({type:"item_adicionado", event:"Item adicionado manualmente", detail:f.codigo+(f.descricao?" — "+f.descricao:"")+" · Qtd: "+f.qtd_nc});
+    await save({data:{...d, itens:novosItens, historico:hist}});
+    setNovoItemForm({codigo:"", descricao:"", lote_serie:"", qtd_nc:""});
+    setAddItemModal(false);
+  };
+
+  // Importar itens via SelecionarROsModal (depois de aberta)
+  const confirmSelecROs = async (payload) => {
+    const importados = [];
+    const novosLinkedROs = [];
+    payload.forEach(({ ro, itensNovos }) => {
+      const code = ro.code || ro.id;
+      novosLinkedROs.push(code);
+      itensNovos.forEach(it => {
+        const lote_serie = [it.lote, it.numSerie].filter(Boolean).join(" / ");
+        importados.push({
+          origem: code,
+          codigo: it.codigo||"",
+          descricao: it.descricao||"",
+          lote_serie: lote_serie,
+          qtd_nc: it.qtdNC||0,
+          disposicao: "",
+          justificativa_disposicao: "",
+          qtd_tratada: 0,
+          responsavel_id: null,
+          responsavel_nome: null,
+          data_planejada: null,
+          data_conclusao: null,
+          concluido_por_id: null,
+          concluido_por_nome: null,
+          anexos: [],
+          status: "pendente",
+        });
+      });
+    });
+    const novosItens = [...itens, ...importados];
+    const atualLinkedROs = d.linkedROs || [];
+    const linkedRefresh = [...atualLinkedROs];
+    novosLinkedROs.forEach(c => { if(!linkedRefresh.includes(c)) linkedRefresh.push(c); });
+    const hist = addHistorico({type:"itens_importados", event:"Itens vinculados via RO", detail:novosLinkedROs.join(", ")+" — "+importados.length+" item(ns)"});
+    await save({data:{...d, itens:novosItens, linkedROs:linkedRefresh, historico:hist}});
+    setSelecROModal(false);
   };
 
   // Qualidade define disposição de um item
@@ -9173,8 +9306,11 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
         <div style={{fontSize:11,color:C.muted,marginBottom:5}}>ROs vinculadas</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {d.linkedROs.map(code=>(
-            <span key={code} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:10,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:11,color:C.accent,fontWeight:600}}>
-              {code}
+            <span key={code}
+              onClick={()=>setVerROModal({roCode: code})}
+              style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:10,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:11,color:C.accent,fontWeight:600,cursor:"pointer"}}
+              title="Ver detalhes da RO">
+              {code} ↗
             </span>
           ))}
         </div>
@@ -9183,10 +9319,48 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
       <div style={{fontSize:11,color:C.muted,marginTop:10,paddingTop:10,borderTop:"1px solid "+C.border}}>Aberta por {ncRecord.createdByName||ncRecord.owner_name||"—"} em {fmt(ncRecord.createdAt)}</div>
     </div>
 
+    {/* Classificação (tipo de desvio) */}
+    {!["cancelada"].includes(status) && <div style={{...Sg.card({marginBottom:14})}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Classificação da Qualidade</div>
+        {canAnalyze && status!=="fechada" && <button style={{...Sg.btn(),fontSize:11,padding:"4px 10px"}} onClick={()=>setClassificarModal(true)}>
+          {d.classificacao?.tipo_desvio ? "Editar" : "Classificar"}
+        </button>}
+      </div>
+      {d.classificacao?.tipo_desvio
+        ? <div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom: d.classificacao?.observacao ? 10 : 0}}>
+              <div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Tipo de desvio</div>
+                <div style={{fontSize:13,color:C.text,fontWeight:600}}>{d.classificacao.tipo_desvio}</div>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Classificado por</div>
+                <div style={{fontSize:13,color:C.text}}>{d.classificacao.classificado_por_nome||"—"} <span style={{color:C.muted,fontSize:11}}>· {fmt(d.classificacao.classificado_em)}</span></div>
+              </div>
+            </div>
+            {d.classificacao?.observacao && <div style={{paddingTop:10,borderTop:"1px dashed "+C.border}}>
+              <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Observação</div>
+              <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5}}>{d.classificacao.observacao}</div>
+            </div>}
+          </div>
+        : <div style={{padding:"14px 0",textAlign:"center",fontSize:12,color:C.muted,fontStyle:"italic"}}>
+            {canAnalyze ? "Ainda não classificada. Clique em \"Classificar\" para definir o tipo de desvio." : "Aguardando classificação pela Qualidade."}
+          </div>
+      }
+    </div>}
+
     {/* Itens afetados */}
     <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border,gap:8,flexWrap:"wrap"}}>
         <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>ITENS AFETADOS ({itensReais.length})</span>
+        {canTratar && !["cancelada","fechada"].includes(status) && d.natureza==="produto" && <div style={{display:"flex",gap:6}}>
+          <button style={{...Sg.btn(),fontSize:11,padding:"4px 10px"}} onClick={()=>{
+            setNovoItemForm({codigo:"", descricao:"", lote_serie:"", qtd_nc:""});
+            setAddItemModal(true);
+          }}>+ Item manual</button>
+          <button style={{...Sg.btn(),fontSize:11,padding:"4px 10px"}} onClick={()=>setSelecROModal(true)}>+ Vincular RO</button>
+        </div>}
       </div>
       {itensReais.length===0
         ? <div style={{padding:24,textAlign:"center",color:C.muted,fontSize:12}}>Nenhum item registrado.</div>
@@ -9346,8 +9520,56 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
     </div>
 
     {/* Modals */}
+    {classificarModal && <ClassificarNCModal
+      open={true} nc={ncRecord} currentUser={currentUser}
+      onClose={()=>setClassificarModal(false)}
+      onConfirm={handleClassificar} C={C} Sg={Sg}/>}
+
+    {addItemModal && <Modal open={true} onClose={()=>setAddItemModal(false)} title="Adicionar item manual" width={560}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:12,marginBottom:12}}>
+        <div>
+          <label style={Sg.lbl}>Código *</label>
+          <input style={Sg.input()} value={novoItemForm.codigo} onChange={e=>setNovoItemForm(p=>({...p,codigo:e.target.value}))} placeholder="Ex: 25927"/>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Descrição</label>
+          <input style={Sg.input()} value={novoItemForm.descricao} onChange={e=>setNovoItemForm(p=>({...p,descricao:e.target.value}))} placeholder="Descrição da peça"/>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:16}}>
+        <div>
+          <label style={Sg.lbl}>Lote / Nº de série</label>
+          <input style={Sg.input()} value={novoItemForm.lote_serie} onChange={e=>setNovoItemForm(p=>({...p,lote_serie:e.target.value}))} placeholder="Lote ou número de série"/>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Quantidade *</label>
+          <input type="number" min="0" style={Sg.input()} value={novoItemForm.qtd_nc} onChange={e=>setNovoItemForm(p=>({...p,qtd_nc:e.target.value}))} placeholder="0"/>
+        </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <button style={Sg.btn()} onClick={()=>setAddItemModal(false)}>Cancelar</button>
+        <button style={{...Sg.btn("primary"),opacity:(novoItemForm.codigo.trim()&&novoItemForm.qtd_nc)?1:.4}} disabled={!(novoItemForm.codigo.trim()&&novoItemForm.qtd_nc)} onClick={handleAddItemManual}>Adicionar</button>
+      </div>
+    </Modal>}
+
+    {selecROModal && <SelecionarROsModal
+      open={true}
+      roRecs={roRecords||[]}
+      ncRecords={ncRecords||[]}
+      currentNCItens={itens}
+      alreadyLinkedROs={d.linkedROs||[]}
+      C={C} Sg={Sg}
+      onClose={()=>setSelecROModal(false)}
+      onConfirm={confirmSelecROs}/>}
+
+    {verROModal && <ROQuickViewModal
+      open={true}
+      roCode={verROModal.roCode}
+      C={C} Sg={Sg}
+      onClose={()=>setVerROModal(null)}/>}
+
     {tratarIdx!==null&&<TratarItemNCModal
-      open={true} item={itens[tratarIdx]} itemIdx={tratarIdx}
+      open={true} item={itens[tratarIdx]} itemIdx={tratarIdx} natureza={d.natureza}
       allUsers={allUsers} currentUser={currentUser}
       onClose={()=>setTratarIdx(null)}
       onConfirm={handleTratarItem} C={C} Sg={Sg}/>}
@@ -11923,7 +12145,7 @@ const saveReq = async (r) => {
         setPendingMigracao(null);
         setView('nc_list');
       }}/>}
-      {view==='nc_detail'&&selId&&selectedNC&&<NCDetail ncRecord={selectedNC} currentUser={loggedIn} allUsers={users} onBack={()=>setView('nc_list')} onUpdate={saveNC}/>}
+      {view==='nc_detail'&&selId&&selectedNC&&<NCDetail ncRecord={selectedNC} currentUser={loggedIn} allUsers={users} roRecords={roRecs} ncRecords={ncRecs} onBack={()=>setView('nc_list')} onUpdate={saveNC}/>}
       {view==='new'       &&<NewRequest currentUser={loggedIn} onSave={(f,atts)=>{const pd=phaseDl||DEFAULT_PHASE_DEADLINES;const now=new Date().toISOString();const yr=new Date().getFullYear();const id='SA-'+String(requests.length+1).padStart(3,'0')+'/'+yr;const r={id,...f,area:f.area||loggedIn.area||'Administrativo',status:'aberta',triage:null,evaluations:{},actions:[],attachments:atts||[],deadlineExtensions:[],stageDeadlines:{avaliacao_inicial:addDays(todayStr(),pd.avaliacao_inicial.days),avaliacao_areas:null,aprovacao_plano:null,montagem_plano:null,execucao:null},log:[{at:now,by:loggedIn.name,type:'criacao',event:'SA criada',detail:'Tipo: '+f.type}],createdBy:loggedIn.id,createdByName:loggedIn.name,createdAt:now};createReq(r);nav('detail',r.id);}} onCancel={()=>nav('changes')}/>}
       {view==='detail'&&selId&&selected&&<RequestDetail request={selected} allUsers={users} matrix={matrix||mkMatrix()} crits={crits} phaseDl={phaseDl} deptQuestions={deptQ} currentUser={loggedIn} onBack={()=>nav('changes')} onUpdate={updateReq} initialTab={initialTab} focusDept={focusDept} focusAcId={focusAcId} autoOpenDrawer={!!(focusDept||focusAcId)}/>}
       {view==='matrix'    &&<MatrixEditor matrix={matrix||mkMatrix()} crits={crits} currentUser={loggedIn} onSave={saveMatrix}/>}
