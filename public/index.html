@@ -9138,21 +9138,49 @@ function NCDetail({ncRecord, currentUser, allUsers, onBack, onUpdate}){
     {/* Dados gerais */}
     <div style={{...Sg.card({marginBottom:14})}}>
       <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:10}}>Dados gerais</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:10}}>
         <div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Descrição</div>
-          <div style={{fontSize:13,color:C.text}}>{d.descricao||"—"}</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Natureza</div>
+          <div style={{fontSize:13,color:C.text,fontWeight:600,textTransform:"capitalize"}}>{d.natureza||"—"}</div>
         </div>
         <div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Responsável</div>
-          <div style={{fontSize:13,color:C.text}}>{d.responsavelNome||"—"}</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Onde foi identificado</div>
+          <div style={{fontSize:13,color:C.text}}>{d.onde_identificado||"—"}</div>
         </div>
         <div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Prazo</div>
-          <div style={{fontSize:13,color:C.text}}>{d.prazo?new Date(d.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Identificação</div>
+          <div style={{fontSize:13,color:C.text}}>{formatIdentificador(d) !== "—" ? formatIdentificador(d) : (d.nf ? "NF: "+d.nf : "—")}</div>
         </div>
       </div>
-      <div style={{fontSize:11,color:C.muted,marginTop:10}}>Aberta por {ncRecord.createdByName||ncRecord.owner_name||"—"} em {fmt(ncRecord.createdAt)}</div>
+
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Descrição do problema</div>
+        <div style={{fontSize:13,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5}}>{d.descricao||"—"}</div>
+      </div>
+
+      {(d.fornecedor || d.equipamento) && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:10,paddingTop:10,borderTop:"1px dashed "+C.border}}>
+        {d.fornecedor && <div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Fornecedor</div>
+          <div style={{fontSize:13,color:C.text}}>{d.fornecedor}</div>
+        </div>}
+        {d.equipamento && <div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:3}}>Equipamento</div>
+          <div style={{fontSize:13,color:C.text}}>{d.equipamento}</div>
+        </div>}
+      </div>}
+
+      {(d.linkedROs && d.linkedROs.length>0) && <div style={{marginBottom:10,paddingTop:10,borderTop:"1px dashed "+C.border}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:5}}>ROs vinculadas</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {d.linkedROs.map(code=>(
+            <span key={code} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:10,background:C.accent+"15",border:"1px solid "+C.accent+"40",fontSize:11,color:C.accent,fontWeight:600}}>
+              {code}
+            </span>
+          ))}
+        </div>
+      </div>}
+
+      <div style={{fontSize:11,color:C.muted,marginTop:10,paddingTop:10,borderTop:"1px solid "+C.border}}>Aberta por {ncRecord.createdByName||ncRecord.owner_name||"—"} em {fmt(ncRecord.createdAt)}</div>
     </div>
 
     {/* Itens afetados */}
@@ -11346,6 +11374,19 @@ const saveReq = async (r) => {
     // unificando o fluxo de abertura (mesma tela, mesma lógica de migração de item).
     const ro = roRecs.find(x => x.code === roCode || x.id === roCode);
     if(!ro){ alert('RO não encontrada'); return; }
+
+    // Validação: a RO já está vinculada a outra NC ativa?
+    const codeNormalizado = String(ro.code || ro.id || "").toLowerCase();
+    const ncAtiva = (ncRecs||[]).find(nc => {
+      if(nc.status==="cancelada" || nc.status==="encerrada") return false;
+      const ls = nc.data?.linkedROs || nc.linkedROs || [];
+      return ls.some(c => String(c||"").toLowerCase() === codeNormalizado);
+    });
+    if(ncAtiva){
+      alert("Esta RO já está vinculada a uma NC ativa: " + (ncAtiva.code || ncAtiva.id) + "\n\nPara abrir uma nova NC com esta RO, primeiro encerre ou cancele a NC atual.");
+      return;
+    }
+
     setNcOriginRO(ro);
     setView('nc_new');
   };
