@@ -3257,7 +3257,7 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
 
   // ── Pendências NC ────────────────────────────────────────────────
   const canNC = hasPerm(currentUser,'nc.abrir')||hasPerm(currentUser,'nc.tratar_itens')||hasPerm(currentUser,'nc.gerenciar_acoes')||hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
-  const ncAtivas = (ncRecs||[]).filter(r=>!["fechada","cancelada"].includes(r.status));
+  const ncAtivas = (ncRecs||[]).filter(r=>!["fechada","encerrada","cancelada"].includes(r.status));
   const canAnalisarNC = hasPerm(currentUser,'nc.analisar')||currentUser?.role==='admin';
   const canTratarItensNC = hasPerm(currentUser,'nc.tratar_itens')||currentUser?.role==='admin';
   // NCs aguardando classificação da Qualidade (NCs abertas sem classificacao.tipo_desvio)
@@ -8091,11 +8091,84 @@ function VincularROModal({open, roCode, currentNCItens, alreadyLinkedROs, onClos
 const NC_STATUS_LABELS = {
   aberta:                {label:"Aberta",                color:"#D97706"},
   em_analise:            {label:"Em Análise",            color:"#CA8A04"},
-  em_tratativa:          {label:"Em Tratativa",          color:"#2563EB"},
-  aguardando_fornecedor: {label:"Aguard. Fornecedor",    color:"#7C3AED"},
-  aguardando_evidencia:  {label:"Aguard. Evidência",     color:"#9333EA"},
+  em_execucao:           {label:"Em Execução",           color:"#2563EB"},
   encerrada:             {label:"Encerrada",             color:"#16A34A"},
   cancelada:             {label:"Cancelada",             color:"#DC2626"},
+  // Legados — mantidos pra compatibilidade com NCs antigas no banco
+  em_tratativa:          {label:"Em Execução",           color:"#2563EB"},
+  aguardando_fornecedor: {label:"Em Execução",           color:"#2563EB"},
+  aguardando_evidencia:  {label:"Em Execução",           color:"#2563EB"},
+  fechada:               {label:"Encerrada",             color:"#16A34A"},
+};
+
+// Categorias de ação no plano — define quais campos extras aparecem
+const NC_ACAO_CATEGORIAS = {
+  retrabalho_externo:   {label:"Retrabalho Externo",     color:"#185FA5", extras:["nf_envio","custo"]},
+  retrabalho_interno:   {label:"Retrabalho Interno",     color:"#185FA5", extras:["op_retrabalho"]},
+  sucata:               {label:"Sucata / Descarte",      color:"#A32D2D", extras:["valor_descarte"]},
+  devolucao:            {label:"Devolução",              color:"#854F0B", extras:["nf_devolucao"]},
+  concessao:            {label:"Concessão",              color:"#7C3AED", extras:[]},
+  negociacao:           {label:"Negociação / Crédito",   color:"#3B6D11", extras:["protocolo","valor_credito"]},
+  reembolso:            {label:"Reembolso",              color:"#3B6D11", extras:["protocolo","valor_reembolso"]},
+  correcao_documento:   {label:"Correção de documento",  color:"#5F5E5A", extras:[]},
+  outro:                {label:"Outro",                  color:"#5F5E5A", extras:[]},
+};
+
+// Campos extras: definição (label, tipo, sinal financeiro)
+const NC_ACAO_EXTRAS = {
+  nf_envio:        {label:"NF de Envio",            type:"text",  financeiro:false},
+  nf_devolucao:    {label:"NF de Devolução",        type:"text",  financeiro:false},
+  op_retrabalho:   {label:"OP de Retrabalho",       type:"text",  financeiro:false},
+  protocolo:       {label:"Protocolo",              type:"text",  financeiro:false},
+  custo:           {label:"Custo (R$)",             type:"money", financeiro:"saida"},
+  valor_descarte:  {label:"Valor descartado (R$)",  type:"money", financeiro:"saida"},
+  valor_credito:   {label:"Valor (R$)",             type:"money", financeiro:"entrada"},
+  valor_reembolso: {label:"Valor (R$)",             type:"money", financeiro:"entrada"},
+};
+
+// Status da subação (mais granular que ação completa)
+const NC_SUBACAO_STATUS = {
+  aberta:    {label:"Aberta",    color:"#D97706"},
+  concluida: {label:"Concluída", color:"#16A34A"},
+  cancelada: {label:"Cancelada", color:"#64748B"},
+};
+const NC_SUBACAO_TERMINAIS = ["concluida","cancelada"];
+
+// Mapeia disposição do item → categoria sugerida pra ação no plano
+const dispToCategoria = (disp) => {
+  const m = {
+    retrabalho_externo:   "retrabalho_externo",
+    retrabalho_interno:   "retrabalho_interno",
+    sucata:               "sucata",
+    devolver_fornecedor:  "devolucao",
+    concessao_solicitada: "concessao",
+    concessao_aprovada:   "concessao",
+    encaminhar_riacp:     "outro",
+    outro:                "outro",
+  };
+  return m[disp] || "outro";
+};
+
+// Calcula resultado financeiro de uma ação ou lista de ações
+const calcFinanceiro = (acoes) => {
+  let saidas = 0, entradas = 0;
+  (acoes||[]).forEach(a=>{
+    const extras = a.extras || {};
+    Object.entries(extras).forEach(([k,v])=>{
+      const meta = NC_ACAO_EXTRAS[k];
+      if(!meta || meta.type!=='money') return;
+      const valor = parseFloat(String(v).replace(",",".").replace(/[^\d.-]/g,"")) || 0;
+      if(meta.financeiro==='saida') saidas += valor;
+      else if(meta.financeiro==='entrada') entradas += valor;
+    });
+  });
+  return { saidas, entradas, liquido: saidas - entradas };
+};
+
+// Formata R$
+const fmtMoney = (v) => {
+  const n = parseFloat(v) || 0;
+  return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 };
 
 const NC_NATUREZAS = [
@@ -8355,22 +8428,42 @@ function FecharNCModal({open, nc, onClose, onConfirm, C, Sg}){
 }
 
 // ── NovaAcaoNCModal — adicionar ação ao plano corretivo ───────────
-function NovaAcaoNCModal({open, onClose, onConfirm, allUsers, C, Sg}){
+function NovaAcaoNCModal({open, onClose, onConfirm, allUsers, presetCategoria, presetDescricao, presetVinculo, C, Sg}){
+  const [categoria, setCategoria] = useState("outro");
   const [descricao, setDescricao] = useState("");
   const [responsavelId, setRespId] = useState("");
   const [prazo, setPrazo] = useState("");
 
-  useEffect(()=>{ if(open){ setDescricao(""); setRespId(""); setPrazo(""); }}, [open]);
+  useEffect(()=>{
+    if(open){
+      setCategoria(presetCategoria || "outro");
+      setDescricao(presetDescricao || "");
+      setRespId("");
+      setPrazo("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   if(!open) return null;
 
   const ativos = (allUsers||[]).filter(u=>u.active!==false);
   const canConfirm = descricao.trim() && responsavelId && prazo;
 
-  return <Modal open={open} onClose={onClose} title="Nova ação corretiva" width={500}>
+  return <Modal open={open} onClose={onClose} title="Nova ação no plano" width={560}>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {presetVinculo && <div style={{padding:"8px 12px",background:C.accent+"10",border:"1px solid "+C.accent+"30",borderRadius:6,fontSize:12,color:C.text}}>
+        Vinculada a: <b>{presetVinculo}</b>
+      </div>}
+      <div>
+        <label style={Sg.lbl}>Categoria *</label>
+        <select style={Sg.input()} value={categoria} onChange={e=>setCategoria(e.target.value)}>
+          {Object.entries(NC_ACAO_CATEGORIAS).map(([k,v])=>(
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </select>
+      </div>
       <div>
         <label style={Sg.lbl}>Descrição da ação *</label>
-        <textarea style={{...Sg.input(),minHeight:64,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Ex: Atualizar IT-045 com novo critério de aceitação..."/>
+        <textarea style={{...Sg.input(),minHeight:60,resize:"vertical"}} value={descricao} onChange={e=>setDescricao(e.target.value)} placeholder="Ex: Retrabalhar 10 un externamente na Tech-Tools..."/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div>
@@ -8390,7 +8483,7 @@ function NovaAcaoNCModal({open, onClose, onConfirm, allUsers, C, Sg}){
       <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
       <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
         const resp = ativos.find(u=>String(u.id)===String(responsavelId));
-        onConfirm({descricao,responsavelId:resp?.id,responsavelNome:resp?.name,prazo,status:"pendente"});
+        onConfirm({categoria, descricao, responsavelId:resp?.id, responsavelNome:resp?.name, prazo, status:"pendente"});
       }}>Adicionar</button>
     </div>
   </Modal>;
@@ -8400,12 +8493,26 @@ function NovaAcaoNCModal({open, onClose, onConfirm, allUsers, C, Sg}){
 function ConcluirAcaoNCModal({open, acao, onClose, onConfirm, C, Sg}){
   const [tipo, setTipo] = useState("concluida");
   const [evidencia, setEvidencia] = useState("");
+  const [extras, setExtras] = useState({});
 
-  useEffect(()=>{ if(open){ setTipo("concluida"); setEvidencia(""); }}, [open]);
+  useEffect(()=>{
+    if(open){
+      setTipo("concluida");
+      setEvidencia("");
+      setExtras(acao?.extras || {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   if(!open||!acao) return null;
 
-  return <Modal open={open} onClose={onClose} title={"Registrar resultado — ação"} width={480}>
-    <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>{acao.descricao}</div>
+  const categoria = NC_ACAO_CATEGORIAS[acao.categoria] || NC_ACAO_CATEGORIAS.outro;
+  const camposExtras = categoria.extras || [];
+
+  return <Modal open={open} onClose={onClose} title="Registrar resultado — ação" width={520}>
+    <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>
+      <div style={{fontWeight:600,color:C.text,marginBottom:2}}>{acao.descricao}</div>
+      <div style={{fontSize:11}}><span style={{color:categoria.color,fontWeight:600}}>{categoria.label}</span></div>
+    </div>
     <div style={{marginBottom:12}}>
       <label style={Sg.lbl}>Resultado</label>
       <div style={{display:"flex",gap:8}}>
@@ -8414,13 +8521,34 @@ function ConcluirAcaoNCModal({open, acao, onClose, onConfirm, C, Sg}){
         ))}
       </div>
     </div>
+
+    {/* Campos extras conforme categoria — só pra "concluida" */}
+    {tipo==="concluida" && camposExtras.length>0 && <div style={{marginBottom:14,padding:"10px 12px",background:C.accent+"08",border:"1px dashed "+C.accent+"30",borderRadius:6}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:8}}>Informações da {categoria.label} <span style={{fontWeight:400,fontStyle:"italic"}}>(opcional)</span></div>
+      <div style={{display:"grid",gridTemplateColumns:camposExtras.length>1?"1fr 1fr":"1fr",gap:10}}>
+        {camposExtras.map(k=>{
+          const meta = NC_ACAO_EXTRAS[k];
+          if(!meta) return null;
+          return <div key={k}>
+            <label style={Sg.lbl}>{meta.label}</label>
+            <input
+              type={meta.type==='money'?'text':'text'}
+              style={Sg.input()}
+              value={extras[k]||""}
+              onChange={e=>setExtras(p=>({...p,[k]:e.target.value}))}
+              placeholder={meta.type==='money'?'0,00':''}/>
+          </div>;
+        })}
+      </div>
+    </div>}
+
     <div style={{marginBottom:16}}>
-      <label style={Sg.lbl}>{tipo==="concluida"?"Evidência / Observação *":"Justificativa *"}</label>
-      <textarea style={{...Sg.input(),minHeight:64,resize:"vertical"}} value={evidencia} onChange={e=>setEvidencia(e.target.value)} placeholder={tipo==="concluida"?"Descreva o que foi feito, número do documento revisado, etc.":"Motivo pelo qual a ação não foi executada..."}/>
+      <label style={Sg.lbl}>{tipo==="concluida"?"Observação / Evidência *":"Justificativa *"}</label>
+      <textarea style={{...Sg.input(),minHeight:64,resize:"vertical"}} value={evidencia} onChange={e=>setEvidencia(e.target.value)} placeholder={tipo==="concluida"?"Descreva o que foi feito...":"Motivo pelo qual a ação não foi executada..."}/>
     </div>
     <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
       <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
-      <button style={{...Sg.btn("primary"),opacity:evidencia.trim()?1:.4}} disabled={!evidencia.trim()} onClick={()=>onConfirm({tipo,evidencia})}>Registrar</button>
+      <button style={{...Sg.btn("primary"),opacity:evidencia.trim()?1:.4}} disabled={!evidencia.trim()} onClick={()=>onConfirm({tipo,evidencia,extras: tipo==="concluida"?extras:{}})}>Registrar</button>
     </div>
   </Modal>;
 }
@@ -9128,6 +9256,8 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
   const [cancelarModal, setCancelarModal] = useState(false);
   const [cancelarMotivo, setCancelarMotivo] = useState("");
   const [classificarModal, setClassificarModal] = useState(false);
+  const [sugerirAcaoModal, setSugerirAcaoModal] = useState(null);
+  const [liberarExecModal, setLiberarExecModal] = useState(false);
   const [selecROModal, setSelecROModal] = useState(false);
   const [verROModal, setVerROModal] = useState(null);
   const [addItemModal, setAddItemModal] = useState(false);
@@ -9157,14 +9287,26 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
   const canCancel    = hasPerm(currentUser,'nc.cancelar');
   const canReopen    = hasPerm(currentUser,'nc.reabrir');
 
-  // Verifica se todos os itens têm disposição terminal
+  // Verifica se todos os itens têm disposição terminal (cobertura total via sublotes ou dispNC direto)
   const itensReais = itens.filter(x=>x.codigo);
-  const todosItensTerminais = itensReais.length>0 && itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC));
+  const itemTratado = (it)=>{
+    const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+    const subs = it.sublotes || [];
+    if(subs.length === 0) return NC_DISP_TERMINAIS.includes(it.dispNC);
+    const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+    if(atrib < qtdTotal) return false;
+    return subs.every(sub=>NC_DISP_TERMINAIS.includes(sub.disposicao));
+  };
+  const todosItensTerminais = itensReais.length>0 && itensReais.every(itemTratado);
 
   // Verifica se todas as ações têm status terminal
   const todasAcoesTerminais = acoes.length===0 || acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status));
 
-  const prontaParaFechar = todosItensTerminais && todasAcoesTerminais && status==="em_analise";
+  // Pode encerrar se: status é em_execucao + tudo terminal
+  const prontaParaFechar = todosItensTerminais && todasAcoesTerminais && ["em_execucao","em_tratativa","em_analise"].includes(status);
+
+  // Resumo financeiro
+  const financeiro = calcFinanceiro(acoes);
 
   // Verifica se o usuário tem concessão pendente para ele
   const minhasConcessoes = itensReais.map((it,i)=>({it,i})).filter(({it})=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id));
@@ -9300,8 +9442,21 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
       event:"Disposição definida",
       detail: qtd+" un · "+dispLabel+" — "+(item.codigo||"item")+(justificativa?" · "+justificativa:""),
     });
-    await save({status:"em_analise", data:{...d, itens:novosItens, historico:hist}});
+    // Não força mudança de status — só sugere transição (ver handleLiberarExecucao)
+    await save({data:{...d, itens:novosItens, historico:hist}});
     setTratarIdx(null);
+
+    // Sugere criar ação no plano (se categoria mapeada e usuário tem permissão)
+    if(canGerAcoes && disp!=="concessao_solicitada" && disp!=="concessao_aprovada" && disp!=="concessao_rejeitada"){
+      const sugCategoria = dispToCategoria(disp);
+      const dispNome = dispLabel;
+      const itemNome = (item.codigo||"item") + (item.descricao?" — "+item.descricao:"");
+      setSugerirAcaoModal({
+        categoria: sugCategoria,
+        descricaoSugerida: dispNome+" — "+qtd+" un · "+itemNome,
+        vinculo: itemNome+" · "+qtd+" un",
+      });
+    }
   };
 
   // Aprovador decide sobre concessão (de um sublote específico)
@@ -9340,24 +9495,58 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
     setNovaAcaoModal(false);
   };
 
+  // Aceitar sugestão de criar ação a partir de disposição
+  const handleAceitarSugAcao = () => {
+    setNovaAcaoModal(true); // o modal NovaAcaoNCModal já vai pegar os presets via prop
+  };
+
+  // Liberar NC para Execução (Em Análise → Em Execução)
+  const handleLiberarExecucao = async () => {
+    // Validações
+    const classOk = !!d.classificacao?.tipo_desvio;
+    const itensComDisp = (itens||[]).filter(it=>it.codigo).every(it=>{
+      const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+      const subs = it.sublotes || [];
+      if(subs.length === 0) return !!it.dispNC; // modelo legado direto
+      const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+      return atrib >= qtdTotal;
+    });
+    const temAlgumaAcao = (acoes||[]).length > 0;
+
+    const motivos = [];
+    if(!classOk) motivos.push("Falta classificar a NC (tipo de desvio)");
+    if(!itensComDisp) motivos.push("Há itens sem disposição cobrindo a quantidade total");
+    if(!temAlgumaAcao) motivos.push("Não há ações no plano");
+
+    if(motivos.length>0){
+      alert("Para liberar para Execução, resolva:\n\n• "+motivos.join("\n• "));
+      return;
+    }
+
+    const hist = addHistorico({type:"transicao",event:"NC liberada para Execução",detail:"Análise concluída — plano de ações definido"});
+    await save({status:"em_execucao", data:{...d, historico:hist}});
+    setLiberarExecModal(false);
+  };
+
   // Concluir/justificar/cancelar ação
-  const handleConcluirAcao = async ({tipo, evidencia}) => {
+  const handleConcluirAcao = async ({tipo, evidencia, extras}) => {
     const now = new Date().toISOString();
     const novasAcoes = acoes.map((a,i)=>{
       if(i!==concluirAcaoIdx) return a;
-      return {...a, status:tipo, evidencia, concluidaAt:now, concluidaBy:currentUser?.name};
+      return {...a, status:tipo, evidencia, extras: extras||{}, concluidaAt:now, concluidaBy:currentUser?.name, concluidaById:currentUser?.id};
     });
     const acao = acoes[concluirAcaoIdx];
-    const hist = addHistorico({type:"acao_concluida",event:"Ação "+tipo,detail:acao.descricao.substring(0,60)});
+    const cat = NC_ACAO_CATEGORIAS[acao?.categoria] || NC_ACAO_CATEGORIAS.outro;
+    const hist = addHistorico({type:"acao_concluida",event:"Ação "+tipo+" — "+cat.label,detail:(acao?.descricao||"").substring(0,60)});
     await save({data:{...d,acoes:novasAcoes,historico:hist}});
     setConcluirAcaoIdx(null);
   };
 
-  // Fechar NC
+  // Encerrar NC
   const handleFechar = async ({analise, sig}) => {
     const now = new Date().toISOString();
-    const hist = addHistorico({type:"fechamento",event:"NC fechada",detail:"Análise final registrada"});
-    await save({status:"fechada",data:{...d,analiseFinal:analise,fechadoBy:currentUser?.name,fechadoByName:currentUser?.name,fechadoAt:now,historico:hist}});
+    const hist = addHistorico({type:"encerramento",event:"NC encerrada",detail:"Análise final registrada"});
+    await save({status:"encerrada",data:{...d,analiseFinal:analise,fechadoBy:currentUser?.name,fechadoByName:currentUser?.name,fechadoAt:now,historico:hist}});
     setFecharModal(false);
   };
 
@@ -9412,16 +9601,67 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
         </div>
       </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {canCancel&&status==="em_analise"&&<button style={{...Sg.btn(),color:C.danger,borderColor:C.danger+"50",fontSize:12}} onClick={()=>setCancelarModal(true)}>Cancelar NC</button>}
-        {canClose&&prontaParaFechar&&<button style={{...Sg.btn("primary"),fontSize:12,background:"#16A34A",borderColor:"#16A34A"}} onClick={()=>setFecharModal(true)}>Fechar NC</button>}
+        {canCancel&&!["encerrada","cancelada","fechada"].includes(status)&&<button style={{...Sg.btn(),color:C.danger,borderColor:C.danger+"50",fontSize:12}} onClick={()=>setCancelarModal(true)}>Cancelar NC</button>}
+        {canAnalyze && (status==="aberta"||status==="em_analise") && <button style={{...Sg.btn("primary"),fontSize:12}} onClick={()=>setLiberarExecModal(true)}>Liberar para Execução →</button>}
+        {canClose&&prontaParaFechar&&status==="em_execucao"&&<button style={{...Sg.btn("primary"),fontSize:12,background:"#16A34A",borderColor:"#16A34A"}} onClick={()=>setFecharModal(true)}>Encerrar NC</button>}
       </div>
     </div>
 
-    {/* Banner pronta para fechar */}
-    {prontaParaFechar&&<div style={{marginBottom:14,padding:"10px 16px",background:"#16A34A10",borderRadius:8,border:"1px solid #16A34A40",fontSize:13,color:"#16A34A",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <span>Todos os itens e ações estão concluídos. Esta NC está pronta para ser fechada.</span>
-      {canClose&&<button style={{...Sg.btn(),background:"#16A34A",color:"#fff",borderColor:"#16A34A",fontSize:12,padding:"5px 14px"}} onClick={()=>setFecharModal(true)}>Fechar NC</button>}
-    </div>}
+    {/* Stepper de etapas — só pra NCs ativas */}
+    {!["cancelada"].includes(status) && (()=>{
+      const isEncerrada = ["encerrada","fechada"].includes(status);
+      const etapaAtual = isEncerrada ? 4 : (status==="em_execucao" ? 3 : (d.classificacao?.tipo_desvio ? 2 : 1));
+      const etapas = [
+        {idx:1,label:"Aberta"},
+        {idx:2,label:"Em Análise"},
+        {idx:3,label:"Em Execução"},
+        {idx:4,label:"Encerrada"},
+      ];
+      // O que falta para avançar
+      const faltas = [];
+      if(etapaAtual===1 || etapaAtual===2){
+        if(!d.classificacao?.tipo_desvio) faltas.push("classificar NC");
+        const itensSemDisp = itensReais.filter(it=>{
+          const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0)||0;
+          const subs = it.sublotes||[];
+          if(subs.length===0) return !it.dispNC;
+          const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+          return atrib < qtdTotal;
+        });
+        if(itensSemDisp.length>0) faltas.push(itensSemDisp.length+" item(ns) sem disposição completa");
+        if(acoes.length===0) faltas.push("nenhuma ação no plano");
+      } else if(etapaAtual===3){
+        const itensPend = itensReais.filter(it=>!itemTratado(it));
+        if(itensPend.length>0) faltas.push(itensPend.length+" item(ns) com disposição não terminal");
+        const acoesPend = acoes.filter(a=>!NC_ACAO_STATUS_TERMINAIS.includes(a.status));
+        if(acoesPend.length>0) faltas.push(acoesPend.length+" ação(ões) em aberto");
+      }
+
+      return <div style={{...Sg.card({marginBottom:14})}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase",marginBottom:12}}>Etapa atual: {etapas[etapaAtual-1]?.label}</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {etapas.map((et,i)=>{
+            const done = et.idx < etapaAtual;
+            const current = et.idx === etapaAtual;
+            return <React.Fragment key={et.idx}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:22,height:22,borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,
+                  background: done ? "#16A34A18" : current ? C.accent : C.surface,
+                  color: done ? "#16A34A" : current ? "#fff" : C.muted,
+                  border: done ? "1px solid #16A34A40" : current ? "1px solid "+C.accent : "1px solid "+C.border,
+                }}>{done?"✓":et.idx}</div>
+                <span style={{fontSize:12, fontWeight:current?600:400, color: current?C.text:done?C.dim:C.muted}}>{et.label}</span>
+              </div>
+              {i<etapas.length-1 && <div style={{flex:1,height:1,background:C.border}}/>}
+            </React.Fragment>;
+          })}
+        </div>
+        {faltas.length>0 && etapaAtual<4 && <div style={{marginTop:14,padding:"10px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border}}>
+          <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{etapaAtual===3?"Para encerrar":"Para liberar à Execução"}, faltam:</div>
+          <div style={{fontSize:12,color:C.text,lineHeight:1.5}}>{faltas.join(" · ")}</div>
+        </div>}
+      </div>;
+    })()}
 
     {/* Banner concessão pendente pra mim */}
     {minhasConcessoes.length>0&&<div style={{marginBottom:14,padding:"10px 16px",background:C.accent+"10",borderRadius:8,border:"1px solid "+C.accent+"40",fontSize:13,color:C.accent}}>
@@ -9524,7 +9764,7 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
     <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border,gap:8,flexWrap:"wrap"}}>
         <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>ITENS AFETADOS ({itensReais.length})</span>
-        {canTratar && !["cancelada","fechada"].includes(status) && d.natureza==="produto" && <div style={{display:"flex",gap:6}}>
+        {canTratar && !["cancelada","fechada","encerrada"].includes(status) && d.natureza==="produto" && <div style={{display:"flex",gap:6}}>
           <button style={{...Sg.btn(),fontSize:11,padding:"4px 10px"}} onClick={()=>{
             setNovoItemForm({codigo:"", descricao:"", lote_serie:"", qtd_nc:""});
             setAddItemModal(true);
@@ -9552,7 +9792,7 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
                 const qtdDisponivel = Math.max(0, qtdTotal - qtdAtribuida);
                 // Compatibilidade com modelo legado: item.dispNC direto e sem sublotes
                 const isLegacyDirect = !sublotes.length && it.dispNC;
-                const podeTratarMais = canTratar && status==="em_analise" && !isLegacyDirect && qtdDisponivel > 0;
+                const podeTratarMais = canTratar && ["aberta","em_analise","em_execucao","em_tratativa"].includes(status) && !isLegacyDirect && qtdDisponivel > 0;
 
                 // Linhas a renderizar (uma por sublote, ou uma linha pendente, ou uma linha legacy)
                 const linhas = [];
@@ -9617,18 +9857,35 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
       }
     </div>
 
-    {/* Plano de ações corretivas */}
+    {/* Plano de ações */}
     <div style={{...Sg.card({padding:0,overflow:"hidden",marginBottom:14})}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid "+C.border}}>
-        <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3}}>PLANO DE AÇÕES CORRETIVAS ({acoes.length})</span>
-        {canGerAcoes&&status==="em_analise"&&<button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>setNovaAcaoModal(true)}>+ Nova ação</button>}
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:.3,textTransform:"uppercase"}}>Plano de Ações</div>
+          {acoes.length>0 && <div style={{fontSize:11,color:C.muted,marginTop:3}}>
+            <span>{acoes.length} ação(ões)</span>
+            {(()=>{
+              const conc = acoes.filter(a=>a.status==='concluida').length;
+              const just = acoes.filter(a=>a.status==='justificada').length;
+              const canc = acoes.filter(a=>a.status==='cancelada').length;
+              const pend = acoes.length - conc - just - canc;
+              return <>
+                {conc>0 && <span style={{color:"#3B6D11"}}> · {conc} concluída(s)</span>}
+                {just>0 && <span style={{color:C.muted}}> · {just} justificada(s)</span>}
+                {canc>0 && <span style={{color:C.danger}}> · {canc} cancelada(s)</span>}
+                {pend>0 && <span style={{color:"#D97706"}}> · {pend} pendente(s)</span>}
+              </>;
+            })()}
+          </div>}
+        </div>
+        {canGerAcoes && !["encerrada","cancelada","fechada"].includes(status) && <button style={{...Sg.btn(),fontSize:11,padding:"4px 12px"}} onClick={()=>{setSugerirAcaoModal(null); setNovaAcaoModal(true);}}>+ Nova ação</button>}
       </div>
       {acoes.length===0
-        ? <div style={{padding:24,textAlign:"center",color:C.muted,fontSize:12}}>Nenhuma ação no plano.</div>
+        ? <div style={{padding:24,textAlign:"center",color:C.muted,fontSize:12}}>Nenhuma ação no plano ainda.{canGerAcoes && !["encerrada","cancelada","fechada"].includes(status) && <><br/>Clique em <b>"+ Nova ação"</b> para criar.</>}</div>
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
-                {["Ação","Responsável","Prazo","Status","Concluída por","Em",""].map((h,i)=>(
+                {["Ação","Categoria","Responsável","Prazo","Status","Registro",""].map((h,i)=>(
                   <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -9637,23 +9894,51 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
               {acoes.map((a,i)=>{
                 const isTerminal = NC_ACAO_STATUS_TERMINAIS.includes(a.status);
                 const isResp = String(a.responsavelId)===String(currentUser?.id);
-                const podeConcluir = (isResp||canConclAcao) && !isTerminal && status==="em_analise";
+                const podeConcluir = (isResp||canConclAcao) && !isTerminal && !["encerrada","cancelada","fechada"].includes(status);
+                const cat = NC_ACAO_CATEGORIAS[a.categoria] || NC_ACAO_CATEGORIAS.outro;
+                // Registro = formato curto dos extras
+                const extras = a.extras||{};
+                const regs = [];
+                Object.entries(extras).forEach(([k,v])=>{
+                  if(!v) return;
+                  const meta = NC_ACAO_EXTRAS[k];
+                  if(!meta) return;
+                  if(meta.type==='money'){
+                    const n = parseFloat(String(v).replace(",",".").replace(/[^\d.-]/g,""))||0;
+                    if(n>0) regs.push(meta.label.replace(" (R$)","")+": "+fmtMoney(n));
+                  } else {
+                    regs.push(meta.label+": "+v);
+                  }
+                });
                 return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
                   <td style={{padding:"8px 10px",fontSize:12,color:C.text,maxWidth:260}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.descricao}</div></td>
+                  <td style={{padding:"8px 10px"}}>
+                    <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:cat.color+"18",color:cat.color,fontWeight:600,whiteSpace:"nowrap"}}>{cat.label}</span>
+                  </td>
                   <td style={{padding:"8px 10px",fontSize:12,color:C.dim,whiteSpace:"nowrap"}}>{a.responsavelNome||"—"}</td>
                   <td style={{padding:"8px 10px",fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{a.prazo?new Date(a.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
                   <td style={{padding:"8px 10px"}}>{acoesStatusBadge(a.status)}</td>
-                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{a.concluidaBy||"—"}</td>
-                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{a.concluidaAt?fmtShort(a.concluidaAt):"—"}</td>
-                  <td style={{padding:"8px 10px"}}>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,maxWidth:200}}>
+                    {regs.length>0 ? <div style={{lineHeight:1.4}}>{regs.map((r,ri)=><div key={ri} style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r}</div>)}</div> : "—"}
+                  </td>
+                  <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
                     {podeConcluir&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setConcluirAcaoIdx(i)}>Registrar</button>}
-                    {a.evidencia&&<div style={{fontSize:11,color:C.muted,marginTop:2,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:"italic"}}>{a.evidencia}</div>}
                   </td>
                 </tr>;
               })}
             </tbody>
           </table>
       }
+
+      {/* Resumo financeiro — só aparece se tem algum valor */}
+      {acoes.length>0 && (financeiro.saidas>0 || financeiro.entradas>0) && <div style={{padding:"10px 14px",background:C.surface,borderTop:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+        <span style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:.4,textTransform:"uppercase"}}>Resumo financeiro</span>
+        <div style={{display:"flex",gap:18,fontSize:12,flexWrap:"wrap"}}>
+          <span style={{color:C.dim}}>Saídas: <b style={{color:C.danger}}>{fmtMoney(financeiro.saidas)}</b></span>
+          <span style={{color:C.dim}}>Entradas: <b style={{color:"#3B6D11"}}>{fmtMoney(financeiro.entradas)}</b></span>
+          <span style={{color:C.text,fontWeight:600}}>Líquido: {fmtMoney(financeiro.liquido)}</span>
+        </div>
+      </div>}
     </div>
 
     {/* Abas: Comunicações / Histórico */}
@@ -9792,8 +10077,42 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
 
     {novaAcaoModal&&<NovaAcaoNCModal
       open={true} allUsers={allUsers}
-      onClose={()=>setNovaAcaoModal(false)}
-      onConfirm={handleNovaAcao} C={C} Sg={Sg}/>}
+      presetCategoria={sugerirAcaoModal?.categoria}
+      presetDescricao={sugerirAcaoModal?.descricaoSugerida}
+      presetVinculo={sugerirAcaoModal?.vinculo}
+      onClose={()=>{setNovaAcaoModal(false); setSugerirAcaoModal(null);}}
+      onConfirm={async(acao)=>{ await handleNovaAcao(acao); setSugerirAcaoModal(null); }}
+      C={C} Sg={Sg}/>}
+
+    {/* Modal "Sugerir criar ação a partir de disposição" */}
+    {sugerirAcaoModal && !novaAcaoModal && <Modal open={true} onClose={()=>setSugerirAcaoModal(null)} title="Criar ação no plano?" width={480}>
+      <div style={{fontSize:13,color:C.text,marginBottom:14,lineHeight:1.5}}>
+        Você acabou de definir a disposição <b>{NC_ACAO_CATEGORIAS[sugerirAcaoModal.categoria]?.label}</b>.
+        <br/>Deseja criar uma ação correspondente no plano agora?
+      </div>
+      <div style={{padding:"10px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim,marginBottom:16}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.4,marginBottom:4}}>Sugestão</div>
+        <div style={{color:C.text}}>{sugerirAcaoModal.descricaoSugerida}</div>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <button style={Sg.btn()} onClick={()=>setSugerirAcaoModal(null)}>Não, depois</button>
+        <button style={Sg.btn("primary")} onClick={handleAceitarSugAcao}>Sim, criar ação</button>
+      </div>
+    </Modal>}
+
+    {/* Modal "Liberar para Execução" */}
+    {liberarExecModal && <Modal open={true} onClose={()=>setLiberarExecModal(false)} title="Liberar para Execução" width={500}>
+      <div style={{fontSize:13,color:C.text,marginBottom:14,lineHeight:1.5}}>
+        Confirma que a análise da NC está finalizada e que o plano está pronto para execução?
+      </div>
+      <div style={{padding:"10px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim,marginBottom:16}}>
+        Após liberar, os responsáveis serão notificados pra executar as ações. Você poderá editar o plano durante a execução, mas qualquer alteração ficará registrada no histórico.
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <button style={Sg.btn()} onClick={()=>setLiberarExecModal(false)}>Cancelar</button>
+        <button style={Sg.btn("primary")} onClick={handleLiberarExecucao}>Liberar →</button>
+      </div>
+    </Modal>}
 
     {concluirAcaoIdx!==null&&<ConcluirAcaoNCModal
       open={true} acao={acoes[concluirAcaoIdx]}
