@@ -3673,6 +3673,57 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
       </div>}
     </div>}
     {activeModule==='nc'&&<div style={{marginBottom:16}}>
+      {ncParaClassificar.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>A CLASSIFICAR ({ncParaClassificar.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 90px 80px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["Código","Descrição","Natureza","Onde","Dias aberto","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {ncParaClassificar.map((r,i)=>{
+            const d=r.data||{};
+            const dias=daysSince(r.createdAt);
+            const diasColor=dias>5?C.danger:dias>2?C.warning:C.muted;
+            return <div key={i} onClick={()=>onNavNC(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 90px 80px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+              <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+              <div style={{fontSize:11,color:C.dim,textTransform:"capitalize"}}>{d.natureza||"—"}</div>
+              <div style={{fontSize:11,color:C.dim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.onde_identificado||"—"}</div>
+              <div style={{fontSize:11,color:diasColor,fontWeight:600}}>{dias!=null?dias+"d":"—"}</div>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.warning+"18",color:C.warning}}>Classificar</span>
+            </div>;
+          })}
+        </div>
+      </div>}
+      {ncParaTratar.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.warning,letterSpacing:.7,marginBottom:6}}>ITENS A TRATAR ({ncParaTratar.length})</div>
+        <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
+          <div style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 80px 100px",background:C.surface,padding:"5px 11px",borderBottom:"1px solid "+C.border,gap:8}}>
+            {["Código","Descrição","Tipo desvio","Dias aberto","Pendência"].map(hh=>(
+              <div key={hh} style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.6,textTransform:"uppercase"}}>{hh}</div>
+            ))}
+          </div>
+          {ncParaTratar.map((r,i)=>{
+            const d=r.data||{};
+            const dias=daysSince(r.createdAt);
+            const diasColor=dias>5?C.danger:dias>2?C.warning:C.muted;
+            return <div key={i} onClick={()=>onNavNC(r.id||r.code)}
+              style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 80px 100px",padding:"8px 11px",borderBottom:"1px solid "+C.border+"33",gap:8,alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.accent+"0D"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.code||r.id}</div>
+              <div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.descricao||r.title||"—"}</div>
+              <div style={{fontSize:11,color:C.dim}}>{d.classificacao?.tipo_desvio||"—"}</div>
+              <div style={{fontSize:11,color:diasColor,fontWeight:600}}>{dias!=null?dias+"d":"—"}</div>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:600,background:C.warning+"18",color:C.warning}}>Tratar</span>
+            </div>;
+          })}
+        </div>
+      </div>}
       {ncConcessoesMinha>0&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:.7,marginBottom:6}}>CONCESSÕES A APROVAR ({ncConcessoesMinha})</div>
         <div style={{...Sg.card({padding:0,overflow:"hidden"})}}>
@@ -12071,19 +12122,56 @@ const saveReq = async (r) => {
   // Badge NC — concessões + ações pendentes pra mim + prontas para fechar
   const pendNCBadge = (()=>{
     let n=0;
+    const isAdmNC = loggedIn?.role==='admin';
+    const canAnalisar = hasPerm(loggedIn,'nc.analisar')||isAdmNC;
+    const canTratar = hasPerm(loggedIn,'nc.tratar_itens')||isAdmNC;
+    const canFechar = hasPerm(loggedIn,'nc.fechar')||isAdmNC;
     (ncRecs||[]).forEach(r=>{
       if(["fechada","cancelada"].includes(r.status)) return;
       const d=r.data||{};
-      (d.itens||[]).forEach(it=>{
-        if(it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(loggedIn?.id)) n++;
-      });
-      (d.acoes||[]).forEach(a=>{
-        if(String(a.responsavelId)===String(loggedIn?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status)) n++;
-      });
       const itensReais=(d.itens||[]).filter(x=>x.codigo);
       const acoes=d.acoes||[];
-      if(hasPerm(loggedIn,'nc.fechar')||loggedIn?.role==='admin'){
-        if(itensReais.length>0&&itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC))&&(acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)))) n++;
+
+      // NC aguardando classificação
+      if(canAnalisar && !d.classificacao?.tipo_desvio) n++;
+
+      // Itens aguardando disposição (sublotes pendentes ou item sem disposição)
+      if(canTratar && d.classificacao?.tipo_desvio){
+        itensReais.forEach(it=>{
+          const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+          const subs = it.sublotes || [];
+          if(subs.length===0 && !it.dispNC) n++;
+          else if(subs.length>0){
+            const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+            if(atrib < qtdTotal) n++;
+          }
+        });
+      }
+
+      // Concessões pra mim aprovar (sublotes + legado)
+      itensReais.forEach(it=>{
+        (it.sublotes||[]).forEach(sub=>{
+          if(sub.disposicao==="concessao_solicitada" && String(sub.aprovadorConcessaoId)===String(loggedIn?.id)) n++;
+        });
+        if(!it.sublotes && it.dispNC==="concessao_solicitada" && String(it.aprovadorConcessaoId)===String(loggedIn?.id)) n++;
+      });
+
+      // Ações do plano sob minha responsabilidade
+      acoes.forEach(a=>{
+        if(String(a.responsavelId)===String(loggedIn?.id)&&!NC_ACAO_STATUS_TERMINAIS.includes(a.status)) n++;
+      });
+
+      // NCs prontas pra fechar (todos itens tratados + ações concluídas)
+      if(canFechar){
+        const itemTratado = (it)=>{
+          const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+          const subs = it.sublotes || [];
+          if(subs.length === 0) return NC_DISP_TERMINAIS.includes(it.dispNC);
+          const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+          if(atrib < qtdTotal) return false;
+          return subs.every(sub=>NC_DISP_TERMINAIS.includes(sub.disposicao));
+        };
+        if(itensReais.length>0 && itensReais.every(itemTratado) && (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)))) n++;
       }
     });
     return n;
