@@ -3258,10 +3258,40 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
   // ── Pendências NC ────────────────────────────────────────────────
   const canNC = hasPerm(currentUser,'nc.abrir')||hasPerm(currentUser,'nc.tratar_itens')||hasPerm(currentUser,'nc.gerenciar_acoes')||hasPerm(currentUser,'nc.analisar')||hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
   const ncAtivas = (ncRecs||[]).filter(r=>!["fechada","cancelada"].includes(r.status));
+  const canAnalisarNC = hasPerm(currentUser,'nc.analisar')||currentUser?.role==='admin';
+  const canTratarItensNC = hasPerm(currentUser,'nc.tratar_itens')||currentUser?.role==='admin';
+  // NCs aguardando classificação da Qualidade (NCs abertas sem classificacao.tipo_desvio)
+  const ncParaClassificar = canAnalisarNC ? ncAtivas.filter(r=>{
+    const d = r.data||{};
+    return !d.classificacao?.tipo_desvio;
+  }) : [];
+  // NCs com itens aguardando disposição (já classificada e com itens sem sublotes definidos)
+  const ncParaTratar = canTratarItensNC ? ncAtivas.filter(r=>{
+    const d = r.data||{};
+    if(!d.classificacao?.tipo_desvio) return false; // ainda não classificada
+    const itens = (d.itens||[]).filter(x=>x.codigo);
+    if(itens.length===0) return false;
+    // Pendente se: tem item sem sublotes e sem dispNC legado, ou tem qtd_nc não atribuída em sublotes
+    return itens.some(it=>{
+      const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+      const subs = it.sublotes || [];
+      if(subs.length === 0) return !it.dispNC; // sem sublotes E sem dispNC legado = pendente
+      const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+      return atrib < qtdTotal; // ainda há quantidade não atribuída
+    });
+  }) : [];
   const ncConcessoesMinha = ncAtivas.reduce((acc,r)=>{
     const itens = r.data?.itens||[];
-    const minhas = itens.filter(it=>it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id));
-    return acc + minhas.length;
+    let count = 0;
+    itens.forEach(it=>{
+      // Sublotes em concessão_solicitada para mim
+      (it.sublotes||[]).forEach(sub=>{
+        if(sub.disposicao==="concessao_solicitada" && String(sub.aprovadorConcessaoId)===String(currentUser?.id)) count++;
+      });
+      // Modelo legado: dispNC direto
+      if(it.dispNC==="concessao_solicitada" && String(it.aprovadorConcessaoId)===String(currentUser?.id)) count++;
+    });
+    return acc + count;
   },0);
   const ncAcoesMinha = ncAtivas.reduce((acc,r)=>{
     const acoes = r.data?.acoes||[];
@@ -3272,10 +3302,19 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
     const itens = (r.data?.itens||[]).filter(x=>x.codigo);
     const acoes = r.data?.acoes||[];
     if(!itens.length) return false;
-    return itens.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC)) &&
+    // Item totalmente tratado se: dispNC terminal, OU todos sublotes em estado terminal cobrindo qtd total
+    const itemTratado = (it)=>{
+      const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+      const subs = it.sublotes || [];
+      if(subs.length === 0) return NC_DISP_TERMINAIS.includes(it.dispNC);
+      const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+      if(atrib < qtdTotal) return false;
+      return subs.every(sub=>NC_DISP_TERMINAIS.includes(sub.disposicao));
+    };
+    return itens.every(itemTratado) &&
            (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)));
   }) : [];
-  const pendNC = ncConcessoesMinha + ncAcoesMinha + ncParaFechar.length;
+  const pendNC = ncParaClassificar.length + ncParaTratar.length + ncConcessoesMinha + ncAcoesMinha + ncParaFechar.length;
   const pendCMTotal=aprovSGQ.length+analises.length+acoes.length;
   const daysSince=d=>d?Math.floor((Date.now()-new Date(d))/(1000*60*60*24)):null;
 
@@ -3296,6 +3335,8 @@ function Dashboard({requests,roRecs,ncRecs,currentUser,allUsers,crits,onNav,onNa
           acoes.length>0&&{label:acoes.length+" ações",color:C.success},
         ].filter(Boolean)},
         {key:'nc',label:'Não Conformidade',pend:pendNC,tags:[
+          ncParaClassificar.length>0&&{label:ncParaClassificar.length+" a classificar",color:C.warning},
+          ncParaTratar.length>0&&{label:ncParaTratar.length+" a tratar",color:C.warning},
           ncConcessoesMinha>0&&{label:ncConcessoesMinha+" concessões",color:C.accent},
           ncAcoesMinha>0&&{label:ncAcoesMinha+" ações",color:C.warning},
           ncParaFechar.length>0&&{label:ncParaFechar.length+" fechar",color:C.success},
@@ -8081,55 +8122,94 @@ function NCItemStatusBadge({status}){
   return <Badge label={s.label} color={s.color}/>;
 }
 
-// ── TratarItemNCModal — qualidade define disposição do item ───────
+// ── TratarItemNCModal — qualidade define disposição de N unidades (sublote) ──
 function TratarItemNCModal({open, item, itemIdx, natureza, allUsers, currentUser, onClose, onConfirm, C, Sg}){
+  const [qtd, setQtd] = useState("");
   const [disp, setDisp] = useState("");
   const [justificativa, setJust] = useState("");
   const [aprovadorId, setAprovadorId] = useState("");
 
+  // Quantidade total do item (aceita campos novos e legados)
+  const qtdTotal = parseFloat(item?.qtd_nc || item?.qtdNC || 0) || 0;
+  // Soma das quantidades já atribuídas em sublotes
+  const qtdJaAtribuida = ((item?.sublotes)||[]).reduce((s,sub)=>s+(parseFloat(sub.qtd)||0),0);
+  // Se item legado tem dispNC direto e não tem sublotes, considera toda a qtd atribuída
+  const isLegacyDirect = !item?.sublotes && item?.dispNC;
+  const qtdDisponivel = isLegacyDirect ? 0 : Math.max(0, qtdTotal - qtdJaAtribuida);
+
   useEffect(()=>{
-    if(open){ setDisp(""); setJust(""); setAprovadorId(""); }
-  },[open]);
+    if(open){
+      setQtd(qtdDisponivel > 0 ? String(qtdDisponivel) : "");
+      setDisp(""); setJust(""); setAprovadorId("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[open, item?.codigo]);
 
   if(!open||!item) return null;
 
   const dispMap = ncDispMap(natureza);
   const needsAprovador = disp==="concessao_solicitada";
-  // Filtra aprovadores: quem tem permissão nc.aprovar_concessao e não é o próprio usuário
   const aprovadores = (allUsers||[]).filter(u=>u.active!==false && String(u.id)!==String(currentUser?.id) && (u.role==='admin' || hasPerm(u,'nc.aprovar_concessao')));
-  const canConfirm = disp && (!needsAprovador || aprovadorId) && justificativa.trim();
+  const qtdNum = parseFloat(qtd) || 0;
+  const qtdOk = qtdNum > 0 && qtdNum <= qtdDisponivel;
+  const canConfirm = qtdOk && disp && (!needsAprovador || aprovadorId) && justificativa.trim();
 
   return <Modal open={open} onClose={onClose} title={"Definir disposição — "+(item.codigo||"item")} width={560}>
     <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>
-      <b>{item.codigo||"—"}</b>{item.descricao?" — "+item.descricao:""}{item.lote_serie?" · Lote: "+item.lote_serie:""}{item.qtd_nc?" · Qtd NC: "+item.qtd_nc:""}
+      <b>{item.codigo||"—"}</b>{item.descricao?" — "+item.descricao:""}{(item.lote_serie||item.lote)?" · Lote: "+(item.lote_serie||item.lote):""}
     </div>
-    <div style={{marginBottom:12}}>
-      <label style={Sg.lbl}>Disposição *</label>
-      <select style={Sg.input()} value={disp} onChange={e=>setDisp(e.target.value)}>
-        <option value="">Selecione...</option>
-        {Object.entries(dispMap).filter(([k])=>!["concessao_aprovada","concessao_rejeitada"].includes(k)).map(([k,v])=>(
-          <option key={k} value={k}>{v.label}</option>
-        ))}
-      </select>
+
+    <div style={{marginBottom:12,padding:"8px 12px",background:C.accent+"10",borderRadius:6,border:"1px solid "+C.accent+"30",fontSize:12,color:C.text}}>
+      Quantidade total: <b>{qtdTotal||"—"}</b>
+      {qtdJaAtribuida>0 && <> · Já atribuída: <b>{qtdJaAtribuida}</b></>}
+      {qtdDisponivel>0 ? <> · <span style={{color:C.accent,fontWeight:600}}>Disponível: {qtdDisponivel}</span></> : <> · <span style={{color:C.danger,fontWeight:600}}>Tudo já atribuído</span></>}
     </div>
-    {needsAprovador&&<div style={{marginBottom:12}}>
-      <label style={Sg.lbl}>Aprovador da Concessão *</label>
-      <select style={Sg.input()} value={aprovadorId} onChange={e=>setAprovadorId(e.target.value)}>
-        <option value="">Selecione o aprovador...</option>
-        {aprovadores.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
-      </select>
-      {aprovadores.length===0 && <div style={{fontSize:11,color:C.warning,marginTop:4}}>Nenhum usuário com permissão "nc.aprovar_concessao" cadastrado.</div>}
+
+    {qtdDisponivel<=0 && <div style={{padding:"10px",background:C.warning+"10",border:"1px solid "+C.warning+"40",borderRadius:6,fontSize:12,color:C.warning,marginBottom:12}}>
+      {isLegacyDirect
+        ? "Este item já tem disposição definida no modelo antigo. Não é possível adicionar sublotes."
+        : "Toda a quantidade já foi atribuída em sublotes."
+      }
     </div>}
-    <div style={{marginBottom:16}}>
-      <label style={Sg.lbl}>Justificativa / Observação *</label>
-      <textarea style={{...Sg.input(),minHeight:72,resize:"vertical"}} value={justificativa} onChange={e=>setJust(e.target.value)} placeholder="Descreva a decisão tomada..."/>
-    </div>
+
+    {qtdDisponivel>0 && <>
+      <div style={{display:"grid",gridTemplateColumns:"110px 1fr",gap:12,marginBottom:12}}>
+        <div>
+          <label style={Sg.lbl}>Quantidade *</label>
+          <input type="number" min="1" max={qtdDisponivel} style={Sg.input()} value={qtd} onChange={e=>setQtd(e.target.value)} placeholder="0"/>
+        </div>
+        <div>
+          <label style={Sg.lbl}>Disposição *</label>
+          <select style={Sg.input()} value={disp} onChange={e=>setDisp(e.target.value)}>
+            <option value="">Selecione...</option>
+            {Object.entries(dispMap).filter(([k])=>!["concessao_aprovada","concessao_rejeitada"].includes(k)).map(([k,v])=>(
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {needsAprovador&&<div style={{marginBottom:12}}>
+        <label style={Sg.lbl}>Aprovador da Concessão *</label>
+        <select style={Sg.input()} value={aprovadorId} onChange={e=>setAprovadorId(e.target.value)}>
+          <option value="">Selecione o aprovador...</option>
+          {aprovadores.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        {aprovadores.length===0 && <div style={{fontSize:11,color:C.warning,marginTop:4}}>Nenhum usuário com permissão "nc.aprovar_concessao" cadastrado.</div>}
+      </div>}
+
+      <div style={{marginBottom:16}}>
+        <label style={Sg.lbl}>Justificativa / Observação *</label>
+        <textarea style={{...Sg.input(),minHeight:64,resize:"vertical"}} value={justificativa} onChange={e=>setJust(e.target.value)} placeholder="Descreva a decisão tomada..."/>
+      </div>
+    </>}
+
     <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-      <button style={Sg.btn()} onClick={onClose}>Cancelar</button>
-      <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
+      <button style={Sg.btn()} onClick={onClose}>{qtdDisponivel<=0 ? "Fechar" : "Cancelar"}</button>
+      {qtdDisponivel>0 && <button style={{...Sg.btn("primary"),opacity:canConfirm?1:.4}} disabled={!canConfirm} onClick={()=>{
         const aprovador = needsAprovador ? aprovadores.find(u=>String(u.id)===String(aprovadorId)) : null;
-        onConfirm({disp, justificativa, aprovadorId: aprovador?.id, aprovadorNome: aprovador?.name});
-      }}>Confirmar</button>
+        onConfirm({qtd:qtdNum, disp, justificativa, aprovadorId: aprovador?.id, aprovadorNome: aprovador?.name});
+      }}>Confirmar</button>}
     </div>
   </Modal>;
 }
@@ -8144,15 +8224,22 @@ function AprovarConcessaoNCModal({open, nc, itemIdx, currentUser, onClose, onCon
   if(!open) return null;
 
   const d = nc?.data||{};
-  const item = (d.itens||[])[itemIdx];
+  // itemIdx pode ser número (modelo legado) ou objeto {itemIdx, subloteIdx} (modelo sublotes)
+  const realItemIdx = (itemIdx && typeof itemIdx === 'object') ? itemIdx.itemIdx : itemIdx;
+  const realSubloteIdx = (itemIdx && typeof itemIdx === 'object') ? itemIdx.subloteIdx : null;
+  const item = (d.itens||[])[realItemIdx];
   if(!item) return null;
+  const sublote = (realSubloteIdx !== null && item.sublotes) ? item.sublotes[realSubloteIdx] : null;
+  const justificativa = sublote ? sublote.justificativa : item.justificativaDisposicao;
+  const qtd = sublote ? sublote.qtd : (item.qtd_nc || item.qtdNC);
+  const lote = item.lote_serie || item.lote;
 
   const canConfirm = decisao && motivo.trim();
 
   return <Modal open={open} onClose={onClose} title={"Aprovação de Concessão — NC "+(nc?.code||"")} width={560}>
     <div style={{marginBottom:12,padding:"8px 12px",background:C.surface,borderRadius:6,border:"1px solid "+C.border,fontSize:12,color:C.dim}}>
-      <b>{item.codigo}</b>{item.descricao?" — "+item.descricao:""}{item.lote?" · Lote: "+item.lote:""}{item.qtdNC?" · Qtd NC: "+item.qtdNC:""}
-      {item.justificativaDisposicao&&<div style={{marginTop:6,color:C.muted,fontStyle:"italic"}}>Justificativa: {item.justificativaDisposicao}</div>}
+      <b>{item.codigo}</b>{item.descricao?" — "+item.descricao:""}{lote?" · Lote: "+lote:""}{qtd?" · Qtd: "+qtd:""}
+      {justificativa&&<div style={{marginTop:6,color:C.muted,fontStyle:"italic"}}>Justificativa: {justificativa}</div>}
     </div>
     <div style={{marginBottom:12}}>
       <label style={Sg.lbl}>Decisão *</label>
@@ -9132,32 +9219,64 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
     setSelecROModal(false);
   };
 
-  // Qualidade define disposição de um item
-  const handleTratarItem = async ({disp, justificativa, aprovadorId, aprovadorNome}) => {
+  // Qualidade define disposição de um item — adiciona um sublote (pode ter vários por item)
+  const handleTratarItem = async ({qtd, disp, justificativa, aprovadorId, aprovadorNome}) => {
     const now = new Date().toISOString();
     const novosItens = itens.map((it,i)=>{
       if(i!==tratarIdx) return it;
-      return {...it, dispNC:disp, justificativaDisposicao:justificativa, tratadoAt:now, tratadoBy:currentUser?.name,
-        ...(disp==="concessao_solicitada"?{aprovadorConcessaoId:aprovadorId,aprovadorConcessaoNome:aprovadorNome,concessaoSolicitadaAt:now}:{}),
+      const subloteAtuais = it.sublotes || [];
+      const novoSublote = {
+        id: Date.now(),
+        qtd: parseFloat(qtd) || 0,
+        disposicao: disp,
+        justificativa,
+        status: disp==="concessao_solicitada" ? "aguardando_aprovacao" : "definida",
+        tratadoAt: now,
+        tratadoBy: currentUser?.name,
+        tratadoById: currentUser?.id,
+        ...(disp==="concessao_solicitada" ? {
+          aprovadorConcessaoId: aprovadorId,
+          aprovadorConcessaoNome: aprovadorNome,
+          concessaoSolicitadaAt: now,
+        } : {}),
       };
+      return {...it, sublotes: [...subloteAtuais, novoSublote]};
     });
     const item = itens[tratarIdx];
-    const hist = addHistorico({type:"disposicao_item",event:"Disposição definida",detail:(NC_DISP[disp]||{}).label+" — "+item.codigo});
-    await save({status:"em_analise",data:{...d,itens:novosItens,historico:hist}});
+    const dispLabel = (ncDispMap(d.natureza)[disp]||{}).label || disp;
+    const hist = addHistorico({
+      type:"disposicao_item",
+      event:"Disposição definida",
+      detail: qtd+" un · "+dispLabel+" — "+(item.codigo||"item")+(justificativa?" · "+justificativa:""),
+    });
+    await save({status:"em_analise", data:{...d, itens:novosItens, historico:hist}});
     setTratarIdx(null);
   };
 
-  // Aprovador decide sobre concessão
+  // Aprovador decide sobre concessão (de um sublote específico)
   const handleAprovConcessao = async ({decisao, motivo, sig}) => {
+    if(!aprovConcessaoIdx) return;
+    const itemIdx = aprovConcessaoIdx.itemIdx;
+    const subloteIdx = aprovConcessaoIdx.subloteIdx;
     const now = new Date().toISOString();
     const novosItens = itens.map((it,i)=>{
-      if(i!==aprovConcessaoIdx) return it;
-      if(decisao==="aprovar") return {...it, dispNC:"concessao_aprovada", concessaoAprovadaAt:now, concessaoAprovadaBy:currentUser?.name, concessaoMotivo:motivo};
-      else return {...it, dispNC:"concessao_rejeitada", concessaoRejeitadaAt:now, concessaoRejeitadaBy:currentUser?.name, concessaoMotivo:motivo};
+      if(i!==itemIdx) return it;
+      const subs = it.sublotes || [];
+      const novosSubs = subs.map((sub,si)=>{
+        if(si!==subloteIdx) return sub;
+        if(decisao==="aprovar") return {...sub, disposicao:"concessao_aprovada", status:"definida", concessaoAprovadaAt:now, concessaoAprovadaBy:currentUser?.name, concessaoMotivo:motivo};
+        return {...sub, disposicao:"concessao_rejeitada", status:"definida", concessaoRejeitadaAt:now, concessaoRejeitadaBy:currentUser?.name, concessaoMotivo:motivo};
+      });
+      return {...it, sublotes: novosSubs};
     });
-    const item = itens[aprovConcessaoIdx];
-    const hist = addHistorico({type:"concessao",event:decisao==="aprovar"?"Concessão aprovada":"Concessão rejeitada",detail:item.codigo+" — "+motivo});
-    await save({data:{...d,itens:novosItens,historico:hist}});
+    const item = itens[itemIdx];
+    const sub = (item?.sublotes||[])[subloteIdx];
+    const hist = addHistorico({
+      type:"concessao",
+      event: decisao==="aprovar"?"Concessão aprovada":"Concessão rejeitada",
+      detail: (item?.codigo||"item")+" · "+(sub?.qtd||"")+" un — "+motivo,
+    });
+    await save({data:{...d, itens:novosItens, historico:hist}});
     setAprovConcessaoIdx(null);
   };
 
@@ -9367,7 +9486,7 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:C.surface,borderBottom:"1px solid "+C.border}}>
-                {["Código","Descrição","Lote","Qtd NC","Disposição","Justificativa","Tratado por","Aprovado por",""].map((h,i)=>(
+                {["Código","Descrição","Lote","Qtd","Disposição","Justificativa","Tratado por","Aprovação",""].map((h,i)=>(
                   <th key={i} style={{padding:"7px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -9375,32 +9494,72 @@ function NCDetail({ncRecord, currentUser, allUsers, roRecords, ncRecords, onBack
             <tbody>
               {itens.map((it,i)=>{
                 if(!it.codigo) return null;
-                const pendenteMinha = it.dispNC==="concessao_solicitada"&&String(it.aprovadorConcessaoId)===String(currentUser?.id);
-                const podeTratar = canTratar && status==="em_analise" && !NC_DISP_TERMINAIS.includes(it.dispNC) && it.dispNC!=="concessao_solicitada";
-                const podeAprovarConcessao = canAprovConc && pendenteMinha;
-                // Coluna "Aprovado por"
-                let aprovadoPor = "—";
-                if(it.dispNC==="concessao_aprovada") aprovadoPor = (it.concessaoAprovadaBy||"—") + (it.concessaoAprovadaAt?" · "+fmtShort(it.concessaoAprovadaAt):"");
-                else if(it.dispNC==="concessao_rejeitada") aprovadoPor = (it.concessaoRejeitadaBy||"—") + " (rejeitada)";
-                else if(it.dispNC==="concessao_solicitada") aprovadoPor = it.aprovadorConcessaoNome||"—";
-                else if(NC_DISP_TERMINAIS.includes(it.dispNC)&&!it.dispNC.includes("concessao")) aprovadoPor = it.tratadoBy||"—";
+                const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+                const lote = it.lote_serie || it.lote || "—";
+                const sublotes = it.sublotes || [];
+                const qtdAtribuida = sublotes.reduce((s,sub)=>s+(parseFloat(sub.qtd)||0),0);
+                const qtdDisponivel = Math.max(0, qtdTotal - qtdAtribuida);
+                // Compatibilidade com modelo legado: item.dispNC direto e sem sublotes
+                const isLegacyDirect = !sublotes.length && it.dispNC;
+                const podeTratarMais = canTratar && status==="em_analise" && !isLegacyDirect && qtdDisponivel > 0;
 
-                return <tr key={i} style={{borderBottom:"1px solid "+C.border,background:pendenteMinha?C.accent+"06":""}}>
-                  <td style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:C.text}}>{it.codigo}</td>
-                  <td style={{padding:"8px 10px",fontSize:12,color:C.dim,maxWidth:180}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.descricao||"—"}</div></td>
-                  <td style={{padding:"8px 10px",fontSize:12,color:C.muted}}>{it.lote||"—"}</td>
-                  <td style={{padding:"8px 10px",fontSize:12,color:C.muted,textAlign:"center"}}>{it.qtdNC||"—"}</td>
-                  <td style={{padding:"8px 10px"}}>
-                    {it.dispNC ? dispBadge(it.dispNC) : <span style={{color:C.warning,fontSize:11,fontStyle:"italic"}}>Aguardando</span>}
-                  </td>
-                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,maxWidth:180}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.justificativaDisposicao||"—"}</div></td>
-                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{it.tratadoBy||(it.dispNC?"—":"—")}</td>
-                  <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{aprovadoPor}</td>
-                  <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
-                    {podeTratar&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setTratarIdx(i)}>Definir</button>}
-                    {podeAprovarConcessao&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovConcessaoIdx(i)}>Aprovar</button>}
-                  </td>
-                </tr>;
+                // Linhas a renderizar (uma por sublote, ou uma linha pendente, ou uma linha legacy)
+                const linhas = [];
+                if(isLegacyDirect){
+                  linhas.push({
+                    qtd: qtdTotal,
+                    disposicao: it.dispNC,
+                    justificativa: it.justificativaDisposicao,
+                    tratadoBy: it.tratadoBy,
+                    tratadoAt: it.tratadoAt,
+                    aprovadorConcessaoId: it.aprovadorConcessaoId,
+                    aprovadorConcessaoNome: it.aprovadorConcessaoNome,
+                    concessaoAprovadaBy: it.concessaoAprovadaBy,
+                    concessaoAprovadaAt: it.concessaoAprovadaAt,
+                    concessaoRejeitadaBy: it.concessaoRejeitadaBy,
+                    isLegacy: true,
+                  });
+                } else if(sublotes.length === 0){
+                  linhas.push({pendente: true, qtd: qtdTotal});
+                } else {
+                  sublotes.forEach((sub,si)=>linhas.push({...sub, _idx:si}));
+                  // Adiciona uma linha "sobra" se ainda há qtd disponível
+                  if(qtdDisponivel > 0){
+                    linhas.push({pendente: true, qtd: qtdDisponivel, isSobra: true});
+                  }
+                }
+
+                return linhas.map((linha,li)=>{
+                  const isPrimeira = li===0;
+                  const isPendente = !!linha.pendente;
+                  const dispKey = linha.disposicao;
+                  const pendenteMinha = dispKey==="concessao_solicitada" && String(linha.aprovadorConcessaoId)===String(currentUser?.id);
+                  const podeAprovarConcessao = canAprovConc && pendenteMinha;
+                  // Coluna "Aprovação"
+                  let aprov = "—";
+                  if(dispKey==="concessao_aprovada") aprov = (linha.concessaoAprovadaBy||"—") + (linha.concessaoAprovadaAt?" · "+fmtShort(linha.concessaoAprovadaAt):"");
+                  else if(dispKey==="concessao_rejeitada") aprov = (linha.concessaoRejeitadaBy||"—") + " (rejeitada)";
+                  else if(dispKey==="concessao_solicitada") aprov = "Aguard. "+(linha.aprovadorConcessaoNome||"—");
+                  return <tr key={i+"_"+li} style={{borderBottom: li===linhas.length-1?"1px solid "+C.border:"none", background:pendenteMinha?C.accent+"06":""}}>
+                    <td style={{padding:"8px 10px",fontSize:12,fontWeight:isPrimeira?700:400,color:C.text}}>{isPrimeira?it.codigo:""}</td>
+                    <td style={{padding:"8px 10px",fontSize:12,color:C.dim,maxWidth:180}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isPrimeira?(it.descricao||"—"):""}</div></td>
+                    <td style={{padding:"8px 10px",fontSize:12,color:C.muted}}>{isPrimeira?lote:""}</td>
+                    <td style={{padding:"8px 10px",fontSize:12,color:C.text,textAlign:"center",fontWeight:isPendente?400:600}}>{linha.qtd||"—"}</td>
+                    <td style={{padding:"8px 10px"}}>
+                      {isPendente
+                        ? <span style={{color:C.warning,fontSize:11,fontStyle:"italic"}}>{linha.isSobra?"sobra a tratar":"aguardando"}</span>
+                        : dispBadge(dispKey)
+                      }
+                    </td>
+                    <td style={{padding:"8px 10px",fontSize:11,color:C.muted,maxWidth:160}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{linha.justificativa||"—"}</div></td>
+                    <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{linha.tratadoBy||"—"}</td>
+                    <td style={{padding:"8px 10px",fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>{aprov}</td>
+                    <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
+                      {isPendente && podeTratarMais && <button style={{...Sg.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setTratarIdx(i)}>{linha.isSobra?"+ Tratar":"Tratar"}</button>}
+                      {podeAprovarConcessao && <button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovConcessaoIdx({itemIdx:i, subloteIdx:linha._idx})}>Aprovar</button>}
+                    </td>
+                  </tr>;
+                });
               })}
             </tbody>
           </table>
@@ -9631,8 +9790,46 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
 
   // Coleta TUDO — todas NCs, todos status
   const todasLinhas = [];
+  const canTratarItensInb = hasPerm(currentUser,'nc.tratar_itens')||currentUser?.role==='admin';
   (ncRecords||[]).forEach(r=>{
     const d = r.data||{};
+    const isAtiva = !["fechada","cancelada"].includes(r.status);
+
+    // NC aguardando classificação (Qualidade)
+    if(isAtiva && !d.classificacao?.tipo_desvio){
+      todasLinhas.push({
+        nc:r, tipo:"classificar", itemIdx:null, acaoIdx:null,
+        descricao:"Aguardando classificação da Qualidade",
+        responsavel:"Qualidade", responsavelId:null,
+        prazo:null, statusAcao:"pendente",
+        isMinha: canAnalisar, isTerminal: false,
+      });
+    }
+
+    // Itens sem disposição (depois de classificada) — modelo sublotes
+    if(isAtiva && d.classificacao?.tipo_desvio){
+      (d.itens||[]).forEach((it,itemIdx)=>{
+        if(!it.codigo) return;
+        const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+        const subs = it.sublotes || [];
+        let pendente = false;
+        if(subs.length === 0) pendente = !it.dispNC; // sem sublotes e sem dispNC legado
+        else {
+          const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+          pendente = atrib < qtdTotal;
+        }
+        if(pendente){
+          todasLinhas.push({
+            nc:r, tipo:"tratar_item", itemIdx,
+            descricao:"Definir disposição — "+it.codigo+(it.descricao?" ("+it.descricao+")":""),
+            responsavel:"Qualidade", responsavelId:null,
+            prazo:null, statusAcao:"pendente",
+            isMinha: canTratarItensInb, isTerminal: false,
+          });
+        }
+      });
+    }
+
     // Ações do plano — TODAS independente de status NC
     (d.acoes||[]).forEach((a,acaoIdx)=>{
       const resp = (allUsers||[]).find(u=>String(u.id)===String(a.responsavelId));
@@ -9645,26 +9842,50 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
         isTerminal: NC_ACAO_STATUS_TERMINAIS.includes(a.status),
       });
     });
-    // Concessões de itens
+    // Concessões de itens — modelo sublotes + legado
     (d.itens||[]).forEach((it,itemIdx)=>{
-      if(!["concessao_solicitada","concessao_aprovada","concessao_rejeitada"].includes(it.dispNC)) return;
-      const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorConcessaoId));
-      const stConc = it.dispNC==="concessao_solicitada"?"pendente":it.dispNC==="concessao_aprovada"?"concluida":"cancelada";
-      todasLinhas.push({
-        nc:r, tipo:"concessao", itemIdx,
-        descricao: "Concessão — "+it.codigo+(it.descricao?" ("+it.descricao+")":""),
-        responsavel: aprov?.name||"—", responsavelId: it.aprovadorConcessaoId,
-        prazo: null, statusAcao: stConc,
-        isMinha: String(it.aprovadorConcessaoId)===String(currentUser?.id),
-        isTerminal: it.dispNC!=="concessao_solicitada",
+      // Sublotes
+      (it.sublotes||[]).forEach((sub,subIdx)=>{
+        if(!["concessao_solicitada","concessao_aprovada","concessao_rejeitada"].includes(sub.disposicao)) return;
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(sub.aprovadorConcessaoId));
+        const stConc = sub.disposicao==="concessao_solicitada"?"pendente":sub.disposicao==="concessao_aprovada"?"concluida":"cancelada";
+        todasLinhas.push({
+          nc:r, tipo:"concessao", itemIdx, subloteIdx:subIdx,
+          descricao:"Concessão "+(it.codigo||"")+" · "+sub.qtd+" un",
+          responsavel: aprov?.name||"—", responsavelId: sub.aprovadorConcessaoId,
+          prazo:null, statusAcao: stConc,
+          isMinha: String(sub.aprovadorConcessaoId)===String(currentUser?.id),
+          isTerminal: stConc!=="pendente",
+        });
       });
+      // Modelo legado: dispNC direto
+      if(!it.sublotes && ["concessao_solicitada","concessao_aprovada","concessao_rejeitada"].includes(it.dispNC)){
+        const aprov = (allUsers||[]).find(u=>String(u.id)===String(it.aprovadorConcessaoId));
+        const stConc = it.dispNC==="concessao_solicitada"?"pendente":it.dispNC==="concessao_aprovada"?"concluida":"cancelada";
+        todasLinhas.push({
+          nc:r, tipo:"concessao", itemIdx,
+          descricao: "Concessão — "+it.codigo+(it.descricao?" ("+it.descricao+")":""),
+          responsavel: aprov?.name||"—", responsavelId: it.aprovadorConcessaoId,
+          prazo: null, statusAcao: stConc,
+          isMinha: String(it.aprovadorConcessaoId)===String(currentUser?.id),
+          isTerminal: it.dispNC!=="concessao_solicitada",
+        });
+      }
     });
     // NC pronta para fechar — só mostra se não fechada/cancelada
     if(!["fechada","cancelada"].includes(r.status)){
       const itensReais=(d.itens||[]).filter(x=>x.codigo);
       const acoes=d.acoes||[];
+      const itemTratado = (it)=>{
+        const qtdTotal = parseFloat(it.qtd_nc||it.qtdNC||0) || 0;
+        const subs = it.sublotes || [];
+        if(subs.length === 0) return NC_DISP_TERMINAIS.includes(it.dispNC);
+        const atrib = subs.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+        if(atrib < qtdTotal) return false;
+        return subs.every(sub=>NC_DISP_TERMINAIS.includes(sub.disposicao));
+      };
       const pronta = itensReais.length>0 &&
-        itensReais.every(it=>NC_DISP_TERMINAIS.includes(it.dispNC)) &&
+        itensReais.every(itemTratado) &&
         (acoes.length===0||acoes.every(a=>NC_ACAO_STATUS_TERMINAIS.includes(a.status)));
       if(pronta){
         const canClose=hasPerm(currentUser,'nc.fechar')||currentUser?.role==='admin';
@@ -9700,9 +9921,11 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
   const responsaveisUnicos = [...new Map(todasLinhas.filter(p=>p.responsavelId).map(p=>[String(p.responsavelId),{id:p.responsavelId,name:p.responsavel}])).values()];
 
   const TIPO_META = {
-    concessao: {label:"Concessão",          cor:"#185FA5"},
-    acao:      {label:"Ação corretiva",     cor:"#D97706"},
-    fechar:    {label:"Pronta p/ fechar",   cor:"#16A34A"},
+    classificar: {label:"Classificar NC",      cor:"#CA8A04"},
+    tratar_item: {label:"Definir disposição",  cor:"#D97706"},
+    concessao:   {label:"Concessão",           cor:"#185FA5"},
+    acao:        {label:"Ação corretiva",      cor:"#D97706"},
+    fechar:      {label:"Pronta p/ fechar",    cor:"#16A34A"},
   };
 
   const statusBadge = (st, isTerminal) => {
@@ -9767,6 +9990,8 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
       </select>
       <select value={fTipo} onChange={e=>setFTipo(e.target.value)} style={{...Sg.input(),maxWidth:160}}>
         <option value="">Todos os tipos</option>
+        <option value="classificar">Classificar NC</option>
+        <option value="tratar_item">Definir disposição</option>
         <option value="acao">Ação corretiva</option>
         <option value="concessao">Concessão</option>
         <option value="fechar">Pronta p/ fechar</option>
@@ -9818,6 +10043,8 @@ function NCPendenciasInbox({ncRecords, currentUser, allUsers, onUpdate, onNavNC}
                   <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{p.prazo?new Date(p.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
                   <td style={{padding:"9px 10px"}}>{statusBadge(p.statusAcao,p.isTerminal)}</td>
                   <td style={{padding:"9px 10px",textAlign:"right",whiteSpace:"nowrap"}}>
+                    {p.tipo==="classificar"&&podeAgir&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>Classificar</button>}
+                    {p.tipo==="tratar_item"&&podeAgir&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>Tratar item</button>}
                     {p.tipo==="acao"&&podeAgir&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setConcluirModal({nc:p.nc,acaoIdx:p.acaoIdx})}>Registrar</button>}
                     {p.tipo==="concessao"&&podeAgir&&<button style={{...Sg.btn("primary"),fontSize:11,padding:"3px 10px"}} onClick={()=>setAprovModal({nc:p.nc,itemIdx:p.itemIdx})}>Aprovar</button>}
                     {p.tipo==="fechar"&&podeAgir&&<button style={{...Sg.btn(),fontSize:11,padding:"3px 10px",color:C.success,borderColor:C.success+"50"}} onClick={()=>onNavNC(p.nc.code||p.nc.id)}>Ver NC</button>}
